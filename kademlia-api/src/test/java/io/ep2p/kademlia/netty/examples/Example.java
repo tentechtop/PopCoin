@@ -1,31 +1,29 @@
-package io.ep2p.kademlia.netty;
+package io.ep2p.kademlia.netty.examples;
 
 import io.ep2p.kademlia.NodeSettings;
 import io.ep2p.kademlia.exception.UnsupportedBoundingException;
 import io.ep2p.kademlia.model.LookupAnswer;
 import io.ep2p.kademlia.model.StoreAnswer;
+import io.ep2p.kademlia.netty.NettyKademliaDHTNode;
+import io.ep2p.kademlia.netty.SampleRepository;
 import io.ep2p.kademlia.netty.builder.NettyKademliaDHTNodeBuilder;
 import io.ep2p.kademlia.netty.common.NettyConnectionInfo;
 import io.ep2p.kademlia.node.KeyHashGenerator;
 import io.ep2p.kademlia.util.BoundedHashUtil;
 import lombok.SneakyThrows;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
 
-/**
- * ≤‚ ‘»›¥Ì
- */
-public class DHTNodeShutdownTest {
+import static java.lang.Thread.sleep;
+
+public class Example {
 
     @SneakyThrows
-    @Test
-    public void testFailLookupAfterShutdown() {
+    public static void main(String[] args) {
         // Setting NodeSettings
-        NodeSettings.Default.IDENTIFIER_SIZE = 3;
+        NodeSettings.Default.IDENTIFIER_SIZE = 4;
         NodeSettings.Default.BUCKET_SIZE = 100;   // K=100 for k-buckets
-        NodeSettings.Default.PING_SCHEDULE_TIME_VALUE = 5;  // Ping every 5 seconds (doesn't matter in our case)
+        NodeSettings.Default.PING_SCHEDULE_TIME_VALUE = 60;  // Ping every 5 seconds (doesn't matter in our case)
 
 
         // Determines hash of a key in DHT. Check kademlia-api
@@ -48,32 +46,46 @@ public class DHTNodeShutdownTest {
                 String.class, String.class).build();
         node1.start();
 
-        NettyKademliaDHTNode<String, String> node2 = new NettyKademliaDHTNodeBuilder<>(
+
+        // Starting node 2 - bootstrapping with node 1
+        NettyKademliaDHTNode< String, String> node2 = new NettyKademliaDHTNodeBuilder<>(
                 BigInteger.valueOf(2L),
                 new NettyConnectionInfo("127.0.0.1", 8001),
                 new SampleRepository(),
                 keyHashGenerator,
                 String.class, String.class).build();
-        node2.start(node1).get();
+        node2.start(node1).get();  // Wait till bootstrap future finishes
 
-        Thread.sleep(2000);
-        StoreAnswer<BigInteger, NettyConnectionInfo, String> storeAnswer = node1.store("1", "1").get();
-        Assertions.assertEquals(StoreAnswer.Result.STORED, storeAnswer.getResult());
 
-        LookupAnswer<BigInteger, NettyConnectionInfo, String, String> lookupAnswer = node1.lookup("1").get();
-        System.out.printf("A Lookup result: %s - Value: %s%n", lookupAnswer.getResult(), lookupAnswer.getValue());
-        Assertions.assertEquals(LookupAnswer.Result.FOUND, lookupAnswer.getResult());
+        NettyKademliaDHTNode< String, String> node3 = new NettyKademliaDHTNodeBuilder<>(
+                BigInteger.valueOf(3L),
+                new NettyConnectionInfo("127.0.0.1", 8002),
+                new SampleRepository(),
+                keyHashGenerator,
+                String.class, String.class).build();
+        node3.start(node1).get();  // Wait till bootstrap future finishes
 
-        lookupAnswer = node2.lookup("1").get();
-        System.out.printf("B Lookup result: %s - Value: %s%n", lookupAnswer.getResult(), lookupAnswer.getValue());
-        Assertions.assertEquals(LookupAnswer.Result.FOUND, lookupAnswer.getResult());
+        NettyKademliaDHTNode< String, String> node4 = new NettyKademliaDHTNodeBuilder<>(
+                BigInteger.valueOf(4L),
+                new NettyConnectionInfo("127.0.0.1", 8003),
+                new SampleRepository(),
+                keyHashGenerator,
+                String.class, String.class).build();
+        node4.start(node1).get();  // Wait till bootstrap future finishes
 
-        node1.stopNow();
 
-        lookupAnswer = node2.lookup("1").get();
-        Assertions.assertEquals(LookupAnswer.Result.FAILED, lookupAnswer.getResult());
 
-        node2.stopNow();
+
+        sleep(1500);
+        node4.broadcastTransaction();
+
+
+
+
+
+
+
+
 
     }
 

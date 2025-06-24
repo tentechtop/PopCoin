@@ -61,8 +61,6 @@ public class NettyKademliaDHTNode<K extends Serializable, V extends Serializable
     }
 
 
-
-
     // 广播交易
     public void broadcastTransaction() {
         RoutingTable<BigInteger, NettyConnectionInfo, Bucket<BigInteger, NettyConnectionInfo>> routingTable = getRoutingTable();
@@ -70,7 +68,6 @@ public class NettyKademliaDHTNode<K extends Serializable, V extends Serializable
         List<ExternalNode<BigInteger, NettyConnectionInfo>> nodes = closest.getNodes();
         //去除自己
         nodes.removeIf(node -> node.getId().equals(this.getId()));
-
         System.out.println("nodes:" + nodes.size());
         for (ExternalNode<BigInteger, NettyConnectionInfo> node : nodes) {
             System.out.println( node+"节点信息"+node.getConnectionInfo());

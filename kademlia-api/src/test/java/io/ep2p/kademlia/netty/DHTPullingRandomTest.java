@@ -24,51 +24,46 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-/**
- * DHTÀ­È¡Ëæ»ú²âÊÔÀà - ²âÊÔ»ùÓÚKademliaÐ­ÒéµÄ·Ö²¼Ê½¹þÏ£±íµÄÀ­È¡¹¦ÄÜ
- */
+
 public class DHTPullingRandomTest {
 
-    // ¼ü¹þÏ£Éú³ÉÆ÷£¬ÓÃÓÚ½«¼ü×ª»»Îª¹þÏ£Öµ
+
     private static KeyHashGenerator<BigInteger, String> keyHashGenerator;
-    // ´æ´¢²âÊÔÖÐÊ¹ÓÃµÄËùÓÐ½Úµã
+
     private static List<NettyKademliaDHTNode<String, String>> nodes = new ArrayList<>();
 
     /**
-     * ³õÊ¼»¯²âÊÔ»·¾³
+     * ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½Ô»ï¿½ï¿½ï¿½
      */
     @SneakyThrows
     @BeforeAll
     public static void init() {
-        // ÉèÖÃ½ÚµãÄ¬ÈÏ²ÎÊý
-        NodeSettings.Default.IDENTIFIER_SIZE = 128;  // ±êÊ¶·û´óÐ¡Îª128Î»
-        NodeSettings.Default.BUCKET_SIZE = 10;       // KÍ°´óÐ¡Îª10
-        NodeSettings.Default.PING_SCHEDULE_TIME_VALUE = 4;  // PINGµ÷¶ÈÊ±¼äÎª4
-        NodeSettings.Default.PING_SCHEDULE_TIME_UNIT = TimeUnit.SECONDS;  // PINGµ÷¶ÈÊ±¼äµ¥Î»ÎªÃë
-
-        // ´´½¨Ò»¸ö¼òµ¥µÄ¹þÏ£Éú³ÉÆ÷£¬ËùÓÐ¼ü¶¼Éú³ÉÏàÍ¬µÄ¹þÏ£Öµ1£¨½öÓÃÓÚ²âÊÔ£©
+        NodeSettings.Default.IDENTIFIER_SIZE = 128;  // ï¿½ï¿½Ê¶ï¿½ï¿½ï¿½ï¿½Ð¡Îª128Î»
+        NodeSettings.Default.BUCKET_SIZE = 10;       // KÍ°ï¿½ï¿½Ð¡Îª10
+        NodeSettings.Default.PING_SCHEDULE_TIME_VALUE = 4;  // PINGï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½Îª4
+        NodeSettings.Default.PING_SCHEDULE_TIME_UNIT = TimeUnit.SECONDS;  // PINGï¿½ï¿½ï¿½ï¿½Ê±ï¿½äµ¥Î»Îªï¿½ï¿½
         keyHashGenerator = (k) -> BigInteger.valueOf(1);
     }
 
     /**
-     * ²âÊÔDHT´æ´¢Ëæ»ú¼üÖµ¶Ô
+     * ï¿½ï¿½ï¿½ï¿½DHTï¿½æ´¢ï¿½ï¿½ï¿½ï¿½ï¿½Öµï¿½ï¿½
      */
     @Test
     void testDHTStoreRandomKeys() throws IOException, ExecutionException, InterruptedException, TimeoutException {
 
-        // Ç°Ò»¸ö½ÚµãÒýÓÃ£¬ÓÃÓÚÒýµ¼ÐÂ½Úµã¼ÓÈëÍøÂç
+        // Ç°Ò»ï¿½ï¿½ï¿½Úµï¿½ï¿½ï¿½ï¿½Ã£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â½Úµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         NettyKademliaDHTNode<String, String> previousNode = null;
 
-        // ´´½¨²¢Æô¶¯7¸ö½Úµã
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½7ï¿½ï¿½ï¿½Úµï¿½
         for (int i = 1; i < 8; i++){
-            // ¹¹½¨Ò»¸öÐÂµÄKademlia DHT½Úµã
+            // ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½Âµï¿½Kademlia DHTï¿½Úµï¿½
             NettyKademliaDHTNode<String, String> nettyKademliaDHTNode = new NettyKademliaDHTNodeBuilder<>(
-                    BigInteger.valueOf(i),  // ½ÚµãID
-                    new NettyConnectionInfo("127.0.0.1", NodeHelper.findRandomPort()),  // Á¬½ÓÐÅÏ¢
-                    new SampleRepository(),  // Ñù±¾´æ´¢¿â
-                    keyHashGenerator,  // ¼ü¹þÏ£Éú³ÉÆ÷
-                    String.class, String.class)  // ¼üÖµÀàÐÍ
-                    // ÉèÖÃDHT´æ´¢·þÎñ¹¤³§£¬Ê¹ÓÃPullingDHTStoreService£¨À­È¡Ê½´æ´¢·þÎñ£©
+                    BigInteger.valueOf(i),  // ï¿½Úµï¿½ID
+                    new NettyConnectionInfo("127.0.0.1", NodeHelper.findRandomPort()),  // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢
+                    new SampleRepository(),  // ï¿½ï¿½ï¿½ï¿½ï¿½æ´¢ï¿½ï¿½
+                    keyHashGenerator,  // ï¿½ï¿½ï¿½ï¿½Ï£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+                    String.class, String.class)  // ï¿½ï¿½Öµï¿½ï¿½ï¿½ï¿½
+                    // ï¿½ï¿½ï¿½ï¿½DHTï¿½æ´¢ï¿½ï¿½ï¿½ñ¹¤³ï¿½ï¿½ï¿½Ê¹ï¿½ï¿½PullingDHTStoreServiceï¿½ï¿½ï¿½ï¿½È¡Ê½ï¿½æ´¢ï¿½ï¿½ï¿½ï¿½
                     .dhtStoreServiceFactory(new DHTStoreServiceFactory<BigInteger, NettyConnectionInfo, String, String>() {
                         @Override
                         public PushingDHTStoreService<BigInteger, NettyConnectionInfo, String, String> getDhtStoreService(DHTKademliaNodeAPI<BigInteger, NettyConnectionInfo, String, String> kademliaNodeAPI) {
@@ -77,7 +72,7 @@ public class DHTPullingRandomTest {
                     })
                     .build();
 
-            // Æô¶¯½Úµã£ºµÚÒ»¸ö½ÚµãÖ±½ÓÆô¶¯£¬ºóÐø½ÚµãÍ¨¹ýÇ°Ò»¸ö½ÚµãÒýµ¼Æô¶¯
+            // ï¿½ï¿½ï¿½ï¿½ï¿½Úµã£ºï¿½ï¿½Ò»ï¿½ï¿½ï¿½Úµï¿½Ö±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Úµï¿½Í¨ï¿½ï¿½Ç°Ò»ï¿½ï¿½ï¿½Úµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
             if (previousNode == null){
                 nettyKademliaDHTNode.start();
             }else {
@@ -91,11 +86,11 @@ public class DHTPullingRandomTest {
 
         System.out.println("Bootstrapped all nodes. Looking up for data");
 
-        // µÈ´ýÍøÂçÎÈ¶¨
+        // ï¿½È´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¶ï¿½
         Thread.sleep(5000);
         long beginTime = System.currentTimeMillis();
 
-        // Ã¿¸ö½Úµã´æ´¢×Ô¼ºID¶ÔÓ¦µÄÊý¾Ý
+        // Ã¿ï¿½ï¿½ï¿½Úµï¿½æ´¢ï¿½Ô¼ï¿½IDï¿½ï¿½Ó¦ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         nodes.forEach(kademliaDHTNode -> {
             try {
                 Assertions.assertEquals(StoreAnswer.Result.STORED, kademliaDHTNode.store(kademliaDHTNode.getId().toString(), "data").get(5, TimeUnit.SECONDS).getResult());
@@ -104,7 +99,7 @@ public class DHTPullingRandomTest {
             }
         });
 
-        // Ã¿¸ö½Úµã²éÕÒÆäËûËùÓÐ½Úµã´æ´¢µÄÊý¾Ý
+        // Ã¿ï¿½ï¿½ï¿½Úµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð½Úµï¿½æ´¢ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         nodes.forEach(kademliaDHTNode -> {
             nodes.forEach(otherNode -> {
                 try {
@@ -121,7 +116,7 @@ public class DHTPullingRandomTest {
         System.out.println("Test passed successfully. Shutting down.");
         Thread.sleep(1000);
 
-        // Í£Ö¹ËùÓÐ½Úµã
+        // Í£Ö¹ï¿½ï¿½ï¿½Ð½Úµï¿½
         nodes.forEach(NettyKademliaDHTNode::stopNow);
     }
 }
