@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: PopCoinSystem
+    version: 1.0.0
+    description: PopCoinSystem
+    author: PopCoin
+    email: popcoin@163.com
+    url: https://github.com/PopCoin/PopCoinSystem
+    license: Apache-2.0
+    copyright: Copyright ? 2019 PopCoin. All rights reserved.
+
+
+
+server:
+  port: 9999
