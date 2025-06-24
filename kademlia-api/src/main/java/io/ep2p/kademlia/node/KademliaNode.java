@@ -135,7 +135,7 @@ public class KademliaNode<I extends Number, C extends ConnectionInfo> implements
         this.referencedNodesStrategy.getReferencedNodes(this).forEach(node -> getMessageSender().sendAsyncMessage(this, node, new ShutdownKademliaMessage<>()));
     }
 
-    /*注册消息处理器*/
+    /*自定义消息注册*/
     protected void init(){
         this.registerMessageHandler(MessageType.EMPTY, new GeneralResponseMessageHandler<>());
         this.registerMessageHandler(MessageType.PONG, new PongMessageHandler<>());
@@ -144,6 +144,7 @@ public class KademliaNode<I extends Number, C extends ConnectionInfo> implements
         this.registerMessageHandler(MessageType.FIND_NODE_RES, new FindNodeResponseMessageHandler<>());
         this.registerMessageHandler(MessageType.SHUTDOWN, new ShutdownMessageHandler<>());
         this.registerMessageHandler(MessageType.TRANSACTION, new TransactionMessageHandler<>());
+        /*自定义消息注册*/
 
 
     }

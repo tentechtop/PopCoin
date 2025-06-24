@@ -25,10 +25,8 @@ public class TransactionMessageHandler<I extends Number, C extends ConnectionInf
 
     protected TransactionMessage<I, C> doHandle(KademliaNodeAPI<I, C> kademliaNode, TransactionMessage<I, C> message){
         Transaction data = (Transaction)message.getData();
-        System.out.println("交易消息要处理的是:"+ data.getDataValue());
-
+        System.out.println("交易消息要处理的是:"+ data);
         //判断交易是否被处理过  缓存
-
         //这个广播是否过期  是否被订阅过  未过期就广播给其他节点  是否被我广播过
         if (kademliaNode.isRunning()){
             try {

@@ -30,7 +30,7 @@ public class NettyKademliaDHTNodeBuilder<K extends Serializable, V extends Seria
     private final BigInteger id;
     private final NettyConnectionInfo connectionInfo;
     private RoutingTable<BigInteger, NettyConnectionInfo, Bucket<BigInteger, NettyConnectionInfo>> routingTable;
-    private MessageSender<BigInteger, NettyConnectionInfo> messageSender;
+    private MessageSender<BigInteger, NettyConnectionInfo> messageSender; //节点客户端 用于请求
     private NodeSettings nodeSettings;
     private GsonFactory gsonFactory;
     private final KademliaRepository<K, V> repository;

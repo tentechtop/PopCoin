@@ -18,6 +18,7 @@ public class KademliaMessageDeserializer<ID extends Number, C extends Connection
     private final Map<String, Type> typeRegistry = new ConcurrentHashMap<>();
     private final Map<String, Class<?>> messageClassRegistry = new ConcurrentHashMap<>();
 
+    /*自定义消息注册*/
     public KademliaMessageDeserializer(Class<ID> idClass) {
         this.registerMessageClass(MessageType.DHT_LOOKUP, DHTLookupKademliaMessage.class);
         this.registerMessageClass(MessageType.DHT_LOOKUP_RESULT, DHTLookupResultKademliaMessage.class);
@@ -44,7 +45,7 @@ public class KademliaMessageDeserializer<ID extends Number, C extends Connection
         this.registerDataType(MessageType.PONG, new TypeToken<String>(){}.getType());
         this.registerDataType(MessageType.SHUTDOWN, new TypeToken<String>(){}.getType());
         this.registerDataType(MessageType.EMPTY, new TypeToken<String>(){}.getType());
-        this.registerDataType(MessageType.TRANSACTION, new TypeToken<Transaction>(){}.getType());
+        this.registerDataType(MessageType.TRANSACTION, new TypeToken<Transaction>(){}.getType());//数据类型
 
 
 

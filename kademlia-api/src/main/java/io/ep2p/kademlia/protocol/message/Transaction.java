@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 
 import java.io.Serializable;
+import java.util.List;
 
 @Data
 @AllArgsConstructor
@@ -17,6 +18,8 @@ public class Transaction implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private  String  dataValue;
+
+    private List<TxOut> OTXO;
 
     @Override
     public int hashCode() {

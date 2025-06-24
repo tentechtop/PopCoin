@@ -41,8 +41,6 @@ public class NettyKademliaChannelInboundHandler<K extends Serializable, V extend
         boolean keepAlive = HttpUtil.isKeepAlive(request);
         FullHttpResponse httpResponse = new DefaultFullHttpResponse(request.protocolVersion(), OK);
         this.nettyKademliaMessageHandler.handle(channelHandlerContext, request, httpResponse);
-
-
         ByteBuf content = request.content();
         String data = content.toString(CharsetUtil.UTF_8);
         log.info("来自节点" +"请求的内容: {}", data);
@@ -58,6 +56,8 @@ public class NettyKademliaChannelInboundHandler<K extends Serializable, V extend
             channelHandlerContext.writeAndFlush(Unpooled.EMPTY_BUFFER).addListener(ChannelFutureListener.CLOSE);
         }
     }
+
+
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
