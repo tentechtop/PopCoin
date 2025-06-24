@@ -30,6 +30,8 @@ public class KademliaMessageDeserializer<ID extends Number, C extends Connection
         this.registerMessageClass(MessageType.PONG, PongKademliaMessage.class);
         this.registerMessageClass(MessageType.SHUTDOWN, ShutdownKademliaMessage.class);
         this.registerMessageClass(MessageType.EMPTY, EmptyKademliaMessage.class);
+        this.registerMessageClass(MessageType.TRANSACTION, TransactionMessage.class);
+
 
         this.registerDataType(MessageType.DHT_LOOKUP, new TypeToken<DHTLookupKademliaMessage.DHTLookup<ID, C, K>>(){}.getType());
         this.registerDataType(MessageType.DHT_LOOKUP_RESULT, new TypeToken<DHTLookupResultKademliaMessage.DHTLookupResult<K, V>>(){}.getType());
@@ -42,6 +44,10 @@ public class KademliaMessageDeserializer<ID extends Number, C extends Connection
         this.registerDataType(MessageType.PONG, new TypeToken<String>(){}.getType());
         this.registerDataType(MessageType.SHUTDOWN, new TypeToken<String>(){}.getType());
         this.registerDataType(MessageType.EMPTY, new TypeToken<String>(){}.getType());
+        this.registerDataType(MessageType.TRANSACTION, new TypeToken<Transaction>(){}.getType());
+
+
+
     }
 
     @SneakyThrows

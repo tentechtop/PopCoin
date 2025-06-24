@@ -41,10 +41,6 @@ public class DefaultNettyKademliaMessageHandler<K extends Serializable, V extend
             responseMessage.setNode(this.dhtKademliaNodeAPI);
 
 
-
-
-
-
         } catch (Exception e){
             log.error("Failed to parse request and pass it to the node api", e);
             response.setStatus(BAD_REQUEST);

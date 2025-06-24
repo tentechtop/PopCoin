@@ -15,4 +15,6 @@ public interface MessageType {
 
     String TRANSACTION = "TRANSACTION";
 
+    String CUSTOM_STRING_MESSAGE = "CUSTOM_STRING_MESSAGE";
+
 }

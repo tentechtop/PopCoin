@@ -146,7 +146,6 @@ public class KademliaNode<I extends Number, C extends ConnectionInfo> implements
         this.registerMessageHandler(MessageType.TRANSACTION, new TransactionMessageHandler<>());
 
 
-
     }
 
 

@@ -9,11 +9,18 @@ import java.math.BigInteger;
 
 
 @ToString(callSuper = true)
-public class TransactionMessage<I extends Number, C extends ConnectionInfo, D extends Serializable> extends KademliaMessage<I, C, Transaction> {
-    public TransactionMessage(Transaction data) {
+public class TransactionMessage<I extends Number, C extends ConnectionInfo> extends KademliaMessage<I, C, Serializable> {
+
+    //过期时间
+    private BigInteger expireTime;
+    //hash
+    private String hash;
+
+    public TransactionMessage(Transaction transaction) {
         this();
-        setData(data);
+        setData(transaction);
     }
+
     public TransactionMessage() {
         super(MessageType.TRANSACTION);
     }

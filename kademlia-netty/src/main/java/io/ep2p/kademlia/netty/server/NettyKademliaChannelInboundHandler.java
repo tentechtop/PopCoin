@@ -1,5 +1,6 @@
 package io.ep2p.kademlia.netty.server;
 
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
@@ -9,6 +10,7 @@ import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpUtil;
+import io.netty.util.CharsetUtil;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.Serializable;
@@ -36,10 +38,15 @@ public class NettyKademliaChannelInboundHandler<K extends Serializable, V extend
 
     @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, FullHttpRequest request) {
-        log.info("接收到的请求: {} {}", request.method(), request.uri() +"请求的内容"+ request.content());
         boolean keepAlive = HttpUtil.isKeepAlive(request);
         FullHttpResponse httpResponse = new DefaultFullHttpResponse(request.protocolVersion(), OK);
         this.nettyKademliaMessageHandler.handle(channelHandlerContext, request, httpResponse);
+
+
+        ByteBuf content = request.content();
+        String data = content.toString(CharsetUtil.UTF_8);
+        log.info("来自节点" +"请求的内容: {}", data);
+
         httpResponse.headers().setInt(CONTENT_LENGTH, httpResponse.content().readableBytes());
         if (keepAlive) {
             httpResponse.headers().set(CONNECTION, KEEP_ALIVE);
@@ -47,7 +54,6 @@ public class NettyKademliaChannelInboundHandler<K extends Serializable, V extend
             httpResponse.headers().set(CONNECTION, CLOSE);
         }
         channelHandlerContext.write(httpResponse);
-
         if (!keepAlive) {
             channelHandlerContext.writeAndFlush(Unpooled.EMPTY_BUFFER).addListener(ChannelFutureListener.CLOSE);
         }

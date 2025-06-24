@@ -137,6 +137,11 @@ public abstract class AbstractRoutingTable<I extends Number, C extends Connectio
       }
     }
 
+/*
+    // 排除自身节点
+    findNodeAnswer.getNodes().removeIf(node -> node.getId().equals(this.id));
+*/
+
     //We sort the list
     Collections.sort(findNodeAnswer.getNodes());
     //We trim the list

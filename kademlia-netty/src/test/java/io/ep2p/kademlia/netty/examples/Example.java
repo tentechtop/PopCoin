@@ -14,6 +14,8 @@ import lombok.SneakyThrows;
 
 import java.math.BigInteger;
 
+import static java.lang.Thread.sleep;
+
 public class Example {
 
     @SneakyThrows
@@ -21,7 +23,7 @@ public class Example {
         // Setting NodeSettings
         NodeSettings.Default.IDENTIFIER_SIZE = 4;
         NodeSettings.Default.BUCKET_SIZE = 100;   // K=100 for k-buckets
-        NodeSettings.Default.PING_SCHEDULE_TIME_VALUE = 5;  // Ping every 5 seconds (doesn't matter in our case)
+        NodeSettings.Default.PING_SCHEDULE_TIME_VALUE = 60;  // Ping every 5 seconds (doesn't matter in our case)
 
 
         // Determines hash of a key in DHT. Check kademlia-api
@@ -55,7 +57,21 @@ public class Example {
         node2.start(node1).get();  // Wait till bootstrap future finishes
 
 
-        node2.broadcastTransaction("难怪打");
+        NettyKademliaDHTNode< String, String> node3 = new NettyKademliaDHTNodeBuilder<>(
+                BigInteger.valueOf(3L),
+                new NettyConnectionInfo("127.0.0.1", 8002),
+                new SampleRepository(),
+                keyHashGenerator,
+                String.class, String.class).build();
+        node3.start(node1).get();  // Wait till bootstrap future finishes
+
+        sleep(1000);
+
+        node2.broadcastTransaction();
+
+
+
+
 
 
 
