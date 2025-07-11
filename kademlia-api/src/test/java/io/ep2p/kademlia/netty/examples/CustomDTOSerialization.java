@@ -52,7 +52,7 @@ public class CustomDTOSerialization {
         System.out.printf("Data in node 2: %s%n", node2.getKademliaRepository().get("K"));
 
         LookupAnswer<BigInteger, NettyConnectionInfo, String, PersonDTO> lookupAnswer = node1.lookup("K").get();
-        System.out.printf("查找结果: %s - Value: %s%n", lookupAnswer.getResult(), lookupAnswer.getValue());
+        System.out.printf("Lookup result: %s - Value: %s%n", lookupAnswer.getResult(), lookupAnswer.getValue());
 
 
         node1.stopNow();

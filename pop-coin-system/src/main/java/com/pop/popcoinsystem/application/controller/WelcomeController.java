@@ -14,4 +14,19 @@ public class WelcomeController {
     public String welcome(){
         return "Welcome to PopCoinSystem, a peer-to-peer electronic cash system";
     }
+
+
+    /**
+     * 请求付款
+     */
+
+    /**
+     * 转账
+     */
+
+    /**
+     * 获取余额
+     */
+
+
 }

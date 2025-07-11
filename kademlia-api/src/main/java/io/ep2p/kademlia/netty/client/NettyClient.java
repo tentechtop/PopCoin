@@ -10,6 +10,10 @@ import java.io.Serializable;
 import java.math.BigInteger;
 
 public class NettyClient<K extends Serializable, V extends Serializable> implements MessageSender<BigInteger, NettyConnectionInfo> {
+
+    //channel列表
+
+
     @Override
     public <U extends Serializable, O extends Serializable> KademliaMessage<BigInteger, NettyConnectionInfo, O> sendMessage(KademliaNodeAPI<BigInteger, NettyConnectionInfo> caller, Node<BigInteger, NettyConnectionInfo> receiver, KademliaMessage<BigInteger, NettyConnectionInfo, U> message) {
         return null;
@@ -21,6 +25,7 @@ public class NettyClient<K extends Serializable, V extends Serializable> impleme
     }
 
 
+    //获取channel
 
 
 }

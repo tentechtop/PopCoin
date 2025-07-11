@@ -54,16 +54,14 @@ public class KademliaNodeServer<K extends Serializable, V extends Serializable> 
     public synchronized void run(DHTKademliaNodeAPI<BigInteger, NettyConnectionInfo, K, V> dhtKademliaNodeAPI) throws InterruptedException {
         if (this.running)
             return;
-
         this.bossGroup = new NioEventLoopGroup();
         this.workerGroup = new NioEventLoopGroup();
-
         ChannelInitializer<SocketChannel> channelChannelInitializer = this.nettyChannelInitializerFactory.getChannelChannelInitializer(
                 this.nettyChannelInboundHandlerFactory.getChannelInboundHandler(
                         this.nettyKademliaMessageHandlerFactory.getNettyKademliaMessageHandler(dhtKademliaNodeAPI)
                 )
         );
-
+        NettyKademliaMessageHandler nettyKademliaMessageHandler = this.nettyKademliaMessageHandlerFactory.getNettyKademliaMessageHandler(dhtKademliaNodeAPI);
         try {
             ServerBootstrap bootstrap = new ServerBootstrap()
                     .group(bossGroup, workerGroup)
@@ -71,11 +69,9 @@ public class KademliaNodeServer<K extends Serializable, V extends Serializable> 
                     .handler(new LoggingHandler(LogLevel.INFO))
                     .childHandler(channelChannelInitializer)
                     .option(ChannelOption.SO_BACKLOG, 1024);
-
             ChannelFuture bind = host != null ? bootstrap.bind(host, port) : bootstrap.bind(port);
             running = true;
             this.bindFuture = bind.sync();
-
         } catch (InterruptedException e) {
             log.error("Kademlia Node Server interrupted", e);
             stop();

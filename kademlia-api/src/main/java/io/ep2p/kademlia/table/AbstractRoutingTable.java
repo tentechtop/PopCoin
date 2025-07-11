@@ -12,10 +12,12 @@ import io.ep2p.kademlia.connection.ConnectionInfo;
 import io.ep2p.kademlia.exception.FullBucketException;
 import io.ep2p.kademlia.model.FindNodeAnswer;
 import io.ep2p.kademlia.node.Node;
+import io.ep2p.kademlia.node.external.BigIntegerExternalNode;
 import io.ep2p.kademlia.node.external.ExternalNode;
 import io.ep2p.kademlia.util.FindNodeAnswerReducer;
 import lombok.NoArgsConstructor;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -136,12 +138,6 @@ public abstract class AbstractRoutingTable<I extends Number, C extends Connectio
         BucketHelper.addToAnswer(bucketN, findNodeAnswer, destinationId);
       }
     }
-
-/*
-    // 排除自身节点
-    findNodeAnswer.getNodes().removeIf(node -> node.getId().equals(this.id));
-*/
-
     //We sort the list
     Collections.sort(findNodeAnswer.getNodes());
     //We trim the list
@@ -151,6 +147,30 @@ public abstract class AbstractRoutingTable<I extends Number, C extends Connectio
     }
     return findNodeAnswer;
   }
+
+
+
+  public void addToAnswer (Bucket<I, C> bucket, FindNodeAnswer<I, C> answer, I destination){
+    for (BigInteger id : ((Bucket<BigInteger, C>) bucket).getNodeIds()) {
+      ExternalNode<BigInteger, C> node = ((Bucket<BigInteger, C>) bucket).getNode(id);
+      BigInteger destination1 = (BigInteger) destination;
+      answer.add((ExternalNode<I, C>) new BigIntegerExternalNode<>(node, destination1.xor(id)));
+    }
+  }
+
+
+    /*
+    // 排除自身节点
+    findNodeAnswer.getNodes().removeIf(node -> node.getId().equals(this.id));
+*/
+
+
+
+
+
+
+
+
 
   @Override
   public boolean contains(I nodeId) {

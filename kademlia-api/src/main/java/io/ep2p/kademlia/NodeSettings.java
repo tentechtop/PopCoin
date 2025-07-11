@@ -28,7 +28,7 @@ public class NodeSettings implements Serializable {
 
 
   public static class Default {
-    public static int IDENTIFIER_SIZE = 128;
+    public static int IDENTIFIER_SIZE = 160;
     public static int BUCKET_SIZE = 20;
     public static int FIND_NODE_SIZE = 20;
     public static int MAXIMUM_LAST_SEEN_AGE_TO_CONSIDER_ALIVE = 20;

@@ -24,6 +24,13 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
+            <exclusions>
+                <!-- 排除自带的logback依赖 -->
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-logging</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <!-- 加密算法 Bouncy Castle 加密库，提供各种加密算法（如 RSA、AES、哈希算法等）和安全协议实现。 -->
         <dependency>
@@ -116,17 +123,12 @@
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
+        <!-- 添加网络发现库 -->
         <dependency>
-            <groupId>io.ep2p</groupId>
-            <artifactId>kademlia-netty</artifactId>
-            <version>0.4.0-RELEASE</version>
+            <groupId>org.jmdns</groupId>
+            <artifactId>jmdns</artifactId>
+            <version>3.6.0</version>
         </dependency>
-        <dependency>
-            <groupId>com.squareup.okhttp3</groupId>
-            <artifactId>okhttp</artifactId>
-            <version>4.10.0</version>
-        </dependency>
-
     </dependencies>
 
 
