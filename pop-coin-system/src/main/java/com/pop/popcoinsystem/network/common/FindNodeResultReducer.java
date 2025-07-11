@@ -21,17 +21,16 @@ public class FindNodeResultReducer {
         this.identifierSize = identifierSize;
     }
 
-
     public void reduce(){
-        List<NodeInfo> nodes = new ArrayList<>();
-        List<NodeInfo> answerNodes = this.findNodeResult.getNodes();
+        List<ExternalNodeInfo> nodes = new ArrayList<>();
+        List<ExternalNodeInfo> answerNodes = this.findNodeResult.getNodes();
 
         for(int i = 0; i < identifierSize; i++){
             if (nodes.size() <= this.max){
                 break;
             }
 
-            for (NodeInfo answerNode : answerNodes) {
+            for (ExternalNodeInfo answerNode : answerNodes) {
                 if (answerNode.getId().equals(power(nodeId, i))){
                     nodes.add(answerNode);
                     answerNodes.remove(answerNode);
@@ -45,7 +44,6 @@ public class FindNodeResultReducer {
             nodes.add(answerNodes.get(i));
             i++;
         }
-
 
         this.findNodeResult.update(nodes);
     }

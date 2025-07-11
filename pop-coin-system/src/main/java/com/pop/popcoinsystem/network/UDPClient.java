@@ -9,13 +9,18 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.DatagramPacket;
+import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioDatagramChannel;
+import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.codec.MessageToMessageDecoder;
 import io.netty.handler.codec.MessageToMessageEncoder;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.el.util.MessageFactory;
 
 import java.math.BigInteger;
+import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -29,16 +34,15 @@ import java.util.concurrent.Executors;
 public class UDPClient {
     private final ExecutorService executorService;
 
-    private final Bootstrap bootstrap;
+    private Bootstrap bootstrap;
+    private NioEventLoopGroup group;
 
-    public UDPClient(Bootstrap bootstrap) {
+    public UDPClient() {
         executorService = Executors.newFixedThreadPool(10);
-        // 配置UDP引导器
-        this.bootstrap = bootstrap;
     }
 
     /** 节点ID到Channel的映射 */
-    public static final Map<BigInteger, Channel> nodeUDPChannel = new ConcurrentHashMap<>();
+    private final Map<BigInteger, Channel> nodeUDPChannel = new ConcurrentHashMap<>();
     /** 节点ID到地址的映射 */
     private final Map<BigInteger, InetSocketAddress> nodeAddresses = new ConcurrentHashMap<>();
 
@@ -48,40 +52,63 @@ public class UDPClient {
     public  void sendMessage(KademliaMessage message) throws InterruptedException {
         BigInteger id = message.getReceiver().getId();
         Channel channel = null;
-        if (!nodeUDPChannel.containsKey(id)){
+        if (!nodeUDPChannel.containsKey(id) || !nodeUDPChannel.get(id).isActive()){
             //重新连接 并保存Channel
             NodeInfo receiver = message.getReceiver();
-            channel = bootstrap.connect(receiver.getIpv4(), receiver.getUdpPort()).sync().channel();
+            channel = connectTarget(receiver.getIpv4(), receiver.getUdpPort());
             nodeUDPChannel.put(id, channel);
-        }else if (!nodeUDPChannel.get(id).isActive()){
-            //重新连接 并保存Channel
-            NodeInfo receiver = message.getReceiver();
-            channel = bootstrap.connect(receiver.getIpv4(), receiver.getUdpPort()).sync().channel();
-            nodeUDPChannel.put(id, channel);
-        }else if (nodeUDPChannel.get(id).isActive()){
-            channel = nodeUDPChannel.get(id);
-        }else {
-            throw new RuntimeException("Channel is not active");
         }
-        byte[] serialize = KademliaMessage.serialize(message);
-        ByteBuf byteBuf = Unpooled.copiedBuffer(serialize);
-        InetSocketAddress inetSocketAddress = new InetSocketAddress(message.getReceiver().getIpv4(), message.getReceiver().getUdpPort());
-        DatagramPacket sendPacket = new DatagramPacket(byteBuf, inetSocketAddress);
-        channel.writeAndFlush(sendPacket).addListener(new ChannelFutureListener() {
+        channel = nodeUDPChannel.get(id);
+        channel.writeAndFlush(message);
+    }
+
+
+    public Channel connectTarget(String ipv4, int tcpPort) throws InterruptedException {
+        group = new NioEventLoopGroup();
+        bootstrap = new Bootstrap();
+        bootstrap.group(group)
+                .channel(NioDatagramChannel.class)
+                .option(ChannelOption.SO_BROADCAST, true)
+                .handler(new ChannelInitializer<NioDatagramChannel>() {
+                    @Override
+                    protected void initChannel(NioDatagramChannel ch) throws Exception {
+                        ChannelPipeline pipeline = ch.pipeline();
+                        pipeline.addLast(new LengthFieldBasedFrameDecoder(
+                                10 * 1024 * 1024,  // 最大帧长度
+                                4,                 // 长度字段偏移量（跳过类型字段）
+                                4,                 // 长度字段长度（总长度字段）
+                                -8,                // 长度调整值 = 内容长度 - 总长度 = -8
+                                0                 // 跳过前12字节（类型+总长度+内容长度）  目前不跳过
+                        ));
+                        pipeline.addLast(new LengthFieldPrepender(4));
+                        pipeline.addLast(new KademliaNodeServer.UDPKademliaMessageEncoder());
+                        pipeline.addLast(new KademliaNodeServer.UDPKademliaMessageDecoder());
+                    }
+                });
+        ChannelFuture connect = bootstrap.connect(ipv4, tcpPort).sync();
+        Channel channel = connect.channel();
+        connect.addListener(new ChannelFutureListener() {
             @Override
-            public void operationComplete(ChannelFuture future) throws Exception {
-                if (!future.isSuccess()) {
-                    // 处理发送失败的情况
-                    System.err.println("Failed to send message: " + future.cause().getMessage());
-                }else  {
-                    log.info("发送成功");
+            public void operationComplete(ChannelFuture channelFuture) throws Exception {
+                if (channelFuture.isSuccess()) {
+                    log.info("UDP:Connect to " + ipv4 + ":" + tcpPort + " success");
+                } else {
+                    log.error("UDP:Connect to " + ipv4 + ":" + tcpPort + " failed");
+                    throw new ConnectException("Connect to " + ipv4 + ":" + tcpPort + " failed");
                 }
             }
         });
-
-
-
+        //异步
+        executorService.submit(() -> {
+            try {
+                channel.closeFuture().sync();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        });
+        return channel;
     }
+
 
 
 
@@ -97,15 +124,6 @@ public class UDPClient {
             } catch (Exception ignored) {}
         });
     }
-
-
-
-
-
-
-
-
-
 
 
 }

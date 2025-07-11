@@ -1,11 +1,15 @@
 package com.pop.popcoinsystem.network.protocol.messageHandler;
 
 import com.pop.popcoinsystem.network.KademliaNodeServer;
+import com.pop.popcoinsystem.network.exception.FullBucketException;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 
 import java.io.Serializable;
 
 public interface MessageHandler {
-    <U extends KademliaMessage< ? extends Serializable>, O extends KademliaMessage< ? extends Serializable>> O handle(KademliaNodeServer kademliaNode, U message);
+
+    KademliaMessage<? extends Serializable> handleMesage (KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) throws InterruptedException, FullBucketException;
+
+
 
 }

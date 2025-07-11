@@ -29,7 +29,6 @@ public class RoutingTable {
      */
     public RoutingTable(BigInteger localNodeId, NodeSettings nodeSettings) {
         log.info("初始化路由表");
-        log.info("路由表深度"+nodeSettings.getIdentifierSize());
         this.localNodeId = localNodeId;
         this.nodeSettings = nodeSettings;
         buckets = new ArrayList<>();
@@ -46,13 +45,14 @@ public class RoutingTable {
     /**
      * 更新路由表 添加或移动节点到适当的K桶
      */
-    public boolean update(NodeInfo node) throws FullBucketException {
+    public boolean update(ExternalNodeInfo node) throws FullBucketException {
         lock.writeLock().lock();
         try {
             node.setLastSeen(new Date());
             Bucket bucket = this.findBucket(node.getId());
             // 更新桶的访问时间
             lastBucketAccessTime.put(bucket.getId(), System.currentTimeMillis());
+            node.setDistance(node.getId().xor(this.localNodeId));
             if (bucket.contains(node)) {
                 bucket.pushToFront(node);
                 return false;
@@ -67,10 +67,11 @@ public class RoutingTable {
     }
 
 
+
     /**
      * 强制将节点添加到路由表中。若对应K桶已满，会移除最老的节点以腾出空间。
      */
-    public synchronized void forceUpdate(NodeInfo node) {
+    public synchronized void forceUpdate(ExternalNodeInfo node) {
         try {
             this.update(node);
         } catch (FullBucketException e) {
@@ -108,7 +109,6 @@ public class RoutingTable {
             }
         }
         Collections.sort(findNodeResult.getNodes());
-
         new FindNodeResultReducer(this.localNodeId, findNodeResult, this.nodeSettings.getFindNodeSize(), this.nodeSettings.getIdentifierSize()).reduce();
         while (findNodeResult.size() > this.nodeSettings.getFindNodeSize()) {
             findNodeResult.remove(findNodeResult.size() - 1); //TODO: Not the best thing.
@@ -118,8 +118,8 @@ public class RoutingTable {
 
     public void addToAnswer (Bucket bucket, FindNodeResult answer, BigInteger destination){
         for (BigInteger id : bucket.getNodeIds()) {
-            NodeInfo node = bucket.getNode(id);
-            answer.add(new NodeInfo(node, destination.xor(id)));
+            ExternalNodeInfo node = bucket.getNode(id);
+            answer.add(new ExternalNodeInfo(node, destination.xor(id)));
         }
     }
 
@@ -131,14 +131,14 @@ public class RoutingTable {
      * @param destinationId 目标节点ID
      * @return 最接近的K个节点的列表
      */
-    public List<NodeInfo> findClosest(BigInteger destinationId) {
+    public List<ExternalNodeInfo> findClosest(BigInteger destinationId) {
         // 用于存储结果的列表
-        ArrayList<NodeInfo> closestNodeList = new ArrayList<>(nodeSettings.getBucketSize());
+        ArrayList<ExternalNodeInfo> closestNodeList = new ArrayList<>(nodeSettings.getBucketSize());
         // 获取目标ID所在的桶
         Bucket targetBucket = this.findBucket(destinationId);
 
         // 使用优先队列（最大堆）来维护当前最近的K个节点
-        PriorityQueue<NodeInfo> closestNodes = new PriorityQueue<>(
+        PriorityQueue<ExternalNodeInfo> closestNodes = new PriorityQueue<>(
                 nodeSettings.getBucketSize(),
                 (a, b) -> getDistance(b.getId()).compareTo(getDistance(a.getId()))
         );
@@ -151,7 +151,7 @@ public class RoutingTable {
         try {
             // 处理目标桶中的所有节点
             for (BigInteger nodeId : targetBucket.getNodeIds()) {
-                NodeInfo node = targetBucket.getNode(nodeId);
+                ExternalNodeInfo node = targetBucket.getNode(nodeId);
                 addIfCloser(node, destinationId, closestNodes);
             }
 
@@ -164,7 +164,7 @@ public class RoutingTable {
                 if (left >= 0) {
                     Bucket bucket = buckets.get(left);
                     for (BigInteger nodeId : bucket.getNodeIds()) {
-                        NodeInfo node = bucket.getNode(nodeId);
+                        ExternalNodeInfo node = bucket.getNode(nodeId);
                         addIfCloser(node, destinationId, closestNodes);
                     }
                     left--;
@@ -173,7 +173,7 @@ public class RoutingTable {
                 if (right < buckets.size()) {
                     Bucket bucket = buckets.get(right);
                     for (BigInteger nodeId : bucket.getNodeIds()) {
-                        NodeInfo node = bucket.getNode(nodeId);
+                        ExternalNodeInfo node = bucket.getNode(nodeId);
                         addIfCloser(node, destinationId, closestNodes);
                     }
                     right++;
@@ -198,7 +198,7 @@ public class RoutingTable {
     /**
      * 辅助方法：如果节点比当前队列中的最远节点更近，则添加到队列中
      */
-    private void addIfCloser(NodeInfo node, BigInteger destinationId, PriorityQueue<NodeInfo> closestNodes) {
+    private void addIfCloser(ExternalNodeInfo node, BigInteger destinationId, PriorityQueue<ExternalNodeInfo> closestNodes) {
         // 计算当前节点与目标ID的距离
         BigInteger distance = getDistance(node.getId());
         // 如果队列未满，直接添加
@@ -206,7 +206,7 @@ public class RoutingTable {
             closestNodes.offer(node);
         } else {
             // 否则，检查是否比最远的节点更近
-            NodeInfo farthest = closestNodes.peek();
+            ExternalNodeInfo farthest = closestNodes.peek();
             if (farthest != null && getDistance(farthest.getId()).compareTo(distance) > 0) {
                 closestNodes.poll();
                 closestNodes.offer(node);
@@ -235,9 +235,7 @@ public class RoutingTable {
 
     public Bucket findBucket(BigInteger id) {
         BigInteger xorNumber = this.getDistance(id);
-        log.info("距离"+xorNumber);
         int prefix = this.getNodePrefix(xorNumber);
-        log.info("前缀"+prefix);
         return buckets.get(prefix);
     }
 

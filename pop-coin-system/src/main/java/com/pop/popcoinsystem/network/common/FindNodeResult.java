@@ -15,8 +15,7 @@ public class FindNodeResult implements Serializable {
 
     private BigInteger destinationId;
     /* Closest nodes in the answer. */
-    private List<NodeInfo> nodes;
-
+    private List<ExternalNodeInfo> nodes;
 
 
     public FindNodeResult() {
@@ -36,11 +35,11 @@ public class FindNodeResult implements Serializable {
         nodes.remove(index);
     }
 
-    public void add(NodeInfo externalNode) {
+    public void add(ExternalNodeInfo externalNode) {
         nodes.add(externalNode);
     }
 
-    public void update(List<NodeInfo> nodes){
+    public void update(List<ExternalNodeInfo> nodes){
         this.nodes = nodes;
     }
 
@@ -49,7 +48,7 @@ public class FindNodeResult implements Serializable {
     public int merge(FindNodeResult findNodeAnswer, int findNodeSize) {
         int nbAdded = 0;
 
-        for (NodeInfo c: findNodeAnswer.getNodes()) {
+        for (ExternalNodeInfo c: findNodeAnswer.getNodes()) {
             if (!nodes.contains(c)) {
                 nbAdded++;
                 nodes.add(c);
@@ -74,7 +73,7 @@ public class FindNodeResult implements Serializable {
         if (nodes.size() < 1) {
             return false;
         }
-        NodeInfo tail = nodes.get(0);
+        ExternalNodeInfo tail = nodes.get(0);
         return tail.getDistance().equals(0);
     }
 

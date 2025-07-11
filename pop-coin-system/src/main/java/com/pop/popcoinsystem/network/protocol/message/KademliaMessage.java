@@ -3,6 +3,7 @@ package com.pop.popcoinsystem.network.protocol.message;
 import com.google.common.base.Objects;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.util.SerializeUtils;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -15,14 +16,13 @@ import java.util.UUID;
 @ToString
 public abstract class KademliaMessage<D extends Serializable> {
     // 消息唯一标识（用于去重）
-    private String messageId;
+    private String messageId = generateMessageId();
     private int type;
     private NodeInfo sender;//消息发送者
     private NodeInfo receiver;//消息接收者
-    private long timestamp;// 时间戳 发送时间
+    private long timestamp = System.currentTimeMillis(); // 时间戳 发送时间
     private D data;//消息数据
-    //过期时间
-    private long expireTime;
+
 
     /**
      * 构造消息
@@ -34,19 +34,21 @@ public abstract class KademliaMessage<D extends Serializable> {
         this.receiver = receiver;
         this.data = data;
         this.timestamp = System.currentTimeMillis();
-        this.expireTime = System.currentTimeMillis() + 1000 * 60 * 5;
     }
 
 
     /**
-     * 检查消息是否过期
+     * 检查消息是否过期  超过10分钟就是过期
      */
     public boolean isExpired() {
-        return System.currentTimeMillis() > expireTime;
+        return System.currentTimeMillis() - timestamp > 10 * 60 * 1000;
     }
 
     public KademliaMessage() {
+        this.timestamp = System.currentTimeMillis();
+        this.messageId = generateMessageId();
     }
+
 
     protected KademliaMessage(int type) {
         this.type = type;

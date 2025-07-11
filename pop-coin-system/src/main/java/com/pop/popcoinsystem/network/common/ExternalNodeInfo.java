@@ -1,0 +1,87 @@
+package com.pop.popcoinsystem.network.common;
+
+import com.pop.popcoinsystem.network.enums.NodeNatType;
+import com.pop.popcoinsystem.network.enums.NodeStatus;
+import com.pop.popcoinsystem.network.enums.NodeType;
+import lombok.*;
+import org.jetbrains.annotations.NotNull;
+
+import java.io.Serializable;
+import java.math.BigInteger;
+import java.util.Date;
+
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+@Getter
+@Setter
+@Builder
+public class ExternalNodeInfo implements Comparable<Object>, Serializable {
+
+    private BigInteger id;//节点ID
+    private  String ipv4;//ipv4地址
+    private  String ipv6;//ipv6地址
+    private  int udpPort;//UDP端口 用于节点发现
+    private  int tcpPort;//TCP端口 用于通信传输
+    private Date lastSeen;//最后活跃时间
+    private int score;//分数
+    private double neighborAverageScore; //邻居平均分
+
+    private long totalSentBytes;// 发送字节总数
+    private long totalReceivedBytes;// 接收字节总数
+    private int nodeType;//节点类型
+    private int nodeNatType;//节点网络类型
+    private double averageResponseTime;       // 平均响应时间
+    private int failedConnectionAttempts;     // 失败的连接尝试次数
+    private boolean isSeedNode;               // 是否为种子节点
+    private NodeStatus nodeStatus;//节点状态
+    protected BigInteger distance;//与当前节点的距离
+
+
+    public ExternalNodeInfo(BigInteger id, String ipv4, String ipv6, int udpPort, int tcpPort,boolean isSeedNode) {
+        this.id = id;
+        this.ipv4 = ipv4;
+        this.ipv6 = ipv6;
+        this.udpPort = udpPort;
+        this.tcpPort = tcpPort;
+        this.lastSeen = new Date();
+        this.score = 0;
+        this.totalSentBytes = 0;
+        this.totalReceivedBytes = 0;
+        this.nodeType = NodeType.FULL.getValue();
+        this.nodeNatType = NodeNatType.PUBLIC.getValue();
+        this.averageResponseTime = 0;
+        this.neighborAverageScore = 0;
+        this.failedConnectionAttempts = 0;
+        this.isSeedNode = isSeedNode;
+        this.nodeStatus = NodeStatus.ACTIVE;
+        this.distance = BigInteger.ZERO;
+    }
+
+    public ExternalNodeInfo(ExternalNodeInfo node, BigInteger xor) {
+        this.distance = xor;
+        this.id = node.getId();
+        this.ipv4 = node.getIpv4();
+        this.ipv6 = node.getIpv6();
+        this.udpPort = node.getUdpPort();
+        this.tcpPort = node.getTcpPort();
+        this.lastSeen = node.getLastSeen();
+        this.score = node.getScore();
+        this.totalSentBytes = node.getTotalSentBytes();
+        this.totalReceivedBytes = node.getTotalReceivedBytes();
+        this.nodeType = node.getNodeType();
+        this.nodeNatType = node.getNodeNatType();
+        this.averageResponseTime = node.getAverageResponseTime();
+        this.neighborAverageScore = node.getNeighborAverageScore();
+        this.failedConnectionAttempts = node.getFailedConnectionAttempts();
+        this.isSeedNode = node.isSeedNode();
+        this.nodeStatus = node.getNodeStatus();
+    }
+
+    @Override
+    public int compareTo(@NotNull Object o) {
+        ExternalNodeInfo c = (ExternalNodeInfo) o;
+        return distance.compareTo(c.distance);
+    }
+
+}

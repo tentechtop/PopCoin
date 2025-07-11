@@ -4,11 +4,16 @@ import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
+import io.netty.channel.*;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import io.netty.handler.codec.LengthFieldPrepender;
 import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigInteger;
+import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -19,59 +24,81 @@ import java.util.concurrent.Executors;
 public class TCPClient {
     private final ExecutorService executorService;
 
-    private final Bootstrap tcpBootstrap;
+    private Bootstrap bootstrap;
+    private NioEventLoopGroup group;
 
 
 
-    public TCPClient(Bootstrap tcpBootstrap) {
+    public TCPClient() {
         executorService = Executors.newFixedThreadPool(10);
-        this.tcpBootstrap = tcpBootstrap;
-
 
     }
 
-    /** 节点ID到Channel的映射 */
-    public static final Map<BigInteger, Channel> nodeTCPChannel = new ConcurrentHashMap<>();
+    /** 节点ID到Channel的映射 */  //不同协议实现的通道不用通用
+    private final Map<BigInteger, Channel> nodeTCPChannel = new ConcurrentHashMap<>();
+
+
+
     /** 节点ID到地址的映射 */
     private final Map<BigInteger, InetSocketAddress> nodeAddresses = new ConcurrentHashMap<>();
 
 
-    public  void sendMessage(KademliaMessage message) throws InterruptedException {
+
+    public  void sendMessage(KademliaMessage message) throws InterruptedException, ConnectException {
         BigInteger id = message.getReceiver().getId();
         Channel channel = null;
-        if (!nodeTCPChannel.containsKey(id)){
+        if (!nodeTCPChannel.containsKey(id)  || !nodeTCPChannel.get(id).isActive()){
             //重新连接 并保存Channel
             NodeInfo receiver = message.getReceiver();
-            ChannelFuture connect = tcpBootstrap.connect(receiver.getIpv4(), receiver.getTcpPort());
-            if (connect.isSuccess()){
-                log.info("Connect to " + receiver.getIpv4() + ":" + receiver.getTcpPort() + " success");
-                channel = connect.sync().channel();
-            }
+            channel = connectTarget(receiver.getIpv4(), receiver.getTcpPort());
             nodeTCPChannel.put(id, channel);
-        }else if (!nodeTCPChannel.get(id).isActive()){
-            //重新连接 并保存Channel
-            NodeInfo receiver = message.getReceiver();
-            ChannelFuture connect = tcpBootstrap.connect(receiver.getIpv4(), receiver.getTcpPort());
-            if (connect.isSuccess()){
-                log.info("Connect to " + receiver.getIpv4() + ":" + receiver.getTcpPort() + " success");
-                channel = connect.sync().channel();
-            }
-            nodeTCPChannel.put(id, channel);
-        }else if (nodeTCPChannel.get(id).isActive()){
-            channel = nodeTCPChannel.get(id);
-        }else {
-            throw new RuntimeException("Channel is not active");
         }
-
-        byte[] serialize = KademliaMessage.serialize(message);
-        // 构造二进制消息
-        ByteBuf byteMessage = channel.alloc().buffer();
-        byteMessage.writeInt(1);         // 消息类型
-        byteMessage.writeInt(4 + serialize.length);  // 内容长度 + 内容长度字段本身
-        byteMessage.writeInt(serialize.length);      // 内容长度
-        byteMessage.writeBytes(serialize);           // 内容
-        channel.writeAndFlush(byteMessage);
+        channel = nodeTCPChannel.get(id);
+        channel.writeAndFlush(message);
     }
+
+
+    public Channel connectTarget(String ipv4, int tcpPort) throws InterruptedException {
+        group = new NioEventLoopGroup();
+        bootstrap = new Bootstrap();
+        bootstrap.group(group)
+                .channel(NioSocketChannel.class)
+                .option(ChannelOption.TCP_NODELAY, true)
+                .handler(new ChannelInitializer<SocketChannel>() {
+                    @Override
+                    protected void initChannel(SocketChannel ch) throws Exception {
+                        ChannelPipeline pipeline = ch.pipeline();
+                        pipeline.addLast(new KademliaNodeServer.TCPKademliaMessageDecoder());
+                        pipeline.addLast(new KademliaNodeServer.TCPKademliaMessageEncoder());
+                    }
+                });
+        ChannelFuture connect = bootstrap.connect(ipv4, tcpPort).sync();
+        Channel channel = connect.channel();
+        connect.addListener(new ChannelFutureListener() {
+            @Override
+            public void operationComplete(ChannelFuture channelFuture) throws Exception {
+                if (channelFuture.isSuccess()) {
+                    log.info("TCP:Connect to " + ipv4 + ":" + tcpPort + " success");
+                } else {
+                    log.error("TCP:Connect to " + ipv4 + ":" + tcpPort + " failed");
+                    throw new ConnectException("Connect to " + ipv4 + ":" + tcpPort + " failed");
+                }
+            }
+        });
+        //异步
+        executorService.submit(() -> {
+            try {
+                channel.closeFuture().sync();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        });
+        return channel;
+    }
+
+
+
+
 
 
 
@@ -87,14 +114,6 @@ public class TCPClient {
             } catch (Exception ignored) {}
         });
     }
-
-
-
-
-
-
-
-
 
 
 }

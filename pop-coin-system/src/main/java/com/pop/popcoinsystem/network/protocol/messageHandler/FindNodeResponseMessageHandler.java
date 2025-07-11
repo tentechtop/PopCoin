@@ -6,8 +6,10 @@ import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import java.io.Serializable;
 
 public class FindNodeResponseMessageHandler implements MessageHandler{
+
     @Override
-    public <U extends KademliaMessage<? extends Serializable>, O extends KademliaMessage<? extends Serializable>> O handle(KademliaNodeServer kademliaNode, U message) {
+    public KademliaMessage<? extends Serializable> handleMesage(KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) {
+
         return null;
     }
 }

@@ -3,19 +3,20 @@ package com.pop.popcoinsystem.network.protocol.message;
 import com.pop.popcoinsystem.network.protocol.MessageType;
 import com.pop.popcoinsystem.util.SerializeUtils;
 import io.netty.channel.Channel;
+import lombok.Builder;
 import lombok.ToString;
 
 import java.io.Serializable;
 import java.math.BigInteger;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-
+@Builder
 @ToString(callSuper = true)
-public class PongKademliaMessage extends KademliaMessage<Serializable>{
+public class PongKademliaMessage extends KademliaMessage<String>{
 
     public PongKademliaMessage() {
-        super(MessageType.PING);
-        setData("PONG");
+        super(MessageType.PONG.getCode());
+        setData(null);
     }
 
     public static byte[] serialize(PongKademliaMessage message) {

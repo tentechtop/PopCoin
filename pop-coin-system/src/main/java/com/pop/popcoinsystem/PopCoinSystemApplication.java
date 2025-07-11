@@ -23,7 +23,6 @@ public class PopCoinSystemApplication {
                 "Application Jeecg-Boot is running! Access URLs:\n\t" +
                 "Local: \t\thttp://localhost:" + port + "/\n\t" +
                 "----------------------------------------------------------");
-
     }
 
 }

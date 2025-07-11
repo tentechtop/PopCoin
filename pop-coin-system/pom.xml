@@ -129,6 +129,10 @@
             <artifactId>jmdns</artifactId>
             <version>3.6.0</version>
         </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-transport</artifactId>
+        </dependency>
     </dependencies>
 
 
