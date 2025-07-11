@@ -350,7 +350,7 @@ public class KademliaNodeServer {
                 //写入消息总长
                 byteBuf.writeInt(12 + data.length);//4
                 //写入内容长度
-                byteBuf.writeInt(data.length);//4
+                byteBuf.writeInt(data.length);//4  //32 位（4 字节）的整数
                 //写入类容
                 byteBuf.writeBytes(data);
             } catch (Exception e) {

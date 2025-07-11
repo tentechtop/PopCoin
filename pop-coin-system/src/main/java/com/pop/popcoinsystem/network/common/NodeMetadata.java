@@ -11,6 +11,7 @@ import lombok.*;
 @Builder
 public class NodeMetadata {
 
+    private int version;//节点版本
     private int score;//分数
     private double neighborAverageScore; //邻居平均分
     private long totalSentBytes;// 发送字节总数

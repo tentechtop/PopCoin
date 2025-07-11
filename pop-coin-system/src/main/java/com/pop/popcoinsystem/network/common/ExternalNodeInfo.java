@@ -19,6 +19,7 @@ import java.util.Date;
 public class ExternalNodeInfo implements Comparable<Object>, Serializable {
 
     private BigInteger id;//节点ID
+    private int version;//节点版本
     private  String ipv4;//ipv4地址
     private  String ipv6;//ipv6地址
     private  int udpPort;//UDP端口 用于节点发现
@@ -56,6 +57,7 @@ public class ExternalNodeInfo implements Comparable<Object>, Serializable {
         this.isSeedNode = isSeedNode;
         this.nodeStatus = NodeStatus.ACTIVE;
         this.distance = BigInteger.ZERO;
+        this.version = 1;
     }
 
     public ExternalNodeInfo(ExternalNodeInfo node, BigInteger xor) {
@@ -76,6 +78,7 @@ public class ExternalNodeInfo implements Comparable<Object>, Serializable {
         this.failedConnectionAttempts = node.getFailedConnectionAttempts();
         this.isSeedNode = node.isSeedNode();
         this.nodeStatus = node.getNodeStatus();
+        this.version = 1;
     }
 
     @Override

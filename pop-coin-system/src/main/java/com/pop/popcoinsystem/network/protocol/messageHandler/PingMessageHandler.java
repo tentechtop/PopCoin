@@ -26,6 +26,7 @@ public class PingMessageHandler implements MessageHandler {
 
     protected PongKademliaMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull PingKademliaMessage message) throws InterruptedException {
         if (kademliaNodeServer.isRunning()){
+            //验证版本
             try {
                 //主动ping我的一定是活跃节点记录下
                 NodeInfo sender = message.getSender();

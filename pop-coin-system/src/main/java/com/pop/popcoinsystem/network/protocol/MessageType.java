@@ -34,6 +34,25 @@ public enum MessageType {
     HANDSHAKE_RES(35, "握手响应"),
 
 
+    VERSION(36, "版本信息"),
+    INV(37, "数据清单"),
+    GETDATA(38, "请求数据"),
+
+
+    GETBLOCKS(39, "请求区块列表"),
+    GETHEADERS(40, "请求区块头"),
+    GETADDR(41, "请求地址信息"),
+    HEADERS(42, "区块头数据"),
+    FILTERLOAD(43, "加载过滤器"),
+    MERKLEBLOCK(44, "Merkle区块"),
+    NOTFOUND(45, "数据未找到"),
+    MEMPOOL(46, "内存池信息"),
+    REJECT(47, "拒绝请求"),
+    GETUTXOS(48, "请求未花费输出"),
+    UTXOS(49, "未花费输出数据"),
+    SENDHEADERS(50, "发送区块头");
+
+
 
 
     ;
