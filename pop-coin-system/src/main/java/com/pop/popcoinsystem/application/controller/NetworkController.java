@@ -10,7 +10,7 @@ public class NetworkController {
 
 
     /**
-     * 启动节点
+     * 启动网络节点
      */
     @RequestMapping("/start")
     public String start() {

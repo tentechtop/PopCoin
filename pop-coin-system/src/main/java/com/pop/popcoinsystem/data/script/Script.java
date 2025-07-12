@@ -319,7 +319,9 @@ public class Script {
             case OP_HASH160:
                 if (stack.isEmpty()) return false;
                 data = stack.remove(stack.size() - 1);
-                stack.add(CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(data)));
+                //byte[] bytes = CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(data));
+                byte[] bytes = CryptoUtil.ECDSASigner.publicKeyHash256And160Byte(data);
+                stack.add(bytes);
                 log.info("OP_HASH160:"+"计算RIPEMD160(SHA256(data))"+"计算结果是: "+CryptoUtil.bytesToHex(stack.get(stack.size() - 1)));
                 return true;
 

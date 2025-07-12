@@ -18,10 +18,15 @@ public class TXOutput {
 
 
     /**
-     * 交易输出唯一ID   内容摘要
+     * 交易输出唯一ID   归属交易hash:交易ID:索引  例如 0x1234567890abcdef:0x1234567890abcdef:0
      */
-    private String txOutputHash;
+    private byte[] txOutId;
 
+
+    /**
+     * 父交易ID
+     */
+    private byte[] txId;
 
     /**
      * 索引
@@ -30,22 +35,14 @@ public class TXOutput {
 
 
     /**
-     * 父交易ID
-     */
-    private String txID;
-
-
-    /**
      * 数值
      */
-    private long value;  // 输出的比特币数量  我要支付的钱金额
-
+    private long value;  // 输出的比特币数量  支付的钱金额
 
     /**
-     * 接收者公钥  新所有者
+     * 接收者公钥哈希 新所有者
      */
-    private PublicKey recipient;
-
+    private byte[] publicKeyHash;
 
     /**
      * 锁定脚本   谁能提供 签名和公钥 并通过验证就能使用这笔未花费   公钥hash就是比特币地址   或者公钥本身

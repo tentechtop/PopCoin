@@ -33,11 +33,9 @@ public enum MessageType {
     HANDSHAKE_REQ(34, "握手请求"),
     HANDSHAKE_RES(35, "握手响应"),
 
-
     VERSION(36, "版本信息"),
     INV(37, "数据清单"),
     GETDATA(38, "请求数据"),
-
 
     GETBLOCKS(39, "请求区块列表"),
     GETHEADERS(40, "请求区块头"),
@@ -50,12 +48,23 @@ public enum MessageType {
     REJECT(47, "拒绝请求"),
     GETUTXOS(48, "请求未花费输出"),
     UTXOS(49, "未花费输出数据"),
-    SENDHEADERS(50, "发送区块头");
+    SENDHEADERS(50, "发送区块头"),
+
+
+    COINBASE(51, "挖矿"),
+    REWARD(52, "奖励"),
+    FEE(53, "手续费"),
 
 
 
 
     ;
+
+
+
+
+
+
 
 
     private final int code;

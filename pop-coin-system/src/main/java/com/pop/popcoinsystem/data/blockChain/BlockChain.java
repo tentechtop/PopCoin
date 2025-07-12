@@ -1,14 +1,25 @@
 package com.pop.popcoinsystem.data.blockChain;
 
-import com.pop.popcoinsystem.data.block.Block;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 import java.math.BigInteger;
 
 /**
- * 这是区块链数据
+ * 区块链
+ * 区块链本质上是一种有序、反向链接链表的数据结构。这意味着，
+ * block按照插入的顺序存放，同时每个block都保存指向上一个
+ * block的链接。这种结构保证可以快速获取最新插入的block同
+ * 时获取它的hash值。这种结构保证可以快速获取最新插入的block
+ * 同时（高效地）获取它的hash值。
  */
 @Data
+@AllArgsConstructor
+@NoArgsConstructor
+@Slf4j
 public class BlockChain {
 
     //网络 链
@@ -55,5 +66,10 @@ public class BlockChain {
 
     //表示区块链的警告信息。通常为空，表示没有警告。如果有 警告，则该字段将包含警告信息。 格式为 警告1(原因,地址),警告2
     private String warnings;
+
+
+
+
+
 
 }

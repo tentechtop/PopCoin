@@ -16,17 +16,4 @@ public class WelcomeController {
     }
 
 
-    /**
-     * 请求付款
-     */
-
-    /**
-     * 转账
-     */
-
-    /**
-     * 获取余额
-     */
-
-
 }

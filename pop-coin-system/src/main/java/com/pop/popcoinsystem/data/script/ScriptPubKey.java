@@ -1,6 +1,8 @@
 package com.pop.popcoinsystem.data.script;
 
 import com.pop.popcoinsystem.util.CryptoUtil;
+import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -10,6 +12,8 @@ import java.util.List;
 /**
  * 锁定脚本 - 定义花费输出所需的条件
  */
+@Slf4j
+@Data
 public class ScriptPubKey extends Script {
 
     // 收款人地址
@@ -51,10 +55,43 @@ public class ScriptPubKey extends Script {
 
     // 从公钥生成P2PKH锁定脚本
     public static ScriptPubKey createP2PKH(byte[] publicKey) {
-        byte[] pubKeyHash = CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(publicKey));
-        System.out.println("公钥哈希: " + CryptoUtil.bytesToHex(pubKeyHash));
-        return new ScriptPubKey(pubKeyHash);
+/*        byte[] pubKeyHash = CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(publicKey));
+        log.info("锁定脚本公钥哈希: " + CryptoUtil.bytesToHex(pubKeyHash));*/
+        byte[] bytes = CryptoUtil.ECDSASigner.publicKeyHash256And160Byte(publicKey);
+        return new ScriptPubKey(bytes);
     }
+
+
+
+    /**
+     * 给定公钥哈希创建P2PKH锁定脚本
+     * @param publicKeyHash
+     * @return
+     */
+    public static ScriptPubKey createP2PKHByPublicKeyHash(byte[] publicKeyHash) {
+        return new ScriptPubKey(publicKeyHash);
+    }
+
+
+    /**
+     * 给定公钥哈希Hex 创建P2PKH锁定脚本
+     * @return
+     */
+    public static ScriptPubKey createP2PKHByPublicKeyHash(String publicKeyHash) {
+        return new ScriptPubKey(CryptoUtil.hexToBytes(publicKeyHash));
+    }
+
+    /**
+     * 给定地址创建锁定脚本
+     * @param address
+     * @return
+     */
+    public static ScriptPubKey createP2PKHByAddress(String address) {
+        return new ScriptPubKey(CryptoUtil.hexToBytes(CryptoUtil.ECDSASigner.addressToPublicKeyHash(address)));
+    }
+
+
+
 
     // 创建P2SH (Pay-to-Script-Hash) 类型的锁定脚本
     public static ScriptPubKey createP2SH(byte[] scriptHash) {

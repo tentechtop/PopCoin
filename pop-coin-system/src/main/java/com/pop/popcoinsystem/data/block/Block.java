@@ -1,5 +1,6 @@
 package com.pop.popcoinsystem.data.block;
 
+import com.pop.popcoinsystem.data.transaction.Transaction;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -8,6 +9,8 @@ import lombok.ToString;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 @AllArgsConstructor
@@ -45,7 +48,6 @@ public class Block implements Serializable {
     //表示该区块的随机数，用于挖矿过程中的工作量证明计算。
     private String nonce;
 
-
     //表示该区块中包含的交易数量
     private int txCount;
 
@@ -56,9 +58,7 @@ public class Block implements Serializable {
     //表示该区块的权重，用于比特币的区块大小限制计算。
     private int weight;
 
-
-
-
-
+    //区块中的交易
+    private List<Transaction> transactions;
 
 }
