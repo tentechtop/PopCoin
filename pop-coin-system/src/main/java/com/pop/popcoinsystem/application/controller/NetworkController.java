@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/blockchain")
 public class NetworkController {
 
+    //对这些接口要做权限认证
 
 
     /**
@@ -17,6 +18,16 @@ public class NetworkController {
 
         return "";
     }
+
+
+    /**
+     * 停止网络节点
+     */
+
+
+    /**
+     * 修改网络配置 并重启
+     */
 
 
 

@@ -17,18 +17,64 @@ public class WalletController {
         return "create wallet success";
     }
 
+    /**
+     * 创建密码钱包
+     */
+    @RequestMapping("/createPasswordWallet")
+    public String createPasswordWallet() {
+        return "create password wallet success";
+    }
+
+    /**
+     * 创建助记词钱包
+     */
+    @RequestMapping("/createMnemonicWallet")
+    public String createMnemonicWallet() {
+        return "create mnemonic wallet success";
+    }
+
+
+    /**
+     * 创建密码助记词钱包
+     */
+    @RequestMapping("/createPasswordMnemonicWallet")
+    public String createPasswordMnemonicWallet() {
+        return "create password mnemonic wallet success";
+    }
 
     /**
      * 发送
      */
+    @RequestMapping("/send")
+    public String send() {
+        return "send success";
+    }
 
     /**
      * 接收
      */
+    @RequestMapping("/receive")
+    public String receive() {
+        return "receive success";
+    }
 
     /**
-     * 获取钱包余额
+     * 获取当前钱包余额
      */
+    @RequestMapping("/getBalance")
+    public String getBalance() {
+        return "get balance success";
+    }
+
+    /**
+     * 查询钱包交易记录
+     */
+    @RequestMapping("/getTransaction")
+    public String getTransaction() {
+        return "get transaction success";
+    }
+
+
 
 
 }

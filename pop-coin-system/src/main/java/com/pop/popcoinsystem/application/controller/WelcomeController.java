@@ -15,5 +15,13 @@ public class WelcomeController {
         return "Welcome to PopCoinSystem, a peer-to-peer electronic cash system";
     }
 
+    /**
+     * 通过私钥登录
+     * @return
+     */
+    @GetMapping("/login")
+    public String login(){
+        return "Login";
+    }
 
 }
