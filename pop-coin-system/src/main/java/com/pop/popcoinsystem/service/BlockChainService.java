@@ -1,4 +1,4 @@
-package com.pop.popcoinsystem.data.service;
+package com.pop.popcoinsystem.service;
 
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.blockChain.BlockChain;

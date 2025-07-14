@@ -83,6 +83,14 @@ public class BlockChainController {
     }
 
 
+    /**
+     * 创建区块
+     */
+    @RequestMapping("/createBlock")
+    public String createBlock() {
+        return "";
+    }
+
 
 
 

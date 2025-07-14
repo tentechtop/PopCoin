@@ -139,25 +139,19 @@ public class ScriptPubKey extends Script {
         if (m < 1 || m > publicKeys.size() || publicKeys.size() > 16) {
             throw new IllegalArgumentException("无效的多重签名参数");
         }
-
         ScriptPubKey script = new ScriptPubKey();
         script.type = TYPE_MULTISIG;
         script.reqSigs = m;
-
         // 添加M
         script.addOpCode(OP_1 + m - 1);
-
         // 添加所有公钥
         for (byte[] pubKey : publicKeys) {
             script.addData(pubKey);
         }
-
         // 添加N
         script.addOpCode(OP_1 + publicKeys.size() - 1);
-
         // 添加OP_CHECKMULTISIG
         script.addOpCode(OP_CHECKMULTISIG);
-
         script.hex = bytesToHex(script.serialize());
         return script;
     }

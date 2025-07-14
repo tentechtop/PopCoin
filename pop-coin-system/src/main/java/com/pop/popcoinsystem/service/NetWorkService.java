@@ -1,4 +1,4 @@
-package com.pop.popcoinsystem.application.service;
+package com.pop.popcoinsystem.service;
 
 import org.springframework.stereotype.Service;
 
