@@ -17,6 +17,8 @@ public class WelcomeController {
 
     /**
      * 通过私钥登录
+     * 用户通过对登录信息进行签名登录
+     *
      * @return
      */
     @GetMapping("/login")

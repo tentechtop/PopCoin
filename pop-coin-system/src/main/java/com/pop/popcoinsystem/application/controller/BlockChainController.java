@@ -4,7 +4,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/blockchain")
+@RequestMapping("/pop/blockchain")
 public class BlockChainController {
 
     /**
@@ -45,6 +45,14 @@ public class BlockChainController {
      */
     @RequestMapping("/getPrevious100Blocks")
     public String getPrevious100Blocks() {
+        return "";
+    }
+
+    /**
+     * 根据范围查询区块
+     */
+    @RequestMapping("/getBlockByRange")
+    public String getBlockByRange() {
         return "";
     }
 
@@ -93,6 +101,31 @@ public class BlockChainController {
     }
 
 
+    /**
+     * 查询交易
+     */
+    @RequestMapping("/getTransaction")
+    public String getTransaction() {
+        return "";
+    }
+
+
+    /**
+     * 查询地址中的余额
+     */
+    @RequestMapping("/getBalance")
+    public String getBalance() {
+        return "";
+    }
+
+
+    /**
+     * 查询地址中的余额并带出未花费
+     */
+    @RequestMapping("/getBalanceWithUnspent")
+    public String getBalanceWithUnspent() {
+        return "";
+    }
 
 
 
