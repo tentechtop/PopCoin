@@ -67,9 +67,4 @@ public class BlockChain {
     //表示区块链的警告信息。通常为空，表示没有警告。如果有 警告，则该字段将包含警告信息。 格式为 警告1(原因,地址),警告2
     private String warnings;
 
-
-
-
-
-
 }

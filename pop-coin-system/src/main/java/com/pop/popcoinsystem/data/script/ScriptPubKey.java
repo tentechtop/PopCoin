@@ -90,9 +90,6 @@ public class ScriptPubKey extends Script {
         return script;
     }
 
-
-
-
     // 创建P2WPKH (Pay-to-Witness-Public-Key-Hash) 类型的锁定脚本
     public static ScriptPubKey createP2WPKH(byte[] pubKeyHash) {
         ScriptPubKey script = new ScriptPubKey();

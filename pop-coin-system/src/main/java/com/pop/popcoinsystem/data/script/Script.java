@@ -22,8 +22,6 @@ import static com.pop.popcoinsystem.util.CryptoUtil.bytesToHex;
 @Slf4j
 public class Script {
 
-
-
     // 脚本元素类
     public static class ScriptElement {
         private final int opCode;

@@ -36,7 +36,6 @@ public class Block implements Serializable {
     private long time;
     //表示该区块之前 11 个区块的中位时间。它用于一些时间敏感的计算。
     private long medianTime;
-
     //表示该区块之前的区块链总工作量，以十六进制表示。它反映了整个区块链的挖矿工作量。
     private String chainWork;
     //表示该区块的挖矿难度。它反映了挖矿的难度程度，即找到一个有效区块哈希的难度。
@@ -47,17 +46,14 @@ public class Block implements Serializable {
     private String difficultyBits;
     //表示该区块的随机数，用于挖矿过程中的工作量证明计算。
     private String nonce;
-
     //表示该区块中包含的交易数量
     private int txCount;
-
     //表示该区块的见证数据大小（以字节为单位）。
     private int strippedSize;
     //表示该区块的大小（以字节为单位），包括见证数据。
     private int size;
     //表示该区块的权重，用于比特币的区块大小限制计算。
     private int weight;
-
     //区块中的交易
     private List<Transaction> transactions;
 

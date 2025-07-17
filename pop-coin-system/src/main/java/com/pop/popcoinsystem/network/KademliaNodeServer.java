@@ -33,7 +33,6 @@ import java.net.InetSocketAddress;
 import java.util.*;
 import java.util.concurrent.*;
 
-
 @Slf4j
 @Data
 public class KademliaNodeServer {
@@ -53,7 +52,6 @@ public class KademliaNodeServer {
     //TCP客服端
     private UDPClient udpClient;
     private TCPClient tcpClient;
-
 
     // 已广播消息记录，避免重复广播
     private final Map<String, Long> broadcastMessages = new ConcurrentHashMap<>();

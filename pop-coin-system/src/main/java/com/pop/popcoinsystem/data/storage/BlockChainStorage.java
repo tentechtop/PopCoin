@@ -19,11 +19,10 @@ import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
 public class BlockChainStorage {
 
     // 数据库存储路径
-    private static final String DB_PATH = "rocksDb/popCoin.db/blockChain.db/"+POP_NET_VERSION+"/";
+    private static final String DB_PATH = "rocksDb/popCoin.db/blockChain"+POP_NET_VERSION+".db/";
     // 列族名称（逻辑分区）
     private static final String CF_CHAINSTATE = "chainstate"; // 存储链信息
     private static final String CF_BLOCKS = "blocks";       // 存储区块
-    private static final String CF_UTXO = "utxo";       // 未花费输出
     private static final String CF_METADATA = "metadata";   // 存储元数据（如最新区块哈希） 链信息中有完整的
     // 元数据键（存储在CF_METADATA列族）
     private static final byte[] KEY_LAST_BLOCK_HASH = "last_block_hash".getBytes();
@@ -118,7 +117,6 @@ public class BlockChainStorage {
         this.cfBlocks = cfHandles.get(1);         // 对应CF_BLOCKS
         this.cfChainState = cfHandles.get(2);     // 对应CF_CHAINSTATE
         this.cfMetadata = cfHandles.get(3);       // 对应CF_METADATA
-        this.cfUtxo = cfHandles.get(4);           // 对应CF_UTXO
         return db;
     }
 

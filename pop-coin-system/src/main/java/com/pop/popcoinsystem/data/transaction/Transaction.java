@@ -17,24 +17,19 @@ import static com.pop.popcoinsystem.data.transaction.constant.VERSION_1;
 
 /**
  * 交易信息
- * 本地比特币客户端会把这条数据向外扩散，传播。让每一个比特币客户端都知晓我的这一笔交易，这样这笔交易才是有效的。他如何验证这笔交易的有效性：
  */
 //隔离见证（SegWit） 通过将签名数据（见证数据）与交易的其他部分分离，解决了上述问题。交易被分为：
 //
 //非见证数据：包含版本号、输入输出结构、锁定时间等固定信息。
 //见证数据：包含签名、公钥等证明交易合法性的信息。
-
-
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 public class Transaction {
-
-
     /**
-     * 交易的Hash // 非见证数据的哈希（SegWit规范）
+     * 交易的Hash
      */
-    private byte[] txId;   //不含有签名计算的hash就是隔离见证
+    private byte[] txId;
 
     /**
      * 交易版本
@@ -81,13 +76,6 @@ public class Transaction {
     private List<Witness> witnesses = new ArrayList<>(); // 每个输入对应一个Witness
 
 
-
-
-
-
-
-
-
     /**
      * 获取这笔交易的hash
      * 计算交易哈希时，应排除txId字段，避免递归计算
@@ -98,8 +86,6 @@ public class Transaction {
         // 序列化交易数据并计算哈希
         this.txId = CryptoUtil.applySHA256(SerializeUtils.serialize(this));
     }
-
-
 
     /**
      * 计算交易权重
