@@ -15,30 +15,26 @@ import lombok.NoArgsConstructor;
 public class TXInput {
 
     /**
-     * 引用交易输出索引  排名
-     */
-    private int txOutIndex;
-
-
-    /**
-     * 引用交易输出ID  hash
-     */
-    private byte[] txOutId;
-
-    /**
-     * 交易Id的hash值  归属交易ID
+     * 交易Id的hash值 前序交易的的ID
      */
     private byte[] txId;
 
     /**
-     * 未花费 输出
+     * 引用交易输出索引 前序交易的输出索引
      */
-    private TXOutput txOutput;
-
+    private int vout;
 
     /**
-     * 解锁脚本  是否允许使用这笔花费   满足条件可使用   签名就是对交易签名
+     * 解锁脚本  是否允许使用这笔花费   满足条件可使用   签名就是对交易签名 （SegWit中通常为空）
      */
     private ScriptSig scriptSig; // 解锁脚本，证明有权使用该输出
+
+
+    /** 隔离见证数据（每个输入的见证栈） */
+    private Witness witness; // 引用之前实现的Witness类
+
+
+    /** 序列号（用于时间锁定，默认0xFFFFFFFF） */
+    private long sequence = 0xFFFFFFFFL;
 
 }

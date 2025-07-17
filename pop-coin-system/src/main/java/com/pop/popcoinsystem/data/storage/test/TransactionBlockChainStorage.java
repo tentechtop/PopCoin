@@ -1,4 +1,4 @@
-package com.pop.popcoinsystem.data.storage;
+package com.pop.popcoinsystem.data.storage.test;
 
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.util.SerializeUtils;
@@ -12,7 +12,9 @@ import java.util.Map;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-
+/**
+ * 带有事务的存储
+ */
 @Slf4j
 public class TransactionBlockChainStorage {
 

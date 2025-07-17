@@ -1,7 +1,7 @@
 spring:
   application:
     name: PopCoinSystem
-    version: 1.0.0
+    version: 1.0.0  #系统版本
     description: PopCoinSystem
     author: PopCoin
     email: popcoin@163.com
@@ -17,4 +17,5 @@ server:
 
 #没有私钥的只能调用普通接口 和区块的基本信息接口 以及交易验证和同步数据等服务
 popcoin:
-  publickey: "" #节点公钥 只有拥有私钥的人才能再本节点 进行节点控制 和钱包等服务
+  publickey: "" #节点公钥hash编码后的值放在这里 只有拥有私钥的人才能再本节点 进行节点控制 和钱包等服务  可以用空格隔开设置多个公钥  提供公钥哈市和签名就能登录
+  netversion: 1  #节点网络版本 1主网  2测试网络1  3测试网络2

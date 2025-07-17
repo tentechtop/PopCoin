@@ -32,14 +32,14 @@ public class Transaction {
 
 
     /**
-     * 交易的Hash
+     * 交易的Hash // 非见证数据的哈希（SegWit规范）
      */
-    private byte[] txId;
+    private byte[] txId;   //不含有签名计算的hash就是隔离见证
 
     /**
      * 交易版本
      */
-    private long version;
+    private long version = 1;
 
     /**
      * 交易数据大小
@@ -54,107 +54,35 @@ public class Transaction {
     /**
      * 锁定时间
      */
-    private long lockTime;
+    private long lockTime  = 0;
+
+    /**
+     * 交易创建时间
+     */
+    private long time = System.currentTimeMillis();
 
     /**
      * 交易输入
      */
-    private List<TXInput> inputs;//交易的输入。可以有多个输入，每一个输入都说明了他是引用的哪一比交易的输出。这里可以理解为 我本次交易的钱是从哪来的。
+    private List<TXInput> inputs = new ArrayList<>();;//交易的输入。可以有多个输入，每一个输入都说明了他是引用的哪一比交易的输出。这里可以理解为 我本次交易的钱是从哪来的。
 
     /**
      * 交易输出
      */
-    private List<TXOutput> outputs;//交易的输出，可以有多个，本次交易的钱我可以转给多个不同的地址，包括给自己找零的钱。可以理解为 我本次交易的钱都给了哪些人。
-
-
-
-    //锁定脚本（ScriptPubKey）
-    //签名 公钥 OP_DUP OP_HASH160 <PubKeyHash> OP_EQUALVERIFY OP_CHECKSIG
-
-    //P2SH（Pay-to-Script-Hash）
-    //该类型支持更复杂的脚本，通过哈希值来引用。
-
-    //P2WPKH（Pay-to-Witness-Public-Key-Hash）
-    //这是隔离见证版本的 P2PKH，能减少交易体积。
-
-    //解锁脚本（ScriptSig）
-    //解锁脚本会被放在交易输入里，其内容取决于对应的锁定脚本：
-    //P2PKH 的解锁脚本
-    //<Signature> <PublicKey>
+    private List<TXOutput> outputs = new ArrayList<>();;//交易的输出，可以有多个，本次交易的钱我可以转给多个不同的地址，包括给自己找零的钱。可以理解为 我本次交易的钱都给了哪些人。
 
     /**
-     * 创建CoinBase交易   区块生成奖励
-     * @param publicKeyHashByte   收账的钱包地址  公钥哈希
-     * @return
+     * 是否隔离见证
      */
-    public static Transaction newCoinbaseTX(byte[] publicKeyHashByte) {
-        Transaction transaction = new Transaction();
-        transaction.setVersion(VERSION_1);
-        transaction.setLockTime(0);// 锁定时间为0（立即生效）
-
-        //这笔交易没有输入 只有输出
-        //创建交易输出
-        ArrayList<TXOutput> txOutputs = new ArrayList<>();
-        TXOutput txOutput = new TXOutput();
-        txOutput.setValue(SUBSIDY); // 设置区块奖励金额
-        txOutput.setPublicKeyHash(publicKeyHashByte);
-        //生成这笔交易的锁定脚本
-        txOutput.setScriptPubKey(ScriptPubKey.createP2PKHByPublicKeyHash(publicKeyHashByte));
-        txOutputs.add(txOutput);
-        transaction.setOutputs(txOutputs);
-        transaction.calculateWeight(); // 计算size和weight
-        transaction.setTxId();
-        return null;
-    }
-
+    private boolean segWit;
     /**
-     * coinBase交易验证
+     * 见证数据
      */
-    public boolean isCoinbase() {
-       return true;
-    }
+    private List<Witness> witnesses = new ArrayList<>(); // 每个输入对应一个Witness
 
 
 
 
-    /**
-     * 普通交易验证交易的有效性
-     * @return
-     */
-    public boolean verify() {
-        // 空交易无效
-        if (inputs == null || inputs.isEmpty() || outputs == null || outputs.isEmpty()) {
-            return false;
-        }
-        // 验证每一个输入的签名
-        for (TXInput input : inputs) {
-            // 证签名和公钥
-            if (input.getScriptSig() == null || input.getTxOutId() == null) {
-                return false;
-            }
-/*            if (!input.getScriptSig().verify(input.getTxOutId(), input.getTxOutIndex(), input.getScriptPubKey())) {
-                return false;
-            }
-            */
-
-
-
-        }
-        // 验证输入总金额 >= 输出总金额
-/*
-        long totalInput = getInputsValue();
-        long totalOutput = getOutputsValue();
-*/
-
-
-
-
-
-
-        //return totalInput >= totalOutput;
-
-        return true;
-    }
 
 
 
@@ -295,16 +223,4 @@ public class Transaction {
             return 9;
         }
     }
-
-
-
-    //对交易签名
-    public void sign() {
-
-
-
-
-    }
-
-
 }

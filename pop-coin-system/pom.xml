@@ -39,6 +39,12 @@
             <version>1.59</version>
         </dependency>
 
+        <!--在 Java 里读取 application.yml 文件-->
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+            <version>2.2</version>
+        </dependency>
 
         <dependency>
             <groupId>org.junit.jupiter</groupId>

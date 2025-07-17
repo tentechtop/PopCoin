@@ -2,39 +2,27 @@ package com.pop.popcoinsystem.service;
 
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.blockChain.BlockChain;
-import com.pop.popcoinsystem.data.script.ScriptSig;
-import com.pop.popcoinsystem.data.storage.BlockChainRocksDBStorageBack;
-import com.pop.popcoinsystem.data.transaction.SpendableOutputResult;
+import com.pop.popcoinsystem.data.storage.test.BlockChainRocksDBStorageBack;
+import com.pop.popcoinsystem.data.transaction.TXOutput;
 import com.pop.popcoinsystem.data.transaction.Transaction;
-import com.pop.popcoinsystem.util.CryptoUtil;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
-import java.security.PublicKey;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 @Service
 public class BlockChainService {
-    //用户创建区块时提供的是钱包的公钥哈希（PublicKey Hash）而非完整的公钥。
-    //用户在交易时
-
-
 
     /**
-     * <p> 创建区块链 </p>
+     * <p> 创建区块 </p>
      * @param address 在比特币网络里，矿工在挖矿过程中，当成功挖到一个新区块时，会在区块的 coinbase 交易里提供公钥哈希（对应地址），
      *                而非直接提供公钥。下面详细剖析这一过程：   用户提供地址  address是一个钱包地址
      * @return
      */
-    public static BlockChain createBlockChain(String address) {
+    public static BlockChain createBlock(String address) {
         String lastBlockHash = BlockChainRocksDBStorageBack.getInstance().getLastBlockHash();//最新的区块的哈希
         if (StringUtils.isBlank(lastBlockHash)) {
-            //钱包地址转公钥
-            byte[] publicKeyHashByte = CryptoUtil.ECDSASigner.addressToPublicKeyHashByte(address);//公钥哈希
-            Transaction coinbaseTX = Transaction.newCoinbaseTX(publicKeyHashByte);
 
 
         }
@@ -49,16 +37,7 @@ public class BlockChainService {
      */
     public void send(String from, String to, double amount) throws Exception {
 
-
-
     }
-
-
-
-
-
-
-
 
 
 
@@ -98,45 +77,26 @@ public class BlockChainService {
     /**
      * 查找钱包地址对应的所有未花费的交易
      *
-     * @param address 钱包地址 公钥哈希
+     * @param address 钱包地址
      * @return
      */
-    public List<Transaction> findUnspentTransactions(String address) {
-        ArrayList<Transaction> transactions = new ArrayList<>();
+    public List<TXOutput> findUnspentTransactions(String address) {
+        ArrayList<TXOutput> utxoList = new ArrayList<>();
 
-        return transactions;
+
+
+        return utxoList;
     }
-
-
-
-    /**
-     * 从交易输入中查询区块链中所有已被花费了的交易输出
-     *
-     * @param address 钱包地址  公钥哈希
-     * @return 交易ID以及对应的交易输出下标地址
-     * @throws Exception
-     */
-    public Map<String, int[]> getAllSpentTXOs(String address) {
-        Map<String, int[]> spentTXOs = new HashMap<>();
-
-        return spentTXOs;
-    }
-
 
 
 
     /**
      * 寻找能够花费的交易
      *
-     * @param address 钱包地址  公钥哈希
+     * @param address 公钥哈希
      * @param amount  花费金额
      */
-    public SpendableOutputResult findSpendableOutputs(String address, double amount) {
-        int accumulated = 0;
-        Map<String, int[]> unspentOuts = new HashMap<>();
 
-        return new SpendableOutputResult(accumulated,unspentOuts);
-    }
 
 
 

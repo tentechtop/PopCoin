@@ -1,7 +1,10 @@
 package com.pop.popcoinsystem.util;
 
+import com.pop.popcoinsystem.PopCoinSystemApplication;
+import com.pop.popcoinsystem.data.transaction.TxSigType;
+import com.pop.popcoinsystem.network.enums.NETVersion;
+import lombok.extern.slf4j.Slf4j;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
-
 import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -13,17 +16,29 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Map;
 
 
 /**
  * 加密工具类 - 提供哈希、签名和密钥管理功能
  */
-
+@Slf4j
 public class CryptoUtil {
 
+    //节点版本
+    public static int POP_NET_VERSION = 1; //默认主网
+    public static byte PRE_P2PKH = 0x00;
+    public static byte PRE_P2SH = 0x05;
 
-    public static String publicKeyToAddress(PublicKey publicKey) {
-        return bytesToHex(publicKey.getEncoded());
+    static {
+        // 从类路径根目录加载application.yml
+        Map<String, Object> config = YamlReaderUtils.loadYaml("application.yml");
+        if (config != null) {
+            POP_NET_VERSION = (int)YamlReaderUtils.getNestedValue(config, "popcoin.netversion");
+            PRE_P2PKH = NETVersion.getP2PKHPreAddress(POP_NET_VERSION);
+            PRE_P2SH = NETVersion.getP2SHPreAddress(POP_NET_VERSION);
+        }
+        log.info("网络版本:"+POP_NET_VERSION);
     }
 
     /**
@@ -32,7 +47,7 @@ public class CryptoUtil {
     public static class ECDSASigner {
         // 静态初始化Bouncy Castle提供者
         static {
-            Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
+            Security.addProvider(new BouncyCastleProvider());
         }
         /**
          * 生成ECDSA密钥对（secp256k1曲线）
@@ -62,25 +77,6 @@ public class CryptoUtil {
                 throw new RuntimeException("应用签名失败", e);
             }
         }
-
-        /**
-         * 对原始数据的hash进行签名
-         */
-        public static byte[] applyHashSignature(PrivateKey privateKey, byte[] data) {
-            try {
-                // 显式指定BC提供者
-                Signature dsa = Signature.getInstance("SHA256withECDSA", "BC");
-                dsa.initSign(privateKey);
-                dsa.update(CryptoUtil.applySHA256(data)); // 传入原始数据的 hash
-                return dsa.sign();
-            } catch (Exception e) {
-                throw new RuntimeException("应用签名失败", e);
-            }
-        }
-
-
-
-
         /**
          * 验证ECDSA签名
          */
@@ -97,27 +93,18 @@ public class CryptoUtil {
         }
 
 
-        /**
-         * 将公钥转换为地址（类似比特币地址格式）
-         * 流程：公钥 → SHA-256 → RIPEMD-160 → 添加版本前缀 → 双重SHA-256 → 取校验和 → 拼接 → Base58编码
-         */
-        public static String publicKeyToAddress(PublicKey publicKey) {
+
+
+        //根据公钥生成P2PKH类型地址
+        public static String createP2PKHAddressByPK(byte[] publicKey) {
             try {
                 // 1. 获取公钥字节（去除开头的0x04字节，保留64字节的坐标）
-                byte[] publicKeyBytes = publicKey.getEncoded();
                 // 移除X.509编码头，获取原始EC公钥字节
                 // 这里简化处理，实际使用时可能需要根据具体编码调整
-                byte[] rawPublicKey = Arrays.copyOfRange(publicKeyBytes, 27, publicKeyBytes.length);
-
-                // 2. 对公钥进行SHA-256哈希
-                byte[] sha256Hash = applySHA256(rawPublicKey);
-
-                // 3. 对SHA-256结果进行RIPEMD-160哈希
-                byte[] ripeMD160Hash = applyRIPEMD160(sha256Hash);
-
+                byte[] ripeMD160Hash = createP2PKHByPK(publicKey);
                 // 4. 添加版本字节（0x00代表 主网地址）
                 byte[] versionedHash = new byte[ripeMD160Hash.length + 1];
-                versionedHash[0] = 0x00; // 主网地址前缀
+                versionedHash[0] = PRE_P2PKH; // 主网地址前缀
                 System.arraycopy(ripeMD160Hash, 0, versionedHash, 1, ripeMD160Hash.length);
 
                 // 5. 计算校验和（对versionedHash进行两次SHA-256哈希，取前4字节）
@@ -133,12 +120,11 @@ public class CryptoUtil {
                 // 7. 使用Base58编码生成最终地址
                 return Base58.encode(addressBytes);
             } catch (Exception e) {
-                throw new RuntimeException("生成地址失败", e);
+                throw new RuntimeException("生成P2PKH地址失败", e);
             }
         }
-
-        // 验证示例：检查生成的地址是否符合标准
-        public static boolean isValidAddress(String address) {
+        //检查生成的地址是否符合标准
+        public static boolean isValidP2PKHAddress(String address) {
             try {
                 // 1. Base58解码地址
                 byte[] decoded = Base58.decode(address);
@@ -160,84 +146,213 @@ public class CryptoUtil {
 
                 byte[] calculatedChecksum = Arrays.copyOfRange(applySHA256(applySHA256(versionedHash)), 0, 4);
 
-                return Arrays.equals(checksum, calculatedChecksum) && version == 0x00; // 主网版本校验
+                return Arrays.equals(checksum, calculatedChecksum) && version == PRE_P2PKH; // 主网版本校验
             } catch (Exception e) {
                 return false; // 解码失败或校验不通过
             }
         }
-
-
-
-
-        // 公钥哈希（修改后）
-        public static String publicKeyHash256And160String(PublicKey publicKey) {
+        //根据公钥生成P2PKH类型公钥哈希
+        public static byte[] createP2PKHByPK(byte[] publicKey) {
             try {
-                // 获取X.509编码的公钥字节（包含头部信息）
-                byte[] publicKeyBytes = publicKey.getEncoded();
-                // 截取原始公钥字节（与生成地址时使用相同的源数据）
-                byte[] rawPublicKey = Arrays.copyOfRange(publicKeyBytes, 27, publicKeyBytes.length);
                 // 对原始公钥进行哈希计算
-                byte[] sha256Hash = applySHA256(rawPublicKey);
-                byte[] bytes = applyRIPEMD160(sha256Hash);
-                return CryptoUtil.bytesToHex(bytes);
-            } catch (Exception e) {
-                throw new RuntimeException("公钥hash失败", e);
-            }
-        }
-
-        public static byte[] publicKeyHash256And160Byte(PublicKey publicKey) {
-            try {
-                // 获取X.509编码的公钥字节（包含头部信息）
-                byte[] publicKeyBytes = publicKey.getEncoded();
-                // 截取原始公钥字节（与生成地址时使用相同的源数据）
-                byte[] rawPublicKey = Arrays.copyOfRange(publicKeyBytes, 27, publicKeyBytes.length);
-                // 对原始公钥进行哈希计算
-                byte[] sha256Hash = applySHA256(rawPublicKey);
+                byte[] sha256Hash = applySHA256(publicKey);
                 return applyRIPEMD160(sha256Hash);
             } catch (Exception e) {
-                throw new RuntimeException("公钥hash失败", e);
+                throw new RuntimeException("生成P2PKH地址失败", e);
             }
+        }
+        //地址转公钥哈希
+        public static byte[] addressToP2PKH(String address) {
+            byte[] decoded = Base58.decode(address);
+            return Arrays.copyOfRange(decoded, 1, 21);
         }
 
 
-        public static byte[] publicKeyHash256And160Byte(byte[] publicKeyBytes) {
+
+        //根据公钥生成P2SH类型地址  2. 创建标准P2PKH赎回脚本: OP_DUP OP_HASH160 <20字节hash> OP_EQUALVERIFY OP_CHECKSIG
+        public static String createP2SHAddressByPK(byte[] redeemScript) {
             try {
-                // 获取X.509编码的公钥字节（包含头部信息）
-                // 截取原始公钥字节（与生成地址时使用相同的源数据）
-                byte[] rawPublicKey = Arrays.copyOfRange(publicKeyBytes, 27, publicKeyBytes.length);
-                // 对原始公钥进行哈希计算
-                byte[] sha256Hash = applySHA256(rawPublicKey);
-                return applyRIPEMD160(sha256Hash);
+                //  计算脚本的HASH160（SHA256 -> RIPEMD160）
+                byte[] scriptHash = applyRIPEMD160(applySHA256(redeemScript));
+
+                //  添加P2SH版本字节(0x05)
+                byte[] versionedHash = new byte[scriptHash.length + 1];
+                versionedHash[0] = PRE_P2SH; // P2SH主网版本
+                System.arraycopy(scriptHash, 0, versionedHash, 1, scriptHash.length);
+
+                //  计算校验和并编码
+                byte[] checksum = Arrays.copyOfRange(applySHA256(applySHA256(versionedHash)), 0, 4);
+                byte[] addressBytes = new byte[versionedHash.length + checksum.length];
+                System.arraycopy(versionedHash, 0, addressBytes, 0, versionedHash.length);
+                System.arraycopy(checksum, 0, addressBytes, versionedHash.length, checksum.length);
+                return Base58.encode(addressBytes);
             } catch (Exception e) {
-                throw new RuntimeException("公钥hash失败", e);
+                throw new RuntimeException("生成P2SH地址失败", e);
             }
         }
+        public static boolean isValidP2SHAddress(String address) {
+            byte[] decoded = Base58.decode(address);
+            if (decoded.length != 25) return false; // 1字节版本 + 20字节哈希 + 4字节校验和
 
+            byte version = decoded[0];
+            byte[] hash = Arrays.copyOfRange(decoded, 1, 21);
+            byte[] checksum = Arrays.copyOfRange(decoded, 21, 25);
 
+            // 重新计算校验和
+            byte[] versionedHash = new byte[21];
+            versionedHash[0] = version;
+            System.arraycopy(hash, 0, versionedHash, 1, 20);
+            byte[] calculatedChecksum = Arrays.copyOfRange(applySHA256(applySHA256(versionedHash)), 0, 4);
+            return Arrays.equals(checksum, calculatedChecksum) && version == PRE_P2SH; // P2SH主网版本
+        }
+        //根据公钥生成P2SH类型公钥哈希
+        public static byte[] createP2SHByPK(byte[] publicKey) {
+            try {
+                byte[] pubKeyHash = createP2PKHByPK(publicKey);
 
+                // 创建标准赎回脚本
+                byte[] script = new byte[25];
+                script[0] = 0x76; // OP_DUP
+                script[1] = (byte) 0xA9; // OP_HASH160
+                script[2] = 0x14; // 20字节
+                System.arraycopy(pubKeyHash, 0, script, 3, 20);
+                script[23] = (byte) 0x88; // OP_EQUALVERIFY
+                script[24] = (byte) 0xAC; // OP_CHECKSIG
 
-        //将地址解码成公钥hash
-        public static String addressToPublicKeyHash(String address) {
+                // 返回脚本的HASH160
+                return applyRIPEMD160(applySHA256(script));
+            } catch (Exception e) {
+                throw new RuntimeException("生成P2SH地址失败", e);
+            }
+        }
+        //地址转公钥哈希
+        public static byte[] addressToP2SH(String address) {
             try {
                 byte[] decoded = Base58.decode(address);
-                byte[] bytes = Arrays.copyOfRange(decoded, 1, 21);
-                return CryptoUtil.bytesToHex(bytes);
-            } catch (Exception e) {
-                throw new RuntimeException("地址转换公钥hash失败", e);
-            }
-        }
-
-        public static byte[] addressToPublicKeyHashByte(String address) {
-            try {
-                byte[] decoded = Base58.decode(address);
+                if (decoded.length != 25) {
+                    return null;
+                }
                 return Arrays.copyOfRange(decoded, 1, 21);
             } catch (Exception e) {
-                throw new RuntimeException("地址转换公钥hash失败", e);
+                return null;
             }
         }
 
 
 
+        //根据公钥生成P2WPKH类型地址 （隔离见证v0）
+        public static String createP2WPKHAddressByPK(byte[] publicKey) {
+            try {
+                // 1. 获取公钥的HASH160（20字节）
+                byte[] pubKeyHash = createP2PKHByPK(publicKey);
+                // 2. 构建数据：版本字节(0x00) + 20字节哈希（共21字节）
+                byte[] dataWithVersion = new byte[21];
+                dataWithVersion[0] = PRE_P2PKH; // 隔离见证v0版本
+                System.arraycopy(pubKeyHash, 0, dataWithVersion, 1, 20);
+                // 3. Bech32编码（主网HRP为"bc"，测试网为"tb"）
+                return Bech32.encode("bc", dataWithVersion);
+            } catch (Exception e) {
+                throw new RuntimeException("生成P2WPKH地址失败", e);
+            }
+        }
+
+        public static boolean isValidP2WPKHAddress(String address) {
+            try {
+                Object[] decoded = Bech32.decode(address);
+                if (decoded == null) return false;
+                String hrp = (String) decoded[0];
+                byte[] data = (byte[]) decoded[1];
+                // 校验：主网HRP为"bc" + 总长度21字节（1字节版本+20字节哈希） + 版本0x00
+                return "bc".equals(hrp)
+                        && data.length == 21
+                        && data[0] == PRE_P2PKH;
+            } catch (Exception e) {
+                return false;
+            }
+        }
+        //根据公钥生成P2WPKH类型公钥哈希
+        public static byte[] createP2WPKHByPK(byte[] publicKey) {
+            try {
+                // P2WPKH使用公钥的HASH160（20字节）
+                return createP2PKHByPK(publicKey);
+            } catch (Exception e) {
+                throw new RuntimeException("生成P2WPKH哈希失败", e);
+            }
+        }
+        //地址转公钥哈希
+        public static byte[] addressToP2WPKH(String address) {
+            try {
+                Object[] decoded = Bech32.decode(address);
+                if (decoded == null) return null;
+                String hrp = (String) decoded[0];
+                byte[] data = (byte[]) decoded[1];
+                if (!"bc".equals(hrp) || data.length != 21) {
+                    return null;
+                }
+                return Arrays.copyOfRange(data, 1, 21);
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+
+
+
+        //根据赎回脚本生成P2WSH类型地址  赎回脚本（Redeem Script） → SHA-256哈希（32字节） → Bech32编码（带版本字节0x00和HRP前缀“bc”） → P2WSH地址
+        public static String createP2WSHAddressByPK(byte[] redeemScript) {
+            try {
+                // 1. 生成32字节脚本哈希（SHA256(脚本)）
+                byte[] scriptHash = applySHA256(redeemScript);
+
+                // 2. 构建数据：版本字节(0x00) + 32字节哈希（共33字节）
+                byte[] dataWithVersion = new byte[33];
+                dataWithVersion[0] = PRE_P2PKH; // 隔离见证v0版本
+                System.arraycopy(scriptHash, 0, dataWithVersion, 1, 32);
+                // 3. Bech32编码
+                return Bech32.encode("bc", dataWithVersion);
+            } catch (Exception e) {
+                throw new RuntimeException("生成P2WSH地址失败", e);
+            }
+        }
+        public static boolean isValidP2WSHAddress(String address) {
+            try {
+                Object[] decoded = Bech32.decode(address);
+                if (decoded == null) return false;
+
+                String hrp = (String) decoded[0];
+                byte[] data = (byte[]) decoded[1];
+
+                // 校验：主网HRP为"bc" + 总长度33字节（1字节版本+32字节哈希） + 版本0x00
+                return "bc".equals(hrp)
+                        && data.length == 33
+                        && data[0] == PRE_P2PKH;
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        //根据赎回脚本生成P2WSH类型哈希
+        public static byte[] createP2WSHByPK(byte[] redeemScript) {
+            try {
+                return applySHA256(redeemScript);
+            } catch (Exception e) {
+                throw new RuntimeException("生成P2WSH哈希失败", e);
+            }
+        }
+        public static byte[] addressToP2WSH(String address) {
+            try {
+                Object[] decoded = Bech32.decode(address);
+                if (decoded == null) return null;
+                String hrp = (String) decoded[0];
+                byte[] data = (byte[]) decoded[1];
+                if (!"bc".equals(hrp) || data.length != 33) {
+                    return null;
+                }
+                return Arrays.copyOfRange(data, 1, 33);
+            } catch (Exception e) {
+                return null;
+            }
+        }
 
 
 
@@ -257,7 +372,7 @@ public class CryptoUtil {
             try (FileOutputStream fos = new FileOutputStream(filename)) {
                 fos.write(keySpec.getEncoded());
             }
-            System.out.println("PublicKey saved to: " + filename);
+            log.info("保存公钥成功"+ filename);
         }
         // 保存私钥到文件（以 PKCS#8 格式）
         public static void savePrivateKey(PrivateKey privateKey, String filename) throws IOException {
@@ -265,7 +380,7 @@ public class CryptoUtil {
             try (FileOutputStream fos = new FileOutputStream(filename)) {
                 fos.write(keySpec.getEncoded());
             }
-            System.out.println("Private key saved to: " + filename);
+            log.info("保存私钥成功"+ filename);
         }
 
         // 从文件加载公钥
@@ -308,28 +423,31 @@ public class CryptoUtil {
         }
 
 
-
-
-
-
-
-    }
-
-
-
-
-
-    /**
-     * 应用SHA256哈希
-     */
-/*    public static byte[] applySHA256(byte[] data) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return digest.digest(data);
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA256算法不可用", e);
+        /**
+         * 根据地址字符串判断其类型（P2PKH/P2SH/P2WPKH/P2WSH）
+         * @param address 待判断的地址字符串
+         * @return 对应的地址类型枚举，无效地址返回null
+         */
+        public static TxSigType getAddressType(String address) {
+            if (address == null || address.trim().isEmpty()) {
+                return null;
+            }
+            // 优先判断隔离见证地址（Bech32编码）
+            if (ECDSASigner.isValidP2WPKHAddress(address)) {
+                return TxSigType.P2WPKH;
+            }else if (ECDSASigner.isValidP2WSHAddress(address)) {
+                return TxSigType.P2WSH;
+            }else if (ECDSASigner.isValidP2PKHAddress(address)) {
+                // 再判断Base58编码的地址
+                return TxSigType.P2PKH;
+            }else if (ECDSASigner.isValidP2SHAddress(address)) {
+                return TxSigType.P2SH;
+            }else {
+                // 所有类型均不匹配
+                return null;
+            }
         }
-    }*/
+    }
 
     /**
      * 生产级SHA-256实现（使用系统默认提供者，确保算法可用性）
@@ -348,19 +466,6 @@ public class CryptoUtil {
             }
         }
     }
-
-
-    /**
-     * 应用RIPEMD160哈希  HASH160
-     */
-/*    public static byte[] applyRIPEMD160(byte[] data) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("RIPEMD160");
-            return md.digest(data);
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("RIPEMD160算法不可用", e);
-        }
-    }*/
 
     /**
      * 生产级RIPEMD-160实现（依赖BouncyCastle，标准库不默认支持）
@@ -397,6 +502,84 @@ public class CryptoUtil {
         }
         return data;
     }
+
+
+
+    /**
+     * 编码一个整数为VarInt格式（比特币协议中的可变长度整数）
+     * @param size 要编码的整数
+     * @return 编码后的字节数组
+     */
+    public static byte[] encodeVarInt(int size) {
+        if (size < 0xfd) {
+            // 0-252: 1字节
+            return new byte[]{(byte) size};
+        } else if (size <= 0xffff) {
+            // 253-65535: 0xfd + 2字节
+            byte[] result = new byte[3];
+            result[0] = (byte) 0xfd;
+            result[1] = (byte) (size & 0xff);
+            result[2] = (byte) ((size >> 8) & 0xff);
+            return result;
+        } else if (size <= 0xffffffffL) {
+            // 65536-4294967295: 0xfe + 4字节
+            byte[] result = new byte[5];
+            result[0] = (byte) 0xfe;
+            result[1] = (byte) (size & 0xff);
+            result[2] = (byte) ((size >> 8) & 0xff);
+            result[3] = (byte) ((size >> 16) & 0xff);
+            result[4] = (byte) ((size >> 24) & 0xff);
+            return result;
+        } else {
+            // 超过int范围的情况，使用long处理（但encodeVarInt参数是int，理论上不会执行到这里）
+            throw new IllegalArgumentException("Size too large for encodeVarInt: " + size);
+        }
+    }
+
+    /**
+     * 从字节数组中读取VarInt格式的整数
+     * @param bytes 字节数组
+     * @param offset 起始偏移量
+     * @return 读取的整数值
+     */
+    public static long readVarInt(byte[] bytes, int offset) {
+        int firstByte = bytes[offset] & 0xff;
+        if (firstByte < 0xfd) {
+            // 1字节直接返回
+            return firstByte;
+        } else if (firstByte == 0xfd) {
+            // 2字节
+            return (bytes[offset + 1] & 0xff) |
+                    ((bytes[offset + 2] & 0xff) << 8);
+        } else if (firstByte == 0xfe) {
+            // 4字节
+            return (bytes[offset + 1] & 0xff) |
+                    ((bytes[offset + 2] & 0xff) << 8) |
+                    ((bytes[offset + 3] & 0xff) << 16) |
+                    ((bytes[offset + 4] & 0xff) << 24);
+        } else {
+            // 8字节（在readVarInt中不处理，因为返回类型是long，可能溢出）
+            throw new UnsupportedOperationException("8-byte VarInt not supported in readVarInt");
+        }
+    }
+
+    /**
+     * 计算一个VarInt编码所需的字节数
+     * @param count 要编码的数值
+     * @return 编码所需的字节数
+     */
+    public static int varIntSize(long count) {
+        if (count < 0xfd) {
+            return 1;
+        } else if (count <= 0xffff) {
+            return 3; // 0xfd + 2字节
+        } else if (count <= 0xffffffffL) {
+            return 5; // 0xfe + 4字节
+        } else {
+            return 9; // 0xff + 8字节
+        }
+    }
+
 
 
 
@@ -560,6 +743,255 @@ public class CryptoUtil {
         }
     }
 
+    public static class Bech32 {
+        private static final String CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+        private static final int[] VALUES = new int[128];
 
+        static {
+            Arrays.fill(VALUES, -1);
+            for (int i = 0; i < CHARSET.length(); i++) {
+                VALUES[CHARSET.charAt(i)] = i;
+            }
+        }
+
+        /**
+         * 编码：HRP + 数据（含版本字节）→ Bech32地址
+         */
+        public static String encode(String hrp, byte[] data) {
+            // 将8位字节转换为5位整数数组
+            int[] fiveBitData = convertBits(data, 8, 5, true);
+            if (fiveBitData == null) return null;
+
+            // 计算校验和
+            int[] checksum = createChecksum(hrp, fiveBitData);
+            int[] combined = new int[fiveBitData.length + checksum.length];
+            System.arraycopy(fiveBitData, 0, combined, 0, fiveBitData.length);
+            System.arraycopy(checksum, 0, combined, fiveBitData.length, checksum.length);
+
+            // 拼接HRP和编码数据
+            StringBuilder sb = new StringBuilder(hrp + "1");
+            for (int b : combined) {
+                sb.append(CHARSET.charAt(b));
+            }
+            return sb.toString();
+        }
+
+        /**
+         * 解码：Bech32地址 → [HRP, 数据(含版本字节)]
+         */
+        public static Object[] decode(String str) {
+            // 基本格式校验
+            if (str.length() < 8 || str.length() > 90) return null;
+            if (str.chars().anyMatch(c -> c < 33 || c > 126)) return null;
+
+            // 检查是否有混合大小写（Bech32要求HRP必须全小写或全大写）
+            boolean hasLower = false;
+            boolean hasUpper = false;
+            for (char c : str.toCharArray()) {
+                if (Character.isLowerCase(c)) hasLower = true;
+                if (Character.isUpperCase(c)) hasUpper = true;
+            }
+            if (hasLower && hasUpper) return null;
+
+            // 统一转换为小写进行处理
+            String lowerStr = str.toLowerCase();
+
+            // 分离HRP和数据部分
+            int splitIdx = lowerStr.lastIndexOf('1');
+            if (splitIdx == -1 || splitIdx == 0 || splitIdx + 1 >= lowerStr.length()) return null;
+            String hrp = lowerStr.substring(0, splitIdx);
+            String dataPart = lowerStr.substring(splitIdx + 1);
+
+            // 转换数据部分为5位整数数组
+            int[] data = new int[dataPart.length()];
+            for (int i = 0; i < dataPart.length(); i++) {
+                char c = dataPart.charAt(i);
+                if (c >= VALUES.length || VALUES[c] == -1) return null;
+                data[i] = VALUES[c];
+            }
+
+            // 校验和验证（使用原始字符串进行验证）
+            if (!verifyChecksum(hrp, data)) return null;
+
+            // 提取有效数据（去除校验和）并转换为字节
+            int[] payload = Arrays.copyOfRange(data, 0, data.length - 6);
+
+            // 确保版本字节有效（隔离见证版本0-16）
+            if (payload.length < 1 || payload[0] > 16) return null;
+
+            // 位转换，不允许填充（严格转换）
+            byte[] decoded = convertBits(payload, 5, 8, false);
+
+            if (decoded == null) return null;
+
+            // 检查隔离见证地址的长度
+            int witnessVersion = decoded[0] & 0xFF;
+            int witnessProgramLength = decoded.length - 1;
+
+            // 验证长度是否符合规范
+            if (witnessVersion == 0) {
+                if (witnessProgramLength != 20 && witnessProgramLength != 32) {
+                    return null; // 版本0必须是20字节(P2WPKH)或32字节(P2WSH)
+                }
+            } else if (witnessVersion >= 1 && witnessVersion <= 16) {
+                if (witnessProgramLength < 2 || witnessProgramLength > 40) {
+                    return null; // 其他版本必须在2-40字节之间
+                }
+            } else {
+                return null; // 无效版本
+            }
+
+            return new Object[]{hrp, decoded};
+        }
+        /**
+         * 位转换核心逻辑（标准实现）
+         * 将srcBits位的数组转换为destBits位的数组
+         */
+        /**
+         * 将字节数组（srcBits位）转换为整数数组（destBits位）
+         * 适用于：8位字节 -> 5位整数（Bech32编码）
+         */
+        private static int[] convertBits(byte[] data, int srcBits, int destBits, boolean pad) {
+            int[] result = new int[(data.length * srcBits + destBits - 1) / destBits];
+            int buffer = 0;
+            int bits = 0;
+            int index = 0;
+            int maxVal = (1 << destBits) - 1;
+
+            for (byte b : data) {
+                int value = b & 0xFF; // 转为无符号值
+                // 检查输入值是否超过srcBits能表示的范围（例如srcBits=5时，值不能超过31）
+                if ((value >>> srcBits) != 0) {
+                    return null;
+                }
+                buffer = (buffer << srcBits) | value; // 累积位到缓冲区
+                bits += srcBits;
+
+                // 当缓冲区位数足够时，提取destBits位到结果
+                while (bits >= destBits) {
+                    result[index++] = (buffer >>> (bits - destBits)) & maxVal;
+                    bits -= destBits;
+                }
+            }
+
+            // 处理剩余位（根据pad参数决定是否填充）
+            if (pad) {
+                if (bits > 0) {
+                    // 填充0以凑齐destBits位
+                    result[index++] = (buffer << (destBits - bits)) & maxVal;
+                }
+            } else {
+                // 不允许填充时，剩余位必须为0（即填充位），否则无效
+                if (bits != 0 && (buffer & ((1 << bits) - 1)) != 0) {
+                    return null;
+                }
+            }
+
+            return Arrays.copyOf(result, index);
+        }
+
+        /**
+         * 将整数数组（srcBits位）转换为字节数组（destBits位）
+         * 适用于：5位整数 -> 8位字节（Bech32解码）
+         */
+        private static byte[] convertBits(int[] data, int srcBits, int destBits, boolean pad) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            int buffer = 0;
+            int bits = 0;
+            int maxVal = (1 << destBits) - 1;
+
+            for (int value : data) {
+                if (value < 0 || (value >>> srcBits) != 0) {
+                    return null; // 输入值超出srcBits范围
+                }
+                buffer = (buffer << srcBits) | value; // 累积位到缓冲区
+                bits += srcBits;
+
+                // 当缓冲区位数足够时，提取destBits位到结果
+                while (bits >= destBits) {
+                    out.write((buffer >>> (bits - destBits)) & maxVal);
+                    bits -= destBits;
+                }
+            }
+
+            // 处理剩余位（根据pad参数决定是否填充）
+            if (pad) {
+                if (bits > 0) {
+                    // 填充0以凑齐destBits位
+                    out.write((buffer << (destBits - bits)) & maxVal);
+                }
+            } else {
+                // 不允许填充时，剩余位必须为0（即填充位），否则无效
+                if (bits != 0 && (buffer & ((1 << bits) - 1)) != 0) {
+                    return null;
+                }
+            }
+
+            return out.toByteArray();
+        }
+
+        /**
+         * 多项式校验和计算（标准Bech32实现）
+         */
+        private static int polymod(int[] values) {
+            int checksum = 1;
+            int[] generators = {0x3B6A57B2, 0x26508E6D, 0x1EA119FA, 0x3D4233DD, 0x2A1462B3};
+            for (int value : values) {
+                int top = checksum >>> 25;
+                checksum = (checksum & 0x1FFFFFF) << 5 ^ value;
+                for (int i = 0; i < 5; i++) {
+                    if ((top >>> i & 1) == 1) {
+                        checksum ^= generators[i];
+                    }
+                }
+            }
+            return checksum;
+        }
+
+        /**
+         * 创建校验和（标准实现）
+         */
+        private static int[] createChecksum(String hrp, int[] data) {
+            int[] hrpExpanded = expandHrp(hrp);
+            int[] values = new int[hrpExpanded.length + data.length + 6];
+            System.arraycopy(hrpExpanded, 0, values, 0, hrpExpanded.length);
+            System.arraycopy(data, 0, values, hrpExpanded.length, data.length);
+            int checksum = polymod(values) ^ 1; // 异或1作为最终校验和
+
+            int[] result = new int[6];
+            for (int i = 0; i < 6; i++) {
+                result[i] = (checksum >>> (5 * (5 - i))) & 0x1F;
+            }
+            return result;
+        }
+
+        /**
+         * 验证校验和（标准实现）
+         */
+        private static boolean verifyChecksum(String hrp, int[] data) {
+            int[] hrpExpanded = expandHrp(hrp);
+            int[] values = new int[hrpExpanded.length + data.length];
+            System.arraycopy(hrpExpanded, 0, values, 0, hrpExpanded.length);
+            System.arraycopy(data, 0, values, hrpExpanded.length, data.length);
+            return polymod(values) == 1;
+        }
+
+        /**
+         * 扩展HRP（人类可读前缀）为5位整数数组
+         */
+        private static int[] expandHrp(String hrp) {
+            int[] result = new int[hrp.length() * 2 + 1];
+            for (int i = 0; i < hrp.length(); i++) {
+                int c = hrp.charAt(i);
+                result[i] = c >>> 5; // 高5位
+            }
+            result[hrp.length()] = 0; // 分隔符
+            for (int i = 0; i < hrp.length(); i++) {
+                int c = hrp.charAt(i);
+                result[hrp.length() + 1 + i] = c & 0x1F; // 低5位
+            }
+            return result;
+        }
+    }
 
 }

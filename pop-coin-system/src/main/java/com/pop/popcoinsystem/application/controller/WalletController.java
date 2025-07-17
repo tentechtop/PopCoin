@@ -75,6 +75,39 @@ public class WalletController {
     }
 
 
+    /**
+     * 根据公钥生成P2PKH类型地址
+     */
+    @RequestMapping("/createP2PKHAddressByPK")
+    public String createP2PKHAddressByPK() {
+        return "create P2PKH address by PK success";
+    }
+
+
+    /**
+     * 根据公钥生成P2SH类型地址
+     */
+    @RequestMapping("/createP2SHAddressByPK")
+    public String createP2SHAddressByPK() {
+        return "create P2SH address by PK success";
+    }
+
+
+    /**
+     * 根据公钥生成P2WPKH类型地址 （隔离见证v0）
+     */
+    @RequestMapping("/createP2WPKHAddressByPK")
+    public String createP2WPKHAddressByPK() {
+        return "create P2WPKH address by PK success";
+    }
+
+    /**
+     * 根据公钥生成P2WPKH类型公钥哈希
+     */
+    @RequestMapping("/createP2WPKHByPK")
+    public String createP2WPKHByPK() {
+        return "create P2WPKH by PK success";
+    }
 
 
 }

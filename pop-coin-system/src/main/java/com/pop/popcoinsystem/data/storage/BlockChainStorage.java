@@ -12,25 +12,22 @@ import java.util.List;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
+
 
 @Slf4j
 public class BlockChainStorage {
 
     // 数据库存储路径
-    private static final String DB_PATH = "rocksDb/popCoin.db/blockChain.db/";
-
+    private static final String DB_PATH = "rocksDb/popCoin.db/blockChain.db/"+POP_NET_VERSION+"/";
     // 列族名称（逻辑分区）
+    private static final String CF_CHAINSTATE = "chainstate"; // 存储链信息
     private static final String CF_BLOCKS = "blocks";       // 存储区块
     private static final String CF_UTXO = "utxo";       // 未花费输出
-    private static final String CF_CHAINSTATE = "chainstate"; // 存储链状态
-    private static final String CF_METADATA = "metadata";   // 存储元数据（如最新区块哈希）
-
+    private static final String CF_METADATA = "metadata";   // 存储元数据（如最新区块哈希） 链信息中有完整的
     // 元数据键（存储在CF_METADATA列族）
     private static final byte[] KEY_LAST_BLOCK_HASH = "last_block_hash".getBytes();
-
-    //最新的区块链数据
-
-
+    private static final byte[] NODE_SETTING_KEY = "node_setting_key".getBytes();
 
     private final RocksDB db;
 
@@ -165,12 +162,6 @@ public class BlockChainStorage {
             rwLock.writeLock().unlock();
         }
     }
-
-
-
-
-
-
 
 
     /**
@@ -369,14 +360,11 @@ public class BlockChainStorage {
 
     //新增未花费输出
     public void addUnspentOutput(TXOutput output) {
-        byte[] txOutId = output.getTxOutId();
-
 
     }
 
     //删除未花费输出
     public void deleteUnspentOutput(TXOutput output) {
-        byte[] txOutId = output.getTxOutId();
 
 
     }
@@ -405,7 +393,7 @@ public class BlockChainStorage {
 
 
 
-    private static final byte[] NODE_SETTING_KEY = "node_setting_key".getBytes();
+
 
 
 
@@ -416,7 +404,7 @@ public class BlockChainStorage {
         rwLock.writeLock().lock();
         try {
             byte[] valueBytes = SerializeUtils.serialize(value);
-            db.put(cfChainState, NODE_SETTING_KEY, valueBytes);
+            db.put(cfMetadata, NODE_SETTING_KEY, valueBytes);
         } catch (RocksDBException e) {
             log.error("节点状态失败: key={}", key, e);
             throw new RuntimeException("节点状态失败", e);

@@ -9,10 +9,8 @@ import java.security.KeyFactory;
 import java.security.PublicKey;
 import java.security.spec.EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import static com.pop.popcoinsystem.util.CryptoUtil.bytesToHex;
 
@@ -23,6 +21,9 @@ import static com.pop.popcoinsystem.util.CryptoUtil.bytesToHex;
 
 @Slf4j
 public class Script {
+
+
+
     // 脚本元素类
     public static class ScriptElement {
         private final int opCode;
@@ -248,6 +249,78 @@ public class Script {
     private boolean executeOpCode(int opCode, List<byte[]> stack, List<byte[]> altStack,
                                   byte[] txToSign, int inputIndex, boolean isGenesisBlock) {
         switch (opCode) {
+
+            case OP_0:
+                // OP_0：将空字节数组压入栈（代表0或false）
+                stack.add(new byte[0]);  // 空数组表示0
+                return true;
+                // ... 类似处理OP_1到OP_16
+            case OP_1:
+                stack.add(new byte[]{1});
+                return true;
+            case OP_2:
+                stack.add(new byte[]{2});  // 将数值2压入栈（表示需要2个有效签名）
+                return true;
+            case OP_3:
+                stack.add(new byte[]{3});
+                return true;
+            case OP_4:
+                stack.add(new byte[]{4});
+                return true;
+            case OP_5:
+                stack.add(new byte[]{5});
+                return true;
+            case OP_6:
+                stack.add(new byte[]{6});
+                return true;
+            case OP_7:
+                stack.add(new byte[]{7});
+                return true;
+            case OP_8:
+                stack.add(new byte[]{8});
+                return true;
+            case OP_9:
+                stack.add(new byte[]{9});
+                return true;
+            case OP_10:
+                stack.add(new byte[]{10});
+                return true;
+            case OP_11:
+                stack.add(new byte[]{11});
+                return true;
+            case OP_12:
+                stack.add(new byte[]{12});
+                return true;
+            case OP_13:
+                stack.add(new byte[]{13});
+                return true;
+            case OP_14:
+                stack.add(new byte[]{14});
+                return true;
+            case OP_15:
+                stack.add(new byte[]{15});
+                return true;
+            case OP_16:
+                stack.add(new byte[]{16});
+                return true;
+
+
+
+
+            case OP_1NEGATE:  // 表示-1
+                stack.add(new byte[]{(byte) 0x81});  // 负数表示
+                return true;
+
+            case OP_EQUAL:
+                if (stack.size() < 2) return false;
+                byte[] topOne = stack.remove(stack.size() - 1);
+                byte[] topTwo = stack.remove(stack.size() - 1);
+                log.info("OP_EQUAL:"+"比较两个栈顶元素是否相等"+"栈顶元素是: "+CryptoUtil.bytesToHex(topOne)+"栈顶元素是: "+CryptoUtil.bytesToHex(topTwo));
+                boolean equalOPEQUAL = Arrays.equals(topOne, topTwo);
+                stack.add(equalOPEQUAL ? new byte[]{1} : new byte[0]);  // 结果压栈：真为0x01，假为空数组
+                return true;
+
+
             // 栈操作
             case OP_DUP:
                 log.info("OP_DUP:"+"复制栈顶元素"+"栈顶元素是: "+CryptoUtil.bytesToHex(stack.get(stack.size() - 1)));
@@ -319,8 +392,8 @@ public class Script {
             case OP_HASH160:
                 if (stack.isEmpty()) return false;
                 data = stack.remove(stack.size() - 1);
-                //byte[] bytes = CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(data));
-                byte[] bytes = CryptoUtil.ECDSASigner.publicKeyHash256And160Byte(data);
+                byte[] bytes = CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(data));
+                //byte[] bytes = CryptoUtil.ECDSASigner.publicKeyHash256And160Byte(data);
                 stack.add(bytes);
                 log.info("OP_HASH160:"+"计算RIPEMD160(SHA256(data))"+"计算结果是: "+CryptoUtil.bytesToHex(stack.get(stack.size() - 1)));
                 return true;
@@ -344,12 +417,12 @@ public class Script {
                 byte[] a = stack.remove(stack.size() - 1);
                 byte[] b = stack.remove(stack.size() - 1);
                 boolean equal = Arrays.equals(a, b);
+                log.info("OP_EQUALVERIFY:"+"比较结果是: "+equal);
                 if (opCode == OP_EQUAL) {
                     stack.add(equal ? new byte[]{1} : new byte[0]);
                 } else {
                     if (!equal) return false;
                 }
-                log.info("OP_EQUALVERIFY:"+"比较结果是: "+equal);
                 return true;
             case OP_CHECKSIG:
                 log.info("验证Checking signature...");
@@ -392,38 +465,81 @@ public class Script {
                     return false;
                 }
             case OP_CHECKSIGVERIFY:
+                //用于简单的单签名验证，如普通比特币地址（P2PKH）的支出。
+                //1. OP_CHECKSIGVERIFY
+                //功能：验证单个数字签名是否与公钥匹配，并立即验证结果（失败时终止脚本）。
+                //执行过程：
+                //从栈中弹出一个公钥和一个签名。
+                //验证签名是否由对应私钥生成，且针对当前交易的特定部分（哈希值）有效。
+                //如果验证失败，脚本立即终止（交易无效）；如果成功，继续执行后续操作码。
+                //与 OP_CHECKSIG 的区别：OP_CHECKSIG 将验证结果（真 / 假）压入栈，而 OP_CHECKSIGVERIFY 直接验证结果，不保留返回值。
+
 
             case OP_CHECKMULTISIG:
+                //用于多重签名钱包，如 2-of-3 签名方案（需 2 个签名来自 3 个公钥）。
+                //2. OP_CHECKMULTISIG
+                //功能：验证多重签名（m-of-n），即需要至少 m 个有效签名来自 n 个公钥中的一部分。
+                //执行过程：
+                //从栈中弹出数字 m（所需签名数）、n 个公钥、数字 n，最后弹出 m 个签名。
+                //验证至少 m 个签名与对应的公钥匹配，且针对当前交易有效。
+                //如果验证成功，将 true 压入栈；否则压入 false。
+                //注意：比特币脚本中存在一个历史漏洞，执行时会多弹出一个栈顶元素（通常为 0），需额外注意。
+                // 遍历公钥列表
+
+
+
             case OP_CHECKMULTISIGVERIFY:
-                if (stack.size() < 1) return false;
+                //用于更严格的多重签名验证，如智能合约中必须满足条件才能支出的场景。
+                //3. OP_CHECKMULTISIGVERIFY
+                //功能：与 OP_CHECKMULTISIG 类似，但直接验证结果，失败时终止脚本。
+                //执行过程：
+                //与 OP_CHECKMULTISIG 相同，验证多重签名。
+                //如果验证失败，脚本立即终止；如果成功，继续执行后续操作码。
+                //与 OP_CHECKMULTISIG 的区别：类似 OP_CHECKSIGVERIFY 与 OP_CHECKSIG 的关系，OP_CHECKMULTISIGVERIFY 不保留验证结果，直接决定脚本是否继续执行。
+
+                if (stack.isEmpty()) return false;
+                log.info("Checking multi-signature...");
+
+                //打印栈中的元素
+                for (byte[] element : stack){
+                    log.info("Checking multi-signature:"+"栈中的元素是: "+CryptoUtil.bytesToHex(element));
+                }
 
                 // 获取需要的公钥数量
-                int m = readInt(stack.remove(stack.size() - 1));
-                if (m < 0 || m > 20) return false;
+                int pkCount = readInt(stack.remove(stack.size() - 1));
+                log.info("Checking multi-signature:"+"需要的公钥数量是: "+pkCount);
+                if (pkCount < 0 || pkCount > 20) return false;
 
                 // 获取公钥列表
                 List<byte[]> pubKeys = new ArrayList<>();
-                for (int i = 0; i < m; i++) {
+                for (int i = 0; i < pkCount; i++) {
+                    log.info("Checking multi-signature:"+"获取公钥列表中第: "+(i+1)+" 个公钥 :"+CryptoUtil.bytesToHex(stack.get(stack.size() - 1)));
                     if (stack.isEmpty()) return false;
                     pubKeys.add(stack.remove(stack.size() - 1));
                 }
 
                 // 获取实际提供的签名数量
                 if (stack.isEmpty()) return false;
-                n = readInt(stack.remove(stack.size() - 1));
-                if (n < 0 || n > m) return false;
+                int sigCount = readInt(stack.remove(stack.size() - 1));
+                log.info("Checking multi-signature:"+"实际提供的签名数量是: "+sigCount);
+                if (sigCount < 0 || sigCount > pkCount) return false;
 
                 // 获取签名列表
                 List<byte[]> signatures = new ArrayList<>();
-                for (int i = 0; i < n; i++) {
+                for (int i = 0; i < sigCount; i++) {
+                    log.info("Checking multi-signature:"+"获取签名列表中第: "+(i+1)+" 个签名 :"+CryptoUtil.bytesToHex(stack.get(stack.size() - 1)));
                     if (stack.isEmpty()) return false;
+                    //栈中还有谁
                     signatures.add(stack.remove(stack.size() - 1));
                 }
 
+                log.info("移除元素");
                 // 移除一个额外的元素（BIP62要求）
                 if (!stack.isEmpty()) {
+                    log.info("移除元素是:"+CryptoUtil.bytesToHex(stack.get(stack.size() - 1)));
                     stack.remove(stack.size() - 1);
                 } else {
+                    log.info("空的");
                     return false;
                 }
 
@@ -434,6 +550,7 @@ public class Script {
                     if (sigIndex >= signatures.size()) break;
 
                     byte[] signatureBytes = signatures.get(sigIndex);
+                    log.info("验证签名:"+"验证签名中第: "+(sigIndex+1)+" 个签名 :"+CryptoUtil.bytesToHex(signatureBytes));
 
                     // 检查签名格式
                     if (!isValidSignatureEncoding(signatureBytes)) {
@@ -443,6 +560,7 @@ public class Script {
 
                     // 提取签名类型
                     int hashType = signatureBytes[signatureBytes.length - 1] & 0xff;
+                    log.info("验证签名:"+"签名类型是: "+hashType);
 
                     try {
                         // 从字节恢复公钥
@@ -451,14 +569,19 @@ public class Script {
                         PublicKey publicKey = keyFactory.generatePublic(publicKeySpec);
 
                         // 生成要签名的哈希
-                        byte[] hashToSign = getHashToSign(txToSign, inputIndex, this, hashType);
+                        //byte[] hashToSign = getHashToSign(txToSign, inputIndex, this, hashType);
+
+                        //boolean verified =  CryptoUtil.ECDSASigner.verifySignature(publicKey, txToSign, signature);
 
                         // 验证签名
                         boolean verified = CryptoUtil.ECDSASigner.verifySignature(publicKey,
-                                Arrays.copyOf(signatureBytes, signatureBytes.length - 1),
-                                hashToSign);
+                                txToSign,
+                                signatureBytes);
                         if (verified) {
+                            log.info("签名通过");
                             sigIndex++;
+                        }else {
+                            log.info("签名不通过");
                         }
                     } catch (Exception e) {
                         e.printStackTrace();
@@ -872,11 +995,23 @@ public class Script {
         return new ArrayList<>(elements);
     }
 
+    //脚本格式输出
+    public String toScripString() {
+        return elements.stream().map(element -> {
+            if (element.isOpCode()) {
+                return OP_CODE_NAMES.get(element.getOpCode());
+            } else {
+                return CryptoUtil.bytesToHex(element.getData());
+            }
+        }).collect(Collectors.joining(" "));
+    }
+
+
+
     // 序列化脚本
     public byte[] serialize() {
         try {
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
-
             for (ScriptElement element : elements) {
                 if (element.isOpCode()) {
                     bos.write(element.getOpCode());
@@ -986,4 +1121,123 @@ public class Script {
 
         return script;
     }
+
+
+
+    // 操作码名称映射
+    private static final Map<Integer, String> OP_CODE_NAMES = new HashMap<>();
+
+    static {
+// 初始化常见操作码的名称
+        OP_CODE_NAMES.put(OP_0, "OP_0");
+        OP_CODE_NAMES.put(OP_1, "OP_1");
+        OP_CODE_NAMES.put(OP_2, "OP_2");
+        OP_CODE_NAMES.put(OP_3, "OP_3");
+        OP_CODE_NAMES.put(OP_4, "OP_4");
+        OP_CODE_NAMES.put(OP_5, "OP_5");
+        OP_CODE_NAMES.put(OP_6, "OP_6");
+        OP_CODE_NAMES.put(OP_7, "OP_7");
+        OP_CODE_NAMES.put(OP_8, "OP_8");
+        OP_CODE_NAMES.put(OP_9, "OP_9");
+        OP_CODE_NAMES.put(OP_10, "OP_10");
+        OP_CODE_NAMES.put(OP_11, "OP_11");
+        OP_CODE_NAMES.put(OP_12, "OP_12");
+        OP_CODE_NAMES.put(OP_13, "OP_13");
+        OP_CODE_NAMES.put(OP_14, "OP_14");
+        OP_CODE_NAMES.put(OP_15, "OP_15");
+        OP_CODE_NAMES.put(OP_16, "OP_16");
+        OP_CODE_NAMES.put(OP_1NEGATE, "OP_1NEGATE");
+        OP_CODE_NAMES.put(OP_PUSHDATA1, "OP_PUSHDATA1");
+        OP_CODE_NAMES.put(OP_PUSHDATA2, "OP_PUSHDATA2");
+        OP_CODE_NAMES.put(OP_PUSHDATA4, "OP_PUSHDATA4");
+
+        // 控制流操作码
+        OP_CODE_NAMES.put(OP_IF, "OP_IF");
+        OP_CODE_NAMES.put(OP_NOTIF, "OP_NOTIF");
+        OP_CODE_NAMES.put(OP_ELSE, "OP_ELSE");
+        OP_CODE_NAMES.put(OP_ENDIF, "OP_ENDIF");
+        OP_CODE_NAMES.put(OP_RETURN, "OP_RETURN");
+
+        // 栈操作码
+        OP_CODE_NAMES.put(OP_DUP, "OP_DUP");
+        OP_CODE_NAMES.put(OP_DROP, "OP_DROP");
+        OP_CODE_NAMES.put(OP_SWAP, "OP_SWAP");
+        OP_CODE_NAMES.put(OP_OVER, "OP_OVER");
+        OP_CODE_NAMES.put(OP_ROT, "OP_ROT");
+        OP_CODE_NAMES.put(OP_TUCK, "OP_TUCK");
+        OP_CODE_NAMES.put(OP_PICK, "OP_PICK");
+        OP_CODE_NAMES.put(OP_ROLL, "OP_ROLL");
+        OP_CODE_NAMES.put(OP_TOALTSTACK, "OP_TOALTSTACK");
+        OP_CODE_NAMES.put(OP_FROMALTSTACK, "OP_FROMALTSTACK");
+        OP_CODE_NAMES.put(OP_2DROP, "OP_2DROP");
+        OP_CODE_NAMES.put(OP_2DUP, "OP_2DUP");
+        OP_CODE_NAMES.put(OP_3DUP, "OP_3DUP");
+        OP_CODE_NAMES.put(OP_2OVER, "OP_2OVER");
+        OP_CODE_NAMES.put(OP_2ROT, "OP_2ROT");
+        OP_CODE_NAMES.put(OP_2SWAP, "OP_2SWAP");
+        OP_CODE_NAMES.put(OP_IFDUP, "OP_IFDUP");
+        OP_CODE_NAMES.put(OP_DEPTH, "OP_DEPTH");
+        OP_CODE_NAMES.put(OP_NIP, "OP_NIP");
+        OP_CODE_NAMES.put(OP_DUP2, "OP_DUP2");
+
+        // 切片操作码
+        OP_CODE_NAMES.put(OP_SIZE, "OP_SIZE");
+
+        // 位逻辑操作码
+        OP_CODE_NAMES.put(OP_INVERT, "OP_INVERT");
+        OP_CODE_NAMES.put(OP_AND, "OP_AND");
+        OP_CODE_NAMES.put(OP_OR, "OP_OR");
+        OP_CODE_NAMES.put(OP_XOR, "OP_XOR");
+        OP_CODE_NAMES.put(OP_EQUAL, "OP_EQUAL");
+        OP_CODE_NAMES.put(OP_EQUALVERIFY, "OP_EQUALVERIFY");
+
+        // 数值操作码
+        OP_CODE_NAMES.put(OP_1ADD, "OP_1ADD");
+        OP_CODE_NAMES.put(OP_1SUB, "OP_1SUB");
+        OP_CODE_NAMES.put(OP_2MUL, "OP_2MUL");
+        OP_CODE_NAMES.put(OP_2DIV, "OP_2DIV");
+        OP_CODE_NAMES.put(OP_NEGATE, "OP_NEGATE");
+        OP_CODE_NAMES.put(OP_ABS, "OP_ABS");
+        OP_CODE_NAMES.put(OP_NOT, "OP_NOT");
+        OP_CODE_NAMES.put(OP_0NOTEQUAL, "OP_0NOTEQUAL");
+        OP_CODE_NAMES.put(OP_ADD, "OP_ADD");
+        OP_CODE_NAMES.put(OP_SUB, "OP_SUB");
+        OP_CODE_NAMES.put(OP_MUL, "OP_MUL");
+        OP_CODE_NAMES.put(OP_DIV, "OP_DIV");
+        OP_CODE_NAMES.put(OP_MOD, "OP_MOD");
+        OP_CODE_NAMES.put(OP_LSHIFT, "OP_LSHIFT");
+        OP_CODE_NAMES.put(OP_RSHIFT, "OP_RSHIFT");
+        OP_CODE_NAMES.put(OP_BOOLAND, "OP_BOOLAND");
+        OP_CODE_NAMES.put(OP_BOOLOR, "OP_BOOLOR");
+        OP_CODE_NAMES.put(OP_NUMEQUAL, "OP_NUMEQUAL");
+        OP_CODE_NAMES.put(OP_NUMEQUALVERIFY, "OP_NUMEQUALVERIFY");
+        OP_CODE_NAMES.put(OP_NUMNOTEQUAL, "OP_NUMNOTEQUAL");
+        OP_CODE_NAMES.put(OP_LESSTHAN, "OP_LESSTHAN");
+        OP_CODE_NAMES.put(OP_GREATERTHAN, "OP_GREATERTHAN");
+        OP_CODE_NAMES.put(OP_LESSTHANOREQUAL, "OP_LESSTHANOREQUAL");
+        OP_CODE_NAMES.put(OP_GREATERTHANOREQUAL, "OP_GREATERTHANOREQUAL");
+        OP_CODE_NAMES.put(OP_MIN, "OP_MIN");
+        OP_CODE_NAMES.put(OP_MAX, "OP_MAX");
+        OP_CODE_NAMES.put(OP_WITHIN, "OP_WITHIN");
+
+        // 密码学操作码
+        OP_CODE_NAMES.put(OP_RIPEMD160, "OP_RIPEMD160");
+        OP_CODE_NAMES.put(OP_SHA1, "OP_SHA1");
+        OP_CODE_NAMES.put(OP_SHA256, "OP_SHA256");
+        OP_CODE_NAMES.put(OP_HASH160, "OP_HASH160");
+        OP_CODE_NAMES.put(OP_HASH256, "OP_HASH256");
+        OP_CODE_NAMES.put(OP_CODESEPARATOR, "OP_CODESEPARATOR");
+        OP_CODE_NAMES.put(OP_CHECKSIG, "OP_CHECKSIG");
+        OP_CODE_NAMES.put(OP_CHECKSIGVERIFY, "OP_CHECKSIGVERIFY");
+        OP_CODE_NAMES.put(OP_CHECKMULTISIG, "OP_CHECKMULTISIG");
+        OP_CODE_NAMES.put(OP_CHECKMULTISIGVERIFY, "OP_CHECKMULTISIGVERIFY");
+
+        // 锁定时间操作码
+        OP_CODE_NAMES.put(OP_NOP, "OP_NOP");
+        OP_CODE_NAMES.put(OP_CHECKLOCKTIMEVERIFY, "OP_CHECKLOCKTIMEVERIFY");
+        OP_CODE_NAMES.put(OP_CHECKSEQUENCEVERIFY, "OP_CHECKSEQUENCEVERIFY");
+
+
+    }
+
 }

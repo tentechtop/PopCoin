@@ -1,4 +1,4 @@
-package com.pop.popcoinsystem.data.storage;
+package com.pop.popcoinsystem.data.storage.test;
 
 import com.google.common.collect.Maps;
 import com.pop.popcoinsystem.data.block.Block;
@@ -15,11 +15,8 @@ import java.io.File;
 import java.util.Map;
 
 
-
 /**
- * ****************************************
- * description：数据库存储工具类
- * ****************************************
+ * 无事务非族列 简单存储
  */
 @Slf4j
 public class BlockChainRocksDBStorageBack {
