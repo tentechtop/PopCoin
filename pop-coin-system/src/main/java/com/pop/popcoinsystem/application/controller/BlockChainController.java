@@ -85,6 +85,7 @@ public class BlockChainController {
 
     /**
      * 创建区块
+     * 需要钱包地址
      */
     @RequestMapping("/createBlock")
     public String createBlock() {
