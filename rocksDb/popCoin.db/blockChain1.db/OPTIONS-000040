@@ -32,7 +32,7 @@
   track_and_verify_wals_in_manifest=false
   WAL_ttl_seconds=0
   use_direct_reads=false
-  allow_2pc=true
+  allow_2pc=false
   allow_mmap_reads=false
   random_access_max_buffer_size=1048576
   allow_mmap_writes=false
@@ -66,7 +66,7 @@
   recycle_log_file_num=0
   manifest_preallocation_size=4194304
   write_thread_slow_yield_usec=3
-  db_log_dir=rocksDb/popCoin.db/transaction/blockChain.db/rocksdb_logs/
+  db_log_dir=rocksDb/popCoin.db/blockChain1.db/rocksdb_logs/
   unordered_write=false
   WAL_size_limit_MB=0
   persist_stats_to_disk=false
@@ -154,7 +154,7 @@
   compaction_filter=nullptr
   preserve_internal_time_seconds=0
   max_write_buffer_number_to_maintain=0
-  max_write_buffer_size_to_maintain=134217728
+  max_write_buffer_size_to_maintain=0
   comparator=leveldb.BytewiseComparator
   memtable_insert_with_hint_prefix_extractor=nullptr
   memtable_factory=SkipListFactory
@@ -260,7 +260,7 @@
   compaction_filter=nullptr
   preserve_internal_time_seconds=0
   max_write_buffer_number_to_maintain=0
-  max_write_buffer_size_to_maintain=134217728
+  max_write_buffer_size_to_maintain=0
   comparator=leveldb.BytewiseComparator
   memtable_insert_with_hint_prefix_extractor=nullptr
   memtable_factory=SkipListFactory
@@ -366,7 +366,7 @@
   compaction_filter=nullptr
   preserve_internal_time_seconds=0
   max_write_buffer_number_to_maintain=0
-  max_write_buffer_size_to_maintain=134217728
+  max_write_buffer_size_to_maintain=0
   comparator=leveldb.BytewiseComparator
   memtable_insert_with_hint_prefix_extractor=nullptr
   memtable_factory=SkipListFactory
@@ -419,7 +419,7 @@
   max_bytes_for_level_base=268435456
   report_bg_io_stats=false
   max_bytes_for_level_multiplier=10.000000
-  disable_auto_compactions=true
+  disable_auto_compactions=false
   check_flush_compaction_key_order=true
   enable_blob_files=false
   paranoid_file_checks=false
@@ -472,7 +472,7 @@
   compaction_filter=nullptr
   preserve_internal_time_seconds=0
   max_write_buffer_number_to_maintain=0
-  max_write_buffer_size_to_maintain=134217728
+  max_write_buffer_size_to_maintain=0
   comparator=leveldb.BytewiseComparator
   memtable_insert_with_hint_prefix_extractor=nullptr
   memtable_factory=SkipListFactory

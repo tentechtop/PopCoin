@@ -2,6 +2,7 @@ package com.pop.popcoinsystem.data.storage;
 
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.transaction.TXOutput;
+import com.pop.popcoinsystem.network.common.NodeSettings;
 import com.pop.popcoinsystem.util.SerializeUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.rocksdb.*;
@@ -398,19 +399,35 @@ public class BlockChainStorage {
 
 
     //新增或者修改-本节点的设置信息 key - NODE_SETTING_KEY
-    public void addOrUpdateNodeSetting(String key, Object value) {
+    public void addOrUpdateNodeSetting(NodeSettings value) {
         rwLock.writeLock().lock();
         try {
             byte[] valueBytes = SerializeUtils.serialize(value);
             db.put(cfMetadata, NODE_SETTING_KEY, valueBytes);
         } catch (RocksDBException e) {
-            log.error("节点状态失败: key={}", key, e);
+            log.error("节点状态失败: key={}", NODE_SETTING_KEY, e);
             throw new RuntimeException("节点状态失败", e);
         } finally {
             rwLock.writeLock().unlock();
         }
     }
 
+    //获取本节点的设置信息
+    public NodeSettings getNodeSetting() {
+        rwLock.readLock().lock();
+        try {
+            byte[] valueBytes = db.get(cfMetadata, NODE_SETTING_KEY);
+            if (valueBytes == null) {
+                return null; // 不存在返回null，避免抛出异常
+            }
+            return (NodeSettings)SerializeUtils.deSerialize(valueBytes);
+        } catch (RocksDBException e) {
+            log.error("获取节点状态失败: key={}", NODE_SETTING_KEY, e);
+            throw new RuntimeException("获取节点状态失败", e);
+        } finally {
+            rwLock.readLock().unlock();
+        }
+    }
 
 
 

@@ -63,9 +63,9 @@ public class P2WSH {
                 pubKey3.getEncoded()
         );
         ScriptPubKey redeemScript = ScriptPubKey.createMultisig(2, pubKeys);//构造赎回脚本  （Redeem Script）：  OP_2 <公钥1> <公钥2> <公钥3> OP_3 OP_CHECKMULTISIG
+        log.info("脚本格式:"+redeemScript.toScripString());
 
         String P2WSHAddress = CryptoUtil.ECDSASigner.createP2WSHAddressByPK(redeemScript.serialize());
-
         log.info("脚本转地址: {}", P2WSHAddress);
         log.info("验证地址是否有效: {}", CryptoUtil.ECDSASigner.isValidP2WSHAddress(P2WSHAddress));
         log.info("地址转哈希: {}", CryptoUtil.bytesToHex(Objects.requireNonNull(CryptoUtil.ECDSASigner.addressToP2WSH(P2WSHAddress))));

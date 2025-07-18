@@ -447,6 +447,31 @@ public class CryptoUtil {
                 return null;
             }
         }
+
+        /**
+         * 获取地址哈希
+         */
+        public static byte[] getAddressHash(String address) {
+            TxSigType addressType = getAddressType(address);
+            switch (addressType) {
+                case P2PKH:
+                    return addressToP2PKH(address);
+                case P2SH:
+                    return addressToP2SH(address);
+                case P2WPKH:
+                    return addressToP2WPKH(address);
+                case P2WSH:
+                    return addressToP2WSH(address);
+            }
+            return null;
+        }
+
+
+
+
+
+
+
     }
 
     /**

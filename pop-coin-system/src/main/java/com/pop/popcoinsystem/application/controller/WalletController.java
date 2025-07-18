@@ -4,6 +4,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+
+/**
+ * 如果节点是你的，它当然可以做为一个钱包为你提供服务
+ */
 @Slf4j
 @RestController
 @RequestMapping("/pop/wallet")

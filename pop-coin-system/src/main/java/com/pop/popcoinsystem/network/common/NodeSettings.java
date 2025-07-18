@@ -1,18 +1,47 @@
 package com.pop.popcoinsystem.network.common;
 
+import com.pop.popcoinsystem.data.storage.BlockChainStorage;
+import com.pop.popcoinsystem.network.enums.NodeStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.Serializable;
+import java.math.BigInteger;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.util.concurrent.TimeUnit;
 
 @Builder
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
+@Slf4j
 public class NodeSettings implements Serializable {
+
+    private BigInteger id;//节点ID
+    private  String ipv4;//ipv4地址
+    //private  String ipv6;//ipv6地址
+    private  int udpPort;//UDP端口 用于节点发现
+    private  int tcpPort;//TCP端口 用于通信传输
+    private int version;//节点版本
+    private int score;//分数
+    private double neighborAverageScore; //邻居平均分
+    private long totalSentBytes;// 发送字节总数
+    private long totalReceivedBytes;// 接收字节总数
+    private int nodeType;//节点类型
+    private int nodeNatType;//节点网络类型
+    private double averageResponseTime;       // 平均响应时间
+    private int failedConnectionAttempts;     // 失败的连接尝试次数
+    private boolean isSeedNode;               // 是否为种子节点
+    private NodeStatus nodeStatus;//节点状态
+
+    public String privateKeyHex;
+    public String publicKeyHex;
+
+
 
     public int identifierSize;
     /* Maximum size of the buckets */
@@ -40,6 +69,7 @@ public class NodeSettings implements Serializable {
         public static int DHT_EXECUTOR_POOL_SIZE = 20;
         public static int SCHEDULED_EXECUTOR_POOL_SIZE = 1;
         public static boolean ENABLED_FIRST_STORE_REQUEST_FORCE_PASS = false;
+
 
         public static NodeSettings build(){
             return NodeSettings.builder()

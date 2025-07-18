@@ -7,6 +7,9 @@ import com.esotericsoftware.kryo.pool.KryoFactory;
 import com.esotericsoftware.kryo.pool.KryoPool;
 import com.pop.popcoinsystem.network.protocol.message.*;
 
+import java.security.PrivateKey;
+import java.security.PublicKey;
+
 /**
  * 序列化工具类
  */
@@ -24,6 +27,10 @@ public class SerializeUtils {
 
         kryo.register(java.util.Date.class);
         kryo.register(java.util.UUID.class);
+
+        kryo.register(PrivateKey.class);
+        kryo.register(PublicKey.class);
+
 
         // 配置Kryo（根据需要调整）
         kryo.setRegistrationRequired(false);
