@@ -113,7 +113,8 @@ public class UTXOTestGenerator {
             UTXO utxo = new UTXO();
             utxo.setAddress(address);
             // 生成随机金额 (0.00000001 - 10 BTC)
-            utxo.setValue(BigDecimal.valueOf(random.nextDouble() * 10 + 0.00000001).setScale(8, BigDecimal.ROUND_DOWN));
+            long satoshiValue = (long) ((random.nextDouble() * 10 + 0.00000001) * 100000000);
+            utxo.setValue(satoshiValue);
             utxo.setTxId(txToSign);
             utxo.setVout(random.nextInt(10)); // 随机vout索引
 
@@ -131,17 +132,15 @@ public class UTXOTestGenerator {
         UTXOTestGenerator generator = new UTXOTestGenerator(storage);
 
         // 生成100万个UTXO
-/*
-        generator.generateUTXOs(1_000_000);
-*/
+/*        generator.generateUTXOs(1_000_000);*/
 
         TemplateStorage instance = TemplateStorage.getInstance();
         Wallet  walleta = instance.getWallet("wallet-b");
         String publicKeyHex = walleta.getPublicKeyHex();
         String address  = CryptoUtil.ECDSASigner.createP2PKHAddressByPK(CryptoUtil.hexToBytes(publicKeyHex));
 
-        List<UTXO> utxosByAddress = storage.getUtxosByAddress(address);
-        log.info("地址: " + address + " 的UTXO数量: " + utxosByAddress.size());
+/*        List<UTXO> utxosByAddress = storage.getUtxosByAddress(address);
+        log.info("地址: " + address + " 的UTXO数量: " + utxosByAddress.size());*/
 
     }
 }

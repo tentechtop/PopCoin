@@ -153,6 +153,18 @@ public class TemplateStorage {
 
 
 
+    //找到全节点所有的UTXO  构建钱包地址和UTXO的映射
+
+
+
+
+
+
+
+
+
+
+
 
 
 

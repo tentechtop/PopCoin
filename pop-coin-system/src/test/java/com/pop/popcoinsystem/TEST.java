@@ -22,25 +22,6 @@ public class TEST {
         Arrays.fill(txToSign, (byte)0x01);
 
 
-        String s = CryptoUtil.ECDSASigner.createP2PKHAddressByPK(publicKey.getEncoded());
-        UTXO utxo = new UTXO();
-        utxo.setAddress(s);
-        utxo.setValue(BigDecimal.valueOf(1000));
-        utxo.setTxId(txToSign);
-        utxo.setVout(0);
-
-        POPStorage instance = POPStorage.getInstance();
-        instance.addUtxo(utxo);
-
-        instance.getUtxosByAddress(s);
-        log.info("{}", instance.getUtxosByAddress(s));
-
-        instance.getUtxo(txToSign, 0);
-        log.info("{}", instance.getUtxo(txToSign, 0));
-
-
-        instance.getUtxoByKey("16906ae9b07db4392948a973a5a4daaf4d26f859a672fe003250abbb4abcc033:5");
-
 
 
 

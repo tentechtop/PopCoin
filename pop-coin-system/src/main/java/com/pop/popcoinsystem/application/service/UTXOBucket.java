@@ -30,32 +30,9 @@ public class UTXOBucket {
         this.utxos = new ArrayList<>();
     }
 
-    // 添加 UTXO 到桶中
-    public void addUTXO(UTXO utxo) {
-        bucketLock.lock();
-        try {
-            if (utxo.getValue().compareTo(minAmount) < 0 ||
-                    utxo.getValue().compareTo(maxAmount) >= 0) {
-                throw new IllegalArgumentException("UTXO 金额超出桶的范围");
-            }
-            utxos.add(utxo);
-            totalAmount = totalAmount.add(utxo.getValue());
-        } finally {
-            bucketLock.unlock();
-        }
-    }
 
-    // 从桶中移除 UTXO
-    public void removeUTXO(UTXO utxo) {
-        bucketLock.lock();
-        try {
-            if (utxos.remove(utxo)) {
-                totalAmount = totalAmount.subtract(utxo.getValue());
-            }
-        } finally {
-            bucketLock.unlock();
-        }
-    }
+
+
 
     // 获取桶内所有可用的 UTXO
     public List<UTXO> getAvailableUTXOs() {
@@ -66,24 +43,6 @@ public class UTXOBucket {
             bucketLock.unlock();
         }
     }
-
-    // 检查桶内可用 UTXO 是否足够支付指定金额
-    public boolean hasEnoughAmount(BigDecimal amount) {
-        return getAvailableTotalAmount().compareTo(amount) >= 0;
-    }
-
-    // 获取桶内可用 UTXO 的总金额
-    public BigDecimal getAvailableTotalAmount() {
-        bucketLock.lock();
-        try {
-            return utxos.stream()
-                    .map(UTXO::getValue)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-        } finally {
-            bucketLock.unlock();
-        }
-    }
-
 
 
 

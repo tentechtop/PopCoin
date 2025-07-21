@@ -13,11 +13,6 @@ import java.math.BigDecimal;
 public class UTXO {
 
     /**
-     * 交易ID和输出索引的结合 用于唯一标识一个UTXO
-     */
-    private String utxoId;        // UTXO 唯一标识
-
-    /**
      * 交易Id的hash值
      */
     private byte[] txId;
@@ -35,7 +30,7 @@ public class UTXO {
     /**
      * 数值 支付的钱金额   //比特币的最小单位是 “聪（satoshi）”，1 比特币（BTC）= 1 亿聪（1 BTC = 100,000,000 satoshi）。
      */
-    private BigDecimal value;
+    private long value;
 
     /**
      * 锁定脚本  谁能提供 签名和公钥 并通过验证就能使用这笔未花费   公钥hash就是比特币地址   或者公钥本身
