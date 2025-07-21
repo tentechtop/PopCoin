@@ -5,6 +5,7 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.pool.KryoFactory;
 import com.esotericsoftware.kryo.pool.KryoPool;
+import com.pop.popcoinsystem.data.transaction.UTXO;
 import com.pop.popcoinsystem.network.protocol.message.*;
 
 import java.security.PrivateKey;
@@ -31,6 +32,7 @@ public class SerializeUtils {
         kryo.register(PrivateKey.class);
         kryo.register(PublicKey.class);
 
+        kryo.register(UTXO.class);
 
         // 配置Kryo（根据需要调整）
         kryo.setRegistrationRequired(false);

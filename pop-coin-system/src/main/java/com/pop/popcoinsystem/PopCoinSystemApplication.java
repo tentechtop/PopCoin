@@ -1,15 +1,13 @@
 package com.pop.popcoinsystem;
 
-import com.pop.popcoinsystem.data.storage.BlockChainStorage;
+import com.pop.popcoinsystem.data.storage.POPStorage;
 import com.pop.popcoinsystem.network.KademliaNodeServer;
 import com.pop.popcoinsystem.network.common.NodeSettings;
 import com.pop.popcoinsystem.network.enums.NodeType;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.NetworkUtil;
-import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.checkerframework.checker.units.qual.C;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -44,7 +42,7 @@ public class PopCoinSystemApplication {
                 String localIp = NetworkUtil.getLocalIp();// 获取本机IP
                 log.info("本机IP:{}", localIp);
                 //获取节点信息 先从数据库中获取 如果没有则创建一份
-                BlockChainStorage instance = BlockChainStorage.getInstance();
+                POPStorage instance = POPStorage.getInstance();
                 NodeSettings nodeSetting = instance.getNodeSetting();
                 KeyPair keyPair = CryptoUtil.ECDSASigner.generateKeyPair();
                 PrivateKey privateKey = keyPair.getPrivate();

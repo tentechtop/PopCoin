@@ -1,6 +1,5 @@
 package com.pop.popcoinsystem.network.common;
 
-import com.pop.popcoinsystem.data.storage.BlockChainStorage;
 import com.pop.popcoinsystem.network.enums.NodeStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -10,8 +9,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.Serializable;
 import java.math.BigInteger;
-import java.security.PrivateKey;
-import java.security.PublicKey;
 import java.util.concurrent.TimeUnit;
 
 @Builder

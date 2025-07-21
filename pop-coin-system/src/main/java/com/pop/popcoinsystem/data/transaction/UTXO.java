@@ -33,7 +33,7 @@ public class UTXO {
     private String address;
 
     /**
-     * 数值 支付的钱金额
+     * 数值 支付的钱金额   //比特币的最小单位是 “聪（satoshi）”，1 比特币（BTC）= 1 亿聪（1 BTC = 100,000,000 satoshi）。
      */
     private BigDecimal value;
 

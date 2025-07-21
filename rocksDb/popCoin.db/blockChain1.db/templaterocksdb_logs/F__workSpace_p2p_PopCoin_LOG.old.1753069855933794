@@ -1,0 +1,371 @@
+2025/07/21-11:50:38.898809 1fcc RocksDB version: 7.10.2
+2025/07/21-11:50:38.898845 1fcc Git sha 3258b5c3e2488464de0827343c8c27bc6499765e
+2025/07/21-11:50:38.898859 1fcc Compile date 2023-03-02 18:27:12
+2025/07/21-11:50:38.898869 1fcc DB SUMMARY
+2025/07/21-11:50:38.898879 1fcc DB Session ID:  52WOXUR56SH4DEBDVUPH
+2025/07/21-11:50:38.899618 1fcc CURRENT file:  CURRENT
+2025/07/21-11:50:38.899630 1fcc IDENTITY file:  IDENTITY
+2025/07/21-11:50:38.899679 1fcc MANIFEST file:  MANIFEST-000048 size: 253 Bytes
+2025/07/21-11:50:38.899691 1fcc SST files in rocksDb/popCoin.db/blockChain1.db/template dir, Total Num: 1, files: 000010.sst 
+2025/07/21-11:50:38.899701 1fcc Write Ahead Log file in rocksDb/popCoin.db/blockChain1.db/template: 000011.log size: 0 ; 000015.log size: 0 ; 000019.log size: 0 ; 000023.log size: 0 ; 000027.log size: 0 ; 000031.log size: 0 ; 000035.log size: 0 ; 000039.log size: 0 ; 000043.log size: 0 ; 000047.log size: 0 ; 
+2025/07/21-11:50:38.899792 1fcc                         Options.error_if_exists: 0
+2025/07/21-11:50:38.899803 1fcc                       Options.create_if_missing: 1
+2025/07/21-11:50:38.899808 1fcc                         Options.paranoid_checks: 1
+2025/07/21-11:50:38.899813 1fcc             Options.flush_verify_memtable_count: 1
+2025/07/21-11:50:38.899818 1fcc                               Options.track_and_verify_wals_in_manifest: 0
+2025/07/21-11:50:38.899822 1fcc        Options.verify_sst_unique_id_in_manifest: 1
+2025/07/21-11:50:38.899827 1fcc                                     Options.env: 0000022016C71710
+2025/07/21-11:50:38.899832 1fcc                                      Options.fs: WinFS
+2025/07/21-11:50:38.899836 1fcc                                Options.info_log: 0000022016E930C0
+2025/07/21-11:50:38.899841 1fcc                Options.max_file_opening_threads: 16
+2025/07/21-11:50:38.899845 1fcc                              Options.statistics: 0000000000000000
+2025/07/21-11:50:38.899850 1fcc                               Options.use_fsync: 0
+2025/07/21-11:50:38.899855 1fcc                       Options.max_log_file_size: 1048576
+2025/07/21-11:50:38.899859 1fcc                  Options.max_manifest_file_size: 1073741824
+2025/07/21-11:50:38.899864 1fcc                   Options.log_file_time_to_roll: 0
+2025/07/21-11:50:38.899868 1fcc                       Options.keep_log_file_num: 2
+2025/07/21-11:50:38.899873 1fcc                    Options.recycle_log_file_num: 0
+2025/07/21-11:50:38.899877 1fcc                         Options.allow_fallocate: 1
+2025/07/21-11:50:38.899881 1fcc                        Options.allow_mmap_reads: 0
+2025/07/21-11:50:38.899886 1fcc                       Options.allow_mmap_writes: 0
+2025/07/21-11:50:38.899890 1fcc                        Options.use_direct_reads: 0
+2025/07/21-11:50:38.899895 1fcc                        Options.use_direct_io_for_flush_and_compaction: 0
+2025/07/21-11:50:38.899899 1fcc          Options.create_missing_column_families: 1
+2025/07/21-11:50:38.899904 1fcc                              Options.db_log_dir: rocksDb/popCoin.db/blockChain1.db/templaterocksdb_logs/
+2025/07/21-11:50:38.899909 1fcc                                 Options.wal_dir: 
+2025/07/21-11:50:38.899913 1fcc                Options.table_cache_numshardbits: 6
+2025/07/21-11:50:38.899917 1fcc                         Options.WAL_ttl_seconds: 0
+2025/07/21-11:50:38.899922 1fcc                       Options.WAL_size_limit_MB: 0
+2025/07/21-11:50:38.899926 1fcc                        Options.max_write_batch_group_size_bytes: 1048576
+2025/07/21-11:50:38.899931 1fcc             Options.manifest_preallocation_size: 4194304
+2025/07/21-11:50:38.899936 1fcc                     Options.is_fd_close_on_exec: 1
+2025/07/21-11:50:38.899940 1fcc                   Options.advise_random_on_open: 1
+2025/07/21-11:50:38.899945 1fcc                    Options.db_write_buffer_size: 0
+2025/07/21-11:50:38.899949 1fcc                    Options.write_buffer_manager: 000002205C2AAF60
+2025/07/21-11:50:38.899954 1fcc         Options.access_hint_on_compaction_start: 1
+2025/07/21-11:50:38.899958 1fcc           Options.random_access_max_buffer_size: 1048576
+2025/07/21-11:50:38.899980 1fcc                      Options.use_adaptive_mutex: 0
+2025/07/21-11:50:38.899985 1fcc                            Options.rate_limiter: 0000000000000000
+2025/07/21-11:50:38.899990 1fcc     Options.sst_file_manager.rate_bytes_per_sec: 0
+2025/07/21-11:50:38.899994 1fcc                       Options.wal_recovery_mode: 2
+2025/07/21-11:50:38.899999 1fcc                  Options.enable_thread_tracking: 0
+2025/07/21-11:50:38.900003 1fcc                  Options.enable_pipelined_write: 0
+2025/07/21-11:50:38.900008 1fcc                  Options.unordered_write: 0
+2025/07/21-11:50:38.900012 1fcc         Options.allow_concurrent_memtable_write: 1
+2025/07/21-11:50:38.900017 1fcc      Options.enable_write_thread_adaptive_yield: 1
+2025/07/21-11:50:38.900021 1fcc             Options.write_thread_max_yield_usec: 100
+2025/07/21-11:50:38.900026 1fcc            Options.write_thread_slow_yield_usec: 3
+2025/07/21-11:50:38.900030 1fcc                               Options.row_cache: None
+2025/07/21-11:50:38.900035 1fcc                              Options.wal_filter: None
+2025/07/21-11:50:38.900039 1fcc             Options.avoid_flush_during_recovery: 0
+2025/07/21-11:50:38.900044 1fcc             Options.allow_ingest_behind: 0
+2025/07/21-11:50:38.900048 1fcc             Options.two_write_queues: 0
+2025/07/21-11:50:38.900052 1fcc             Options.manual_wal_flush: 0
+2025/07/21-11:50:38.900057 1fcc             Options.wal_compression: 0
+2025/07/21-11:50:38.900061 1fcc             Options.atomic_flush: 0
+2025/07/21-11:50:38.900066 1fcc             Options.avoid_unnecessary_blocking_io: 0
+2025/07/21-11:50:38.900070 1fcc                 Options.persist_stats_to_disk: 0
+2025/07/21-11:50:38.900075 1fcc                 Options.write_dbid_to_manifest: 0
+2025/07/21-11:50:38.900080 1fcc                 Options.log_readahead_size: 0
+2025/07/21-11:50:38.900085 1fcc                 Options.file_checksum_gen_factory: Unknown
+2025/07/21-11:50:38.900090 1fcc                 Options.best_efforts_recovery: 0
+2025/07/21-11:50:38.900095 1fcc                Options.max_bgerror_resume_count: 2147483647
+2025/07/21-11:50:38.900100 1fcc            Options.bgerror_resume_retry_interval: 1000000
+2025/07/21-11:50:38.900105 1fcc             Options.allow_data_in_errors: 0
+2025/07/21-11:50:38.900111 1fcc             Options.db_host_id: __hostname__
+2025/07/21-11:50:38.900116 1fcc             Options.enforce_single_del_contracts: true
+2025/07/21-11:50:38.900121 1fcc             Options.max_background_jobs: 2
+2025/07/21-11:50:38.900125 1fcc             Options.max_background_compactions: -1
+2025/07/21-11:50:38.900130 1fcc             Options.max_subcompactions: 1
+2025/07/21-11:50:38.900134 1fcc             Options.avoid_flush_during_shutdown: 0
+2025/07/21-11:50:38.900139 1fcc           Options.writable_file_max_buffer_size: 1048576
+2025/07/21-11:50:38.900143 1fcc             Options.delayed_write_rate : 16777216
+2025/07/21-11:50:38.900147 1fcc             Options.max_total_wal_size: 0
+2025/07/21-11:50:38.900154 1fcc             Options.delete_obsolete_files_period_micros: 21600000000
+2025/07/21-11:50:38.900159 1fcc                   Options.stats_dump_period_sec: 600
+2025/07/21-11:50:38.900163 1fcc                 Options.stats_persist_period_sec: 600
+2025/07/21-11:50:38.900168 1fcc                 Options.stats_history_buffer_size: 1048576
+2025/07/21-11:50:38.900172 1fcc                          Options.max_open_files: -1
+2025/07/21-11:50:38.900177 1fcc                          Options.bytes_per_sync: 0
+2025/07/21-11:50:38.900181 1fcc                      Options.wal_bytes_per_sync: 0
+2025/07/21-11:50:38.900185 1fcc                   Options.strict_bytes_per_sync: 0
+2025/07/21-11:50:38.900190 1fcc       Options.compaction_readahead_size: 0
+2025/07/21-11:50:38.900194 1fcc                  Options.max_background_flushes: -1
+2025/07/21-11:50:38.900199 1fcc Compression algorithms supported:
+2025/07/21-11:50:38.900204 1fcc 	kZSTD supported: 1
+2025/07/21-11:50:38.900209 1fcc 	kSnappyCompression supported: 1
+2025/07/21-11:50:38.900225 1fcc 	kBZip2Compression supported: 0
+2025/07/21-11:50:38.900230 1fcc 	kZlibCompression supported: 1
+2025/07/21-11:50:38.900234 1fcc 	kLZ4Compression supported: 1
+2025/07/21-11:50:38.900238 1fcc 	kXpressCompression supported: 0
+2025/07/21-11:50:38.900243 1fcc 	kLZ4HCCompression supported: 1
+2025/07/21-11:50:38.900247 1fcc 	kZSTDNotFinalCompression supported: 1
+2025/07/21-11:50:38.900252 1fcc Fast CRC32 supported: Supported on x86
+2025/07/21-11:50:38.900257 1fcc DMutex implementation: std::mutex
+2025/07/21-11:50:38.900992 1fcc               Options.comparator: leveldb.BytewiseComparator
+2025/07/21-11:50:38.901000 1fcc           Options.merge_operator: None
+2025/07/21-11:50:38.901005 1fcc        Options.compaction_filter: None
+2025/07/21-11:50:38.901010 1fcc        Options.compaction_filter_factory: None
+2025/07/21-11:50:38.901014 1fcc  Options.sst_partitioner_factory: None
+2025/07/21-11:50:38.901019 1fcc         Options.memtable_factory: SkipListFactory
+2025/07/21-11:50:38.901023 1fcc            Options.table_factory: BlockBasedTable
+2025/07/21-11:50:38.901041 1fcc            table_factory options:   flush_block_policy_factory: FlushBlockBySizePolicyFactory (000002205C318A50)
+  cache_index_and_filter_blocks: 0
+  cache_index_and_filter_blocks_with_high_priority: 1
+  pin_l0_filter_and_index_blocks_in_cache: 0
+  pin_top_level_index_and_filter: 1
+  index_type: 0
+  data_block_index_type: 0
+  index_shortening: 1
+  data_block_hash_table_util_ratio: 0.750000
+  checksum: 4
+  no_block_cache: 0
+  block_cache: 000002205C2A89C0
+  block_cache_name: LRUCache
+  block_cache_options:
+    capacity : 8388608
+    num_shard_bits : 4
+    strict_capacity_limit : 0
+    memory_allocator : None
+    high_pri_pool_ratio: 0.000
+    low_pri_pool_ratio: 0.000
+  block_cache_compressed: 0000000000000000
+  persistent_cache: 0000000000000000
+  block_size: 4096
+  block_size_deviation: 10
+  block_restart_interval: 16
+  index_block_restart_interval: 1
+  metadata_block_size: 4096
+  partition_filters: 0
+  use_delta_encoding: 1
+  filter_policy: nullptr
+  whole_key_filtering: 1
+  verify_compression: 0
+  read_amp_bytes_per_bit: 0
+  format_version: 5
+  enable_index_compression: 1
+  block_align: 0
+  max_auto_readahead_size: 262144
+  prepopulate_block_cache: 0
+  initial_auto_readahead_size: 8192
+  num_file_reads_for_auto_readahead: 2
+2025/07/21-11:50:38.901046 1fcc        Options.write_buffer_size: 67108864
+2025/07/21-11:50:38.901051 1fcc  Options.max_write_buffer_number: 2
+2025/07/21-11:50:38.901055 1fcc          Options.compression: Snappy
+2025/07/21-11:50:38.901060 1fcc                  Options.bottommost_compression: Disabled
+2025/07/21-11:50:38.901064 1fcc       Options.prefix_extractor: nullptr
+2025/07/21-11:50:38.901069 1fcc   Options.memtable_insert_with_hint_prefix_extractor: nullptr
+2025/07/21-11:50:38.901073 1fcc             Options.num_levels: 7
+2025/07/21-11:50:38.901078 1fcc        Options.min_write_buffer_number_to_merge: 1
+2025/07/21-11:50:38.901082 1fcc     Options.max_write_buffer_number_to_maintain: 0
+2025/07/21-11:50:38.901087 1fcc     Options.max_write_buffer_size_to_maintain: 0
+2025/07/21-11:50:38.901091 1fcc            Options.bottommost_compression_opts.window_bits: -14
+2025/07/21-11:50:38.901096 1fcc                  Options.bottommost_compression_opts.level: 32767
+2025/07/21-11:50:38.901101 1fcc               Options.bottommost_compression_opts.strategy: 0
+2025/07/21-11:50:38.901105 1fcc         Options.bottommost_compression_opts.max_dict_bytes: 0
+2025/07/21-11:50:38.901110 1fcc         Options.bottommost_compression_opts.zstd_max_train_bytes: 0
+2025/07/21-11:50:38.901114 1fcc         Options.bottommost_compression_opts.parallel_threads: 1
+2025/07/21-11:50:38.901119 1fcc                  Options.bottommost_compression_opts.enabled: false
+2025/07/21-11:50:38.901124 1fcc         Options.bottommost_compression_opts.max_dict_buffer_bytes: 0
+2025/07/21-11:50:38.901128 1fcc         Options.bottommost_compression_opts.use_zstd_dict_trainer: true
+2025/07/21-11:50:38.901133 1fcc            Options.compression_opts.window_bits: -14
+2025/07/21-11:50:38.901139 1fcc                  Options.compression_opts.level: 32767
+2025/07/21-11:50:38.901145 1fcc               Options.compression_opts.strategy: 0
+2025/07/21-11:50:38.901149 1fcc         Options.compression_opts.max_dict_bytes: 0
+2025/07/21-11:50:38.901154 1fcc         Options.compression_opts.zstd_max_train_bytes: 0
+2025/07/21-11:50:38.901158 1fcc         Options.compression_opts.use_zstd_dict_trainer: true
+2025/07/21-11:50:38.901163 1fcc         Options.compression_opts.parallel_threads: 1
+2025/07/21-11:50:38.901167 1fcc                  Options.compression_opts.enabled: false
+2025/07/21-11:50:38.901172 1fcc         Options.compression_opts.max_dict_buffer_bytes: 0
+2025/07/21-11:50:38.901176 1fcc      Options.level0_file_num_compaction_trigger: 4
+2025/07/21-11:50:38.901181 1fcc          Options.level0_slowdown_writes_trigger: 20
+2025/07/21-11:50:38.901185 1fcc              Options.level0_stop_writes_trigger: 36
+2025/07/21-11:50:38.901190 1fcc                   Options.target_file_size_base: 67108864
+2025/07/21-11:50:38.901194 1fcc             Options.target_file_size_multiplier: 1
+2025/07/21-11:50:38.901199 1fcc                Options.max_bytes_for_level_base: 268435456
+2025/07/21-11:50:38.901203 1fcc Options.level_compaction_dynamic_level_bytes: 0
+2025/07/21-11:50:38.901208 1fcc          Options.max_bytes_for_level_multiplier: 10.000000
+2025/07/21-11:50:38.901213 1fcc Options.max_bytes_for_level_multiplier_addtl[0]: 1
+2025/07/21-11:50:38.901217 1fcc Options.max_bytes_for_level_multiplier_addtl[1]: 1
+2025/07/21-11:50:38.901222 1fcc Options.max_bytes_for_level_multiplier_addtl[2]: 1
+2025/07/21-11:50:38.901226 1fcc Options.max_bytes_for_level_multiplier_addtl[3]: 1
+2025/07/21-11:50:38.901231 1fcc Options.max_bytes_for_level_multiplier_addtl[4]: 1
+2025/07/21-11:50:38.901235 1fcc Options.max_bytes_for_level_multiplier_addtl[5]: 1
+2025/07/21-11:50:38.901240 1fcc Options.max_bytes_for_level_multiplier_addtl[6]: 1
+2025/07/21-11:50:38.901244 1fcc       Options.max_sequential_skip_in_iterations: 8
+2025/07/21-11:50:38.901249 1fcc                    Options.max_compaction_bytes: 1677721600
+2025/07/21-11:50:38.901253 1fcc   Options.ignore_max_compaction_bytes_for_input: true
+2025/07/21-11:50:38.901258 1fcc                        Options.arena_block_size: 1048576
+2025/07/21-11:50:38.901263 1fcc   Options.soft_pending_compaction_bytes_limit: 68719476736
+2025/07/21-11:50:38.901267 1fcc   Options.hard_pending_compaction_bytes_limit: 274877906944
+2025/07/21-11:50:38.901272 1fcc                Options.disable_auto_compactions: 0
+2025/07/21-11:50:38.901277 1fcc                        Options.compaction_style: kCompactionStyleLevel
+2025/07/21-11:50:38.901282 1fcc                          Options.compaction_pri: kMinOverlappingRatio
+2025/07/21-11:50:38.901287 1fcc Options.compaction_options_universal.size_ratio: 1
+2025/07/21-11:50:38.901292 1fcc Options.compaction_options_universal.min_merge_width: 2
+2025/07/21-11:50:38.901296 1fcc Options.compaction_options_universal.max_merge_width: 4294967295
+2025/07/21-11:50:38.901301 1fcc Options.compaction_options_universal.max_size_amplification_percent: 200
+2025/07/21-11:50:38.901306 1fcc Options.compaction_options_universal.compression_size_percent: -1
+2025/07/21-11:50:38.901311 1fcc Options.compaction_options_universal.stop_style: kCompactionStopStyleTotalSize
+2025/07/21-11:50:38.901315 1fcc Options.compaction_options_fifo.max_table_files_size: 1073741824
+2025/07/21-11:50:38.901320 1fcc Options.compaction_options_fifo.allow_compaction: 0
+2025/07/21-11:50:38.901325 1fcc                   Options.table_properties_collectors: 
+2025/07/21-11:50:38.901330 1fcc                   Options.inplace_update_support: 0
+2025/07/21-11:50:38.901335 1fcc                 Options.inplace_update_num_locks: 10000
+2025/07/21-11:50:38.901339 1fcc               Options.memtable_prefix_bloom_size_ratio: 0.000000
+2025/07/21-11:50:38.901344 1fcc               Options.memtable_whole_key_filtering: 0
+2025/07/21-11:50:38.901349 1fcc   Options.memtable_huge_page_size: 0
+2025/07/21-11:50:38.901353 1fcc                           Options.bloom_locality: 0
+2025/07/21-11:50:38.901376 1fcc                    Options.max_successive_merges: 0
+2025/07/21-11:50:38.901382 1fcc                Options.optimize_filters_for_hits: 0
+2025/07/21-11:50:38.901386 1fcc                Options.paranoid_file_checks: 0
+2025/07/21-11:50:38.901391 1fcc                Options.force_consistency_checks: 1
+2025/07/21-11:50:38.901395 1fcc                Options.report_bg_io_stats: 0
+2025/07/21-11:50:38.901400 1fcc                               Options.ttl: 2592000
+2025/07/21-11:50:38.901404 1fcc          Options.periodic_compaction_seconds: 0
+2025/07/21-11:50:38.901409 1fcc  Options.preclude_last_level_data_seconds: 0
+2025/07/21-11:50:38.901413 1fcc    Options.preserve_internal_time_seconds: 0
+2025/07/21-11:50:38.901418 1fcc                       Options.enable_blob_files: false
+2025/07/21-11:50:38.901422 1fcc                           Options.min_blob_size: 0
+2025/07/21-11:50:38.901427 1fcc                          Options.blob_file_size: 268435456
+2025/07/21-11:50:38.901432 1fcc                   Options.blob_compression_type: NoCompression
+2025/07/21-11:50:38.901436 1fcc          Options.enable_blob_garbage_collection: false
+2025/07/21-11:50:38.901441 1fcc      Options.blob_garbage_collection_age_cutoff: 0.250000
+2025/07/21-11:50:38.901446 1fcc Options.blob_garbage_collection_force_threshold: 1.000000
+2025/07/21-11:50:38.901451 1fcc          Options.blob_compaction_readahead_size: 0
+2025/07/21-11:50:38.901455 1fcc                Options.blob_file_starting_level: 0
+2025/07/21-11:50:38.901460 1fcc Options.experimental_mempurge_threshold: 0.000000
+2025/07/21-11:50:38.901506 1fcc               Options.comparator: leveldb.BytewiseComparator
+2025/07/21-11:50:38.901511 1fcc           Options.merge_operator: None
+2025/07/21-11:50:38.901516 1fcc        Options.compaction_filter: None
+2025/07/21-11:50:38.901520 1fcc        Options.compaction_filter_factory: None
+2025/07/21-11:50:38.901525 1fcc  Options.sst_partitioner_factory: None
+2025/07/21-11:50:38.901529 1fcc         Options.memtable_factory: SkipListFactory
+2025/07/21-11:50:38.901534 1fcc            Options.table_factory: BlockBasedTable
+2025/07/21-11:50:38.901547 1fcc            table_factory options:   flush_block_policy_factory: FlushBlockBySizePolicyFactory (000002205C318810)
+  cache_index_and_filter_blocks: 0
+  cache_index_and_filter_blocks_with_high_priority: 1
+  pin_l0_filter_and_index_blocks_in_cache: 0
+  pin_top_level_index_and_filter: 1
+  index_type: 0
+  data_block_index_type: 0
+  index_shortening: 1
+  data_block_hash_table_util_ratio: 0.750000
+  checksum: 4
+  no_block_cache: 0
+  block_cache: 000002205C2A9440
+  block_cache_name: LRUCache
+  block_cache_options:
+    capacity : 8388608
+    num_shard_bits : 4
+    strict_capacity_limit : 0
+    memory_allocator : None
+    high_pri_pool_ratio: 0.000
+    low_pri_pool_ratio: 0.000
+  block_cache_compressed: 0000000000000000
+  persistent_cache: 0000000000000000
+  block_size: 4096
+  block_size_deviation: 10
+  block_restart_interval: 16
+  index_block_restart_interval: 1
+  metadata_block_size: 4096
+  partition_filters: 0
+  use_delta_encoding: 1
+  filter_policy: nullptr
+  whole_key_filtering: 1
+  verify_compression: 0
+  read_amp_bytes_per_bit: 0
+  format_version: 5
+  enable_index_compression: 1
+  block_align: 0
+  max_auto_readahead_size: 262144
+  prepopulate_block_cache: 0
+  initial_auto_readahead_size: 8192
+  num_file_reads_for_auto_readahead: 2
+2025/07/21-11:50:38.901552 1fcc        Options.write_buffer_size: 67108864
+2025/07/21-11:50:38.901557 1fcc  Options.max_write_buffer_number: 2
+2025/07/21-11:50:38.901561 1fcc          Options.compression: Snappy
+2025/07/21-11:50:38.901566 1fcc                  Options.bottommost_compression: Disabled
+2025/07/21-11:50:38.901570 1fcc       Options.prefix_extractor: nullptr
+2025/07/21-11:50:38.901582 1fcc   Options.memtable_insert_with_hint_prefix_extractor: nullptr
+2025/07/21-11:50:38.901587 1fcc             Options.num_levels: 7
+2025/07/21-11:50:38.901591 1fcc        Options.min_write_buffer_number_to_merge: 1
+2025/07/21-11:50:38.901597 1fcc     Options.max_write_buffer_number_to_maintain: 0
+2025/07/21-11:50:38.901602 1fcc     Options.max_write_buffer_size_to_maintain: 0
+2025/07/21-11:50:38.901607 1fcc            Options.bottommost_compression_opts.window_bits: -14
+2025/07/21-11:50:38.901612 1fcc                  Options.bottommost_compression_opts.level: 32767
+2025/07/21-11:50:38.901616 1fcc               Options.bottommost_compression_opts.strategy: 0
+2025/07/21-11:50:38.901621 1fcc         Options.bottommost_compression_opts.max_dict_bytes: 0
+2025/07/21-11:50:38.901625 1fcc         Options.bottommost_compression_opts.zstd_max_train_bytes: 0
+2025/07/21-11:50:38.901630 1fcc         Options.bottommost_compression_opts.parallel_threads: 1
+2025/07/21-11:50:38.901635 1fcc                  Options.bottommost_compression_opts.enabled: false
+2025/07/21-11:50:38.901639 1fcc         Options.bottommost_compression_opts.max_dict_buffer_bytes: 0
+2025/07/21-11:50:38.901644 1fcc         Options.bottommost_compression_opts.use_zstd_dict_trainer: true
+2025/07/21-11:50:38.901649 1fcc            Options.compression_opts.window_bits: -14
+2025/07/21-11:50:38.901653 1fcc                  Options.compression_opts.level: 32767
+2025/07/21-11:50:38.901658 1fcc               Options.compression_opts.strategy: 0
+2025/07/21-11:50:38.901662 1fcc         Options.compression_opts.max_dict_bytes: 0
+2025/07/21-11:50:38.901667 1fcc         Options.compression_opts.zstd_max_train_bytes: 0
+2025/07/21-11:50:38.901671 1fcc         Options.compression_opts.use_zstd_dict_trainer: true
+2025/07/21-11:50:38.901676 1fcc         Options.compression_opts.parallel_threads: 1
+2025/07/21-11:50:38.901680 1fcc                  Options.compression_opts.enabled: false
+2025/07/21-11:50:38.901685 1fcc         Options.compression_opts.max_dict_buffer_bytes: 0
+2025/07/21-11:50:38.901690 1fcc      Options.level0_file_num_compaction_trigger: 4
+2025/07/21-11:50:38.901694 1fcc          Options.level0_slowdown_writes_trigger: 20
+2025/07/21-11:50:38.901699 1fcc              Options.level0_stop_writes_trigger: 36
+2025/07/21-11:50:38.901703 1fcc                   Options.target_file_size_base: 67108864
+2025/07/21-11:50:38.901708 1fcc             Options.target_file_size_multiplier: 1
+2025/07/21-11:50:38.901712 1fcc                Options.max_bytes_for_level_base: 268435456
+2025/07/21-11:50:38.901717 1fcc Options.level_compaction_dynamic_level_bytes: 0
+2025/07/21-11:50:38.901722 1fcc          Options.max_bytes_for_level_multiplier: 10.000000
+2025/07/21-11:50:38.901726 1fcc Options.max_bytes_for_level_multiplier_addtl[0]: 1
+2025/07/21-11:50:38.901731 1fcc Options.max_bytes_for_level_multiplier_addtl[1]: 1
+2025/07/21-11:50:38.901736 1fcc Options.max_bytes_for_level_multiplier_addtl[2]: 1
+2025/07/21-11:50:38.901740 1fcc Options.max_bytes_for_level_multiplier_addtl[3]: 1
+2025/07/21-11:50:38.901745 1fcc Options.max_bytes_for_level_multiplier_addtl[4]: 1
+2025/07/21-11:50:38.901749 1fcc Options.max_bytes_for_level_multiplier_addtl[5]: 1
+2025/07/21-11:50:38.901754 1fcc Options.max_bytes_for_level_multiplier_addtl[6]: 1
+2025/07/21-11:50:38.901758 1fcc       Options.max_sequential_skip_in_iterations: 8
+2025/07/21-11:50:38.901763 1fcc                    Options.max_compaction_bytes: 1677721600
+2025/07/21-11:50:38.901767 1fcc   Options.ignore_max_compaction_bytes_for_input: true
+2025/07/21-11:50:38.901772 1fcc                        Options.arena_block_size: 1048576
+2025/07/21-11:50:38.901777 1fcc   Options.soft_pending_compaction_bytes_limit: 68719476736
+2025/07/21-11:50:38.901781 1fcc   Options.hard_pending_compaction_bytes_limit: 274877906944
+2025/07/21-11:50:38.901786 1fcc                Options.disable_auto_compactions: 0
+2025/07/21-11:50:38.901790 1fcc                        Options.compaction_style: kCompactionStyleLevel
+2025/07/21-11:50:38.901795 1fcc                          Options.compaction_pri: kMinOverlappingRatio
+2025/07/21-11:50:38.901800 1fcc Options.compaction_options_universal.size_ratio: 1
+2025/07/21-11:50:38.901804 1fcc Options.compaction_options_universal.min_merge_width: 2
+2025/07/21-11:50:38.901810 1fcc Options.compaction_options_universal.max_merge_width: 4294967295
+2025/07/21-11:50:38.901815 1fcc Options.compaction_options_universal.max_size_amplification_percent: 200
+2025/07/21-11:50:38.901820 1fcc Options.compaction_options_universal.compression_size_percent: -1
+2025/07/21-11:50:38.901824 1fcc Options.compaction_options_universal.stop_style: kCompactionStopStyleTotalSize
+2025/07/21-11:50:38.901829 1fcc Options.compaction_options_fifo.max_table_files_size: 1073741824
+2025/07/21-11:50:38.901833 1fcc Options.compaction_options_fifo.allow_compaction: 0
+2025/07/21-11:50:38.901839 1fcc                   Options.table_properties_collectors: 
+2025/07/21-11:50:38.901844 1fcc                   Options.inplace_update_support: 0
+2025/07/21-11:50:38.901848 1fcc                 Options.inplace_update_num_locks: 10000
+2025/07/21-11:50:38.901853 1fcc               Options.memtable_prefix_bloom_size_ratio: 0.000000
+2025/07/21-11:50:38.901858 1fcc               Options.memtable_whole_key_filtering: 0
+2025/07/21-11:50:38.901862 1fcc   Options.memtable_huge_page_size: 0
+2025/07/21-11:50:38.901880 1fcc                           Options.bloom_locality: 0
+2025/07/21-11:50:38.901885 1fcc                    Options.max_successive_merges: 0
+2025/07/21-11:50:38.901894 1fcc                Options.optimize_filters_for_hits: 0
+2025/07/21-11:50:38.901898 1fcc                Options.paranoid_file_checks: 0
+2025/07/21-11:50:38.901903 1fcc                Options.force_consistency_checks: 1
+2025/07/21-11:50:38.901908 1fcc                Options.report_bg_io_stats: 0
+2025/07/21-11:50:38.901912 1fcc                               Options.ttl: 2592000
+2025/07/21-11:50:38.901916 1fcc          Options.periodic_compaction_seconds: 0
+2025/07/21-11:50:38.901921 1fcc  Options.preclude_last_level_data_seconds: 0
+2025/07/21-11:50:38.901925 1fcc    Options.preserve_internal_time_seconds: 0
+2025/07/21-11:50:38.901930 1fcc                       Options.enable_blob_files: false
+2025/07/21-11:50:38.901934 1fcc                           Options.min_blob_size: 0
+2025/07/21-11:50:38.901939 1fcc                          Options.blob_file_size: 268435456
+2025/07/21-11:50:38.901943 1fcc                   Options.blob_compression_type: NoCompression
+2025/07/21-11:50:38.901948 1fcc          Options.enable_blob_garbage_collection: false
+2025/07/21-11:50:38.901953 1fcc      Options.blob_garbage_collection_age_cutoff: 0.250000
+2025/07/21-11:50:38.901957 1fcc Options.blob_garbage_collection_force_threshold: 1.000000
+2025/07/21-11:50:38.901963 1fcc          Options.blob_compaction_readahead_size: 0
+2025/07/21-11:50:38.901967 1fcc                Options.blob_file_starting_level: 0
+2025/07/21-11:50:38.901973 1fcc Options.experimental_mempurge_threshold: 0.000000
+2025/07/21-11:50:38.925667 1fcc DB pointer 000002205C37F580

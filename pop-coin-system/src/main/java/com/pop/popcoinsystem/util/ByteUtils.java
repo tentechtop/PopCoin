@@ -3,6 +3,7 @@ package com.pop.popcoinsystem.util;
 import org.apache.commons.lang3.ArrayUtils;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.stream.Stream;
 
@@ -58,5 +59,41 @@ public class ByteUtils {
         }
         return data;
     }
+
+
+
+
+
+
+
+
+
+
+
+    //int
+    // 将 int 转换为 4 字节数组（大端序）
+    // 将 int 转换为 4 字节数组（大端序）
+    // 将int转换为4字节数组（大端序）
+    public static byte[] intToBytes(int value) {
+        return ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN).putInt(value).array();
+    }
+
+    // 将4字节数组转换为int（大端序）
+    public static int fromBytesToInt(byte[] bytes) {
+        if (bytes == null) {
+            throw new IllegalArgumentException("字节数组不能为 null");
+        }
+        if (bytes.length != 4) {
+            throw new IllegalArgumentException("转换 int 类型时，字节数组长度必须为 4，实际为：" + bytes.length);
+        }
+        return ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).getInt();
+    }
+
+    // 若存在toBytes方法，确保其处理int时调用intToBytes（可选）
+    public static byte[] toBytes(int value) {
+        return intToBytes(value); // 保证int转换为4字节
+    }
+
+
 
 }

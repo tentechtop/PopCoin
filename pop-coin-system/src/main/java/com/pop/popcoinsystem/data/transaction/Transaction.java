@@ -9,6 +9,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.apache.commons.codec.digest.DigestUtils;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -40,6 +41,11 @@ public class Transaction {
      * 交易数据大小
      */
     private long size;
+
+    /**
+     * 交易手续费
+     */
+    private long fee;
 
     /**
      * 权重
@@ -209,4 +215,20 @@ public class Transaction {
             return 9;
         }
     }
+
+
+    public long getFeePerByte() {
+        return fee / size;
+    }
+
+
+
+    //创建一笔CoinBase交易
+    public static Transaction createCoinBaseTransaction(String to) {
+        //判断地址是否合法类型
+
+
+        return new Transaction();
+    }
+
 }

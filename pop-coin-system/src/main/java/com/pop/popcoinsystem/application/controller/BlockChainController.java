@@ -1,41 +1,55 @@
 package com.pop.popcoinsystem.application.controller;
 
+import com.pop.popcoinsystem.data.block.BlockVO;
+import com.pop.popcoinsystem.data.blockChain.BlockChain;
+import com.pop.popcoinsystem.data.block.BlockDTO;
+import com.pop.popcoinsystem.data.vo.result.Result;
+import com.pop.popcoinsystem.service.BlockChainService;
+import jakarta.annotation.Resource;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+
+/**
+ * 为了可维护性 整个系统仅支持P2WPKH
+ */
 
 @RestController
 @RequestMapping("/pop/blockchain")
 public class BlockChainController {
+    @Resource
+    private BlockChainService blockChainService;
 
     /**
      * 查询区块高度
      */
-    @RequestMapping("/getBlockHeight")
-    public String getBlockHeight() {
-        return "";
+    @PostMapping("/getBlockHeight")
+    public Result<Long> getBlockHeight(@RequestBody BlockVO blockVO) {
+        return blockChainService.getBlockHeight(blockVO.getHash());
     }
-
 
     /**
      * 查询当前区块链信息
      */
-    @RequestMapping("/getBlockChainInfo")
-    public String getBlockChainInfo() {
-        return "";
+    @PostMapping("/getBlockChainInfo")
+    public Result<BlockChain> getBlockChainInfo() {
+        return blockChainService.getBlockChainInfo();
     }
 
     /**
-     * 获取区块信息
+     * 获取区块信息 根据区块hash HEX
      */
-    @RequestMapping("/getBlock")
-    public String getBlock() {
-        return "";
+    @PostMapping("/getBlock")
+    public Result<BlockDTO> getBlock(@RequestBody BlockVO blockVO) {
+        return blockChainService.getBlock(blockVO);
     }
 
     /**
      * 查询最新的区块 最多100个
      */
-    @RequestMapping("/getLatest100Blocks")
+    @PostMapping("/getLatest100Blocks")
     public String getLatest100Blocks() {
         return "";
     }
@@ -43,7 +57,7 @@ public class BlockChainController {
     /**
      * 查询当前区块的前100个区块
      */
-    @RequestMapping("/getPrevious100Blocks")
+    @PostMapping("/getPrevious100Blocks")
     public String getPrevious100Blocks() {
         return "";
     }
@@ -51,7 +65,7 @@ public class BlockChainController {
     /**
      * 根据范围查询区块
      */
-    @RequestMapping("/getBlockByRange")
+    @PostMapping("/getBlockByRange")
     public String getBlockByRange() {
         return "";
     }
@@ -60,7 +74,7 @@ public class BlockChainController {
     /**
      * 同步区块链全部数据
      */
-    @RequestMapping("/syncBlockChain")
+    @PostMapping("/syncBlockChain")
     public String syncBlockChain() {
         return "";
     }
@@ -68,7 +82,7 @@ public class BlockChainController {
     /**
      * 同步区块链最新数据
      */
-    @RequestMapping("/syncBlockChainLatest")
+    @PostMapping("/syncBlockChainLatest")
     public String syncBlockChainLatest() {
         return "";
     }
@@ -76,7 +90,7 @@ public class BlockChainController {
     /**
      * 同步区块头
      */
-    @RequestMapping("/syncBlockHeaders")
+    @PostMapping("/syncBlockHeaders")
     public String syncBlockHeaders() {
         return "";
     }
@@ -85,7 +99,7 @@ public class BlockChainController {
     /**
      * 获取网络节点列表
      */
-    @RequestMapping("/getPeerList")
+    @PostMapping("/getPeerList")
     public String getPeerList() {
         return "";
     }
@@ -95,8 +109,16 @@ public class BlockChainController {
      * 创建区块
      * 需要钱包地址
      */
-    @RequestMapping("/createBlock")
+    @PostMapping("/createBlock")
     public String createBlock() {
+        return "";
+    }
+
+    /**
+     * 创建创世区块
+     */
+    @PostMapping("/createGenesisBlock")
+    public String createGenesisBlock() {
         return "";
     }
 
@@ -104,7 +126,7 @@ public class BlockChainController {
     /**
      * 查询交易
      */
-    @RequestMapping("/getTransaction")
+    @PostMapping("/getTransaction")
     public String getTransaction() {
         return "";
     }
@@ -113,7 +135,7 @@ public class BlockChainController {
     /**
      * 查询地址中的余额
      */
-    @RequestMapping("/getBalance")
+    @PostMapping("/getBalance")
     public String getBalance() {
         return "";
     }
@@ -122,7 +144,7 @@ public class BlockChainController {
     /**
      * 查询地址中的余额并带出未花费
      */
-    @RequestMapping("/getBalanceWithUnspent")
+    @PostMapping("/getBalanceWithUnspent")
     public String getBalanceWithUnspent() {
         return "";
     }

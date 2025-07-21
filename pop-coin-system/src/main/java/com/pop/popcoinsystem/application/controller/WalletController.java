@@ -1,6 +1,9 @@
 package com.pop.popcoinsystem.application.controller;
 
+import com.pop.popcoinsystem.application.service.WalletService;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -12,11 +15,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/pop/wallet")
 public class WalletController {
+    @Resource
+    private WalletService walletService;
 
     /**
      * 创建钱包
      */
-    @RequestMapping("/create")
+    @PostMapping("/create")
     public String createWallet() {
         return "create wallet success";
     }
@@ -24,7 +29,7 @@ public class WalletController {
     /**
      * 创建密码钱包
      */
-    @RequestMapping("/createPasswordWallet")
+    @PostMapping("/createPasswordWallet")
     public String createPasswordWallet() {
         return "create password wallet success";
     }
@@ -32,7 +37,7 @@ public class WalletController {
     /**
      * 创建助记词钱包
      */
-    @RequestMapping("/createMnemonicWallet")
+    @PostMapping("/createMnemonicWallet")
     public String createMnemonicWallet() {
         return "create mnemonic wallet success";
     }
@@ -41,7 +46,7 @@ public class WalletController {
     /**
      * 创建密码助记词钱包
      */
-    @RequestMapping("/createPasswordMnemonicWallet")
+    @PostMapping("/createPasswordMnemonicWallet")
     public String createPasswordMnemonicWallet() {
         return "create password mnemonic wallet success";
     }
@@ -49,7 +54,7 @@ public class WalletController {
     /**
      * 发送
      */
-    @RequestMapping("/send")
+    @PostMapping("/send")
     public String send() {
         return "send success";
     }
@@ -57,7 +62,7 @@ public class WalletController {
     /**
      * 接收
      */
-    @RequestMapping("/receive")
+    @PostMapping("/receive")
     public String receive() {
         return "receive success";
     }
@@ -65,7 +70,7 @@ public class WalletController {
     /**
      * 获取当前钱包余额
      */
-    @RequestMapping("/getBalance")
+    @PostMapping("/getBalance")
     public String getBalance() {
         return "get balance success";
     }
@@ -73,7 +78,7 @@ public class WalletController {
     /**
      * 查询钱包交易记录
      */
-    @RequestMapping("/getTransaction")
+    @PostMapping("/getTransaction")
     public String getTransaction() {
         return "get transaction success";
     }
@@ -82,7 +87,7 @@ public class WalletController {
     /**
      * 根据公钥生成P2PKH类型地址
      */
-    @RequestMapping("/createP2PKHAddressByPK")
+    @PostMapping("/createP2PKHAddressByPK")
     public String createP2PKHAddressByPK() {
         return "create P2PKH address by PK success";
     }
@@ -91,7 +96,7 @@ public class WalletController {
     /**
      * 根据公钥生成P2SH类型地址
      */
-    @RequestMapping("/createP2SHAddressByPK")
+    @PostMapping("/createP2SHAddressByPK")
     public String createP2SHAddressByPK() {
         return "create P2SH address by PK success";
     }
@@ -100,7 +105,7 @@ public class WalletController {
     /**
      * 根据公钥生成P2WPKH类型地址 （隔离见证v0）
      */
-    @RequestMapping("/createP2WPKHAddressByPK")
+    @PostMapping("/createP2WPKHAddressByPK")
     public String createP2WPKHAddressByPK() {
         return "create P2WPKH address by PK success";
     }
@@ -108,7 +113,7 @@ public class WalletController {
     /**
      * 根据公钥生成P2WPKH类型公钥哈希
      */
-    @RequestMapping("/createP2WPKHByPK")
+    @PostMapping("/createP2WPKHByPK")
     public String createP2WPKHByPK() {
         return "create P2WPKH by PK success";
     }
