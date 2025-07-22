@@ -24,9 +24,14 @@ public class Script {
 
     // 脚本元素类
     public static class ScriptElement {
-        private final int opCode;
-        private final byte[] data;
-        private final boolean isOpCode;
+        private int opCode;
+        private byte[] data;
+        private boolean isOpCode;
+
+        // 添加无参构造函数
+        public ScriptElement() {
+
+        }
 
         public ScriptElement(int opCode) {
             this.opCode = opCode;

@@ -1,0 +1,371 @@
+2025/07/22-10:31:47.761966 2edc RocksDB version: 7.10.2
+2025/07/22-10:31:47.762018 2edc Git sha 3258b5c3e2488464de0827343c8c27bc6499765e
+2025/07/22-10:31:47.762034 2edc Compile date 2023-03-02 18:27:12
+2025/07/22-10:31:47.762047 2edc DB SUMMARY
+2025/07/22-10:31:47.762059 2edc DB Session ID:  1D88FO6GLF9BWN0H7AET
+2025/07/22-10:31:47.763363 2edc CURRENT file:  CURRENT
+2025/07/22-10:31:47.763379 2edc IDENTITY file:  IDENTITY
+2025/07/22-10:31:47.763447 2edc MANIFEST file:  MANIFEST-000068 size: 253 Bytes
+2025/07/22-10:31:47.763465 2edc SST files in rocksDb/popCoin.db/blockChain1.db/wallet dir, Total Num: 1, files: 000010.sst 
+2025/07/22-10:31:47.763480 2edc Write Ahead Log file in rocksDb/popCoin.db/blockChain1.db/wallet: 000011.log size: 0 ; 000015.log size: 0 ; 000019.log size: 0 ; 000023.log size: 0 ; 000027.log size: 0 ; 000031.log size: 0 ; 000035.log size: 0 ; 000039.log size: 0 ; 000043.log size: 0 ; 000047.log size: 0 ; 000051.log size: 0 ; 000055.log size: 0 ; 000059.log size: 0 ; 000063.log size: 0 ; 000067.log size: 0 ; 
+2025/07/22-10:31:47.764156 2edc                         Options.error_if_exists: 0
+2025/07/22-10:31:47.764168 2edc                       Options.create_if_missing: 1
+2025/07/22-10:31:47.764174 2edc                         Options.paranoid_checks: 1
+2025/07/22-10:31:47.764180 2edc             Options.flush_verify_memtable_count: 1
+2025/07/22-10:31:47.764186 2edc                               Options.track_and_verify_wals_in_manifest: 0
+2025/07/22-10:31:47.764191 2edc        Options.verify_sst_unique_id_in_manifest: 1
+2025/07/22-10:31:47.764197 2edc                                     Options.env: 000001902126E620
+2025/07/22-10:31:47.764203 2edc                                      Options.fs: WinFS
+2025/07/22-10:31:47.764209 2edc                                Options.info_log: 0000019021514930
+2025/07/22-10:31:47.764214 2edc                Options.max_file_opening_threads: 16
+2025/07/22-10:31:47.764220 2edc                              Options.statistics: 0000000000000000
+2025/07/22-10:31:47.764226 2edc                               Options.use_fsync: 0
+2025/07/22-10:31:47.764231 2edc                       Options.max_log_file_size: 1048576
+2025/07/22-10:31:47.764237 2edc                  Options.max_manifest_file_size: 1073741824
+2025/07/22-10:31:47.764243 2edc                   Options.log_file_time_to_roll: 0
+2025/07/22-10:31:47.764248 2edc                       Options.keep_log_file_num: 2
+2025/07/22-10:31:47.764254 2edc                    Options.recycle_log_file_num: 0
+2025/07/22-10:31:47.764262 2edc                         Options.allow_fallocate: 1
+2025/07/22-10:31:47.764268 2edc                        Options.allow_mmap_reads: 0
+2025/07/22-10:31:47.764273 2edc                       Options.allow_mmap_writes: 0
+2025/07/22-10:31:47.764278 2edc                        Options.use_direct_reads: 0
+2025/07/22-10:31:47.764284 2edc                        Options.use_direct_io_for_flush_and_compaction: 0
+2025/07/22-10:31:47.764290 2edc          Options.create_missing_column_families: 1
+2025/07/22-10:31:47.764295 2edc                              Options.db_log_dir: rocksDb/popCoin.db/blockChain1.db/walletrocksdb_logs/
+2025/07/22-10:31:47.764301 2edc                                 Options.wal_dir: 
+2025/07/22-10:31:47.764307 2edc                Options.table_cache_numshardbits: 6
+2025/07/22-10:31:47.764312 2edc                         Options.WAL_ttl_seconds: 0
+2025/07/22-10:31:47.764317 2edc                       Options.WAL_size_limit_MB: 0
+2025/07/22-10:31:47.764323 2edc                        Options.max_write_batch_group_size_bytes: 1048576
+2025/07/22-10:31:47.764328 2edc             Options.manifest_preallocation_size: 4194304
+2025/07/22-10:31:47.764334 2edc                     Options.is_fd_close_on_exec: 1
+2025/07/22-10:31:47.764339 2edc                   Options.advise_random_on_open: 1
+2025/07/22-10:31:47.764345 2edc                    Options.db_write_buffer_size: 0
+2025/07/22-10:31:47.764351 2edc                    Options.write_buffer_manager: 000001902126D270
+2025/07/22-10:31:47.764356 2edc         Options.access_hint_on_compaction_start: 1
+2025/07/22-10:31:47.764385 2edc           Options.random_access_max_buffer_size: 1048576
+2025/07/22-10:31:47.764392 2edc                      Options.use_adaptive_mutex: 0
+2025/07/22-10:31:47.764398 2edc                            Options.rate_limiter: 0000000000000000
+2025/07/22-10:31:47.764404 2edc     Options.sst_file_manager.rate_bytes_per_sec: 0
+2025/07/22-10:31:47.764409 2edc                       Options.wal_recovery_mode: 2
+2025/07/22-10:31:47.764415 2edc                  Options.enable_thread_tracking: 0
+2025/07/22-10:31:47.764420 2edc                  Options.enable_pipelined_write: 0
+2025/07/22-10:31:47.764426 2edc                  Options.unordered_write: 0
+2025/07/22-10:31:47.764431 2edc         Options.allow_concurrent_memtable_write: 1
+2025/07/22-10:31:47.764437 2edc      Options.enable_write_thread_adaptive_yield: 1
+2025/07/22-10:31:47.764442 2edc             Options.write_thread_max_yield_usec: 100
+2025/07/22-10:31:47.764448 2edc            Options.write_thread_slow_yield_usec: 3
+2025/07/22-10:31:47.764453 2edc                               Options.row_cache: None
+2025/07/22-10:31:47.764459 2edc                              Options.wal_filter: None
+2025/07/22-10:31:47.764464 2edc             Options.avoid_flush_during_recovery: 0
+2025/07/22-10:31:47.764470 2edc             Options.allow_ingest_behind: 0
+2025/07/22-10:31:47.764475 2edc             Options.two_write_queues: 0
+2025/07/22-10:31:47.764480 2edc             Options.manual_wal_flush: 0
+2025/07/22-10:31:47.764486 2edc             Options.wal_compression: 0
+2025/07/22-10:31:47.764491 2edc             Options.atomic_flush: 0
+2025/07/22-10:31:47.764497 2edc             Options.avoid_unnecessary_blocking_io: 0
+2025/07/22-10:31:47.764502 2edc                 Options.persist_stats_to_disk: 0
+2025/07/22-10:31:47.764508 2edc                 Options.write_dbid_to_manifest: 0
+2025/07/22-10:31:47.764513 2edc                 Options.log_readahead_size: 0
+2025/07/22-10:31:47.764519 2edc                 Options.file_checksum_gen_factory: Unknown
+2025/07/22-10:31:47.764524 2edc                 Options.best_efforts_recovery: 0
+2025/07/22-10:31:47.764530 2edc                Options.max_bgerror_resume_count: 2147483647
+2025/07/22-10:31:47.764535 2edc            Options.bgerror_resume_retry_interval: 1000000
+2025/07/22-10:31:47.764541 2edc             Options.allow_data_in_errors: 0
+2025/07/22-10:31:47.764546 2edc             Options.db_host_id: __hostname__
+2025/07/22-10:31:47.764552 2edc             Options.enforce_single_del_contracts: true
+2025/07/22-10:31:47.764557 2edc             Options.max_background_jobs: 2
+2025/07/22-10:31:47.764563 2edc             Options.max_background_compactions: -1
+2025/07/22-10:31:47.764569 2edc             Options.max_subcompactions: 1
+2025/07/22-10:31:47.764574 2edc             Options.avoid_flush_during_shutdown: 0
+2025/07/22-10:31:47.764580 2edc           Options.writable_file_max_buffer_size: 1048576
+2025/07/22-10:31:47.764585 2edc             Options.delayed_write_rate : 16777216
+2025/07/22-10:31:47.764591 2edc             Options.max_total_wal_size: 0
+2025/07/22-10:31:47.764596 2edc             Options.delete_obsolete_files_period_micros: 21600000000
+2025/07/22-10:31:47.764602 2edc                   Options.stats_dump_period_sec: 600
+2025/07/22-10:31:47.764607 2edc                 Options.stats_persist_period_sec: 600
+2025/07/22-10:31:47.764613 2edc                 Options.stats_history_buffer_size: 1048576
+2025/07/22-10:31:47.764618 2edc                          Options.max_open_files: -1
+2025/07/22-10:31:47.764624 2edc                          Options.bytes_per_sync: 0
+2025/07/22-10:31:47.764629 2edc                      Options.wal_bytes_per_sync: 0
+2025/07/22-10:31:47.764635 2edc                   Options.strict_bytes_per_sync: 0
+2025/07/22-10:31:47.764640 2edc       Options.compaction_readahead_size: 0
+2025/07/22-10:31:47.764646 2edc                  Options.max_background_flushes: -1
+2025/07/22-10:31:47.764657 2edc Compression algorithms supported:
+2025/07/22-10:31:47.764663 2edc 	kZSTD supported: 1
+2025/07/22-10:31:47.764682 2edc 	kSnappyCompression supported: 1
+2025/07/22-10:31:47.764688 2edc 	kBZip2Compression supported: 0
+2025/07/22-10:31:47.764694 2edc 	kZlibCompression supported: 1
+2025/07/22-10:31:47.764699 2edc 	kLZ4Compression supported: 1
+2025/07/22-10:31:47.764704 2edc 	kXpressCompression supported: 0
+2025/07/22-10:31:47.764710 2edc 	kLZ4HCCompression supported: 1
+2025/07/22-10:31:47.764715 2edc 	kZSTDNotFinalCompression supported: 1
+2025/07/22-10:31:47.764722 2edc Fast CRC32 supported: Supported on x86
+2025/07/22-10:31:47.764728 2edc DMutex implementation: std::mutex
+2025/07/22-10:31:47.765683 2edc               Options.comparator: leveldb.BytewiseComparator
+2025/07/22-10:31:47.765692 2edc           Options.merge_operator: None
+2025/07/22-10:31:47.765698 2edc        Options.compaction_filter: None
+2025/07/22-10:31:47.765703 2edc        Options.compaction_filter_factory: None
+2025/07/22-10:31:47.765708 2edc  Options.sst_partitioner_factory: None
+2025/07/22-10:31:47.765713 2edc         Options.memtable_factory: SkipListFactory
+2025/07/22-10:31:47.765718 2edc            Options.table_factory: BlockBasedTable
+2025/07/22-10:31:47.765741 2edc            table_factory options:   flush_block_policy_factory: FlushBlockBySizePolicyFactory (00000190212A6970)
+  cache_index_and_filter_blocks: 0
+  cache_index_and_filter_blocks_with_high_priority: 1
+  pin_l0_filter_and_index_blocks_in_cache: 0
+  pin_top_level_index_and_filter: 1
+  index_type: 0
+  data_block_index_type: 0
+  index_shortening: 1
+  data_block_hash_table_util_ratio: 0.750000
+  checksum: 4
+  no_block_cache: 0
+  block_cache: 000001901C841FC0
+  block_cache_name: LRUCache
+  block_cache_options:
+    capacity : 8388608
+    num_shard_bits : 4
+    strict_capacity_limit : 0
+    memory_allocator : None
+    high_pri_pool_ratio: 0.000
+    low_pri_pool_ratio: 0.000
+  block_cache_compressed: 0000000000000000
+  persistent_cache: 0000000000000000
+  block_size: 4096
+  block_size_deviation: 10
+  block_restart_interval: 16
+  index_block_restart_interval: 1
+  metadata_block_size: 4096
+  partition_filters: 0
+  use_delta_encoding: 1
+  filter_policy: nullptr
+  whole_key_filtering: 1
+  verify_compression: 0
+  read_amp_bytes_per_bit: 0
+  format_version: 5
+  enable_index_compression: 1
+  block_align: 0
+  max_auto_readahead_size: 262144
+  prepopulate_block_cache: 0
+  initial_auto_readahead_size: 8192
+  num_file_reads_for_auto_readahead: 2
+2025/07/22-10:31:47.765747 2edc        Options.write_buffer_size: 67108864
+2025/07/22-10:31:47.765752 2edc  Options.max_write_buffer_number: 2
+2025/07/22-10:31:47.765757 2edc          Options.compression: Snappy
+2025/07/22-10:31:47.765762 2edc                  Options.bottommost_compression: Disabled
+2025/07/22-10:31:47.765767 2edc       Options.prefix_extractor: nullptr
+2025/07/22-10:31:47.765772 2edc   Options.memtable_insert_with_hint_prefix_extractor: nullptr
+2025/07/22-10:31:47.765777 2edc             Options.num_levels: 7
+2025/07/22-10:31:47.765782 2edc        Options.min_write_buffer_number_to_merge: 1
+2025/07/22-10:31:47.765787 2edc     Options.max_write_buffer_number_to_maintain: 0
+2025/07/22-10:31:47.765792 2edc     Options.max_write_buffer_size_to_maintain: 0
+2025/07/22-10:31:47.765797 2edc            Options.bottommost_compression_opts.window_bits: -14
+2025/07/22-10:31:47.765802 2edc                  Options.bottommost_compression_opts.level: 32767
+2025/07/22-10:31:47.765807 2edc               Options.bottommost_compression_opts.strategy: 0
+2025/07/22-10:31:47.765812 2edc         Options.bottommost_compression_opts.max_dict_bytes: 0
+2025/07/22-10:31:47.765818 2edc         Options.bottommost_compression_opts.zstd_max_train_bytes: 0
+2025/07/22-10:31:47.765823 2edc         Options.bottommost_compression_opts.parallel_threads: 1
+2025/07/22-10:31:47.765828 2edc                  Options.bottommost_compression_opts.enabled: false
+2025/07/22-10:31:47.765833 2edc         Options.bottommost_compression_opts.max_dict_buffer_bytes: 0
+2025/07/22-10:31:47.765838 2edc         Options.bottommost_compression_opts.use_zstd_dict_trainer: true
+2025/07/22-10:31:47.765844 2edc            Options.compression_opts.window_bits: -14
+2025/07/22-10:31:47.765850 2edc                  Options.compression_opts.level: 32767
+2025/07/22-10:31:47.765856 2edc               Options.compression_opts.strategy: 0
+2025/07/22-10:31:47.765860 2edc         Options.compression_opts.max_dict_bytes: 0
+2025/07/22-10:31:47.765865 2edc         Options.compression_opts.zstd_max_train_bytes: 0
+2025/07/22-10:31:47.765870 2edc         Options.compression_opts.use_zstd_dict_trainer: true
+2025/07/22-10:31:47.765876 2edc         Options.compression_opts.parallel_threads: 1
+2025/07/22-10:31:47.765881 2edc                  Options.compression_opts.enabled: false
+2025/07/22-10:31:47.765886 2edc         Options.compression_opts.max_dict_buffer_bytes: 0
+2025/07/22-10:31:47.765891 2edc      Options.level0_file_num_compaction_trigger: 4
+2025/07/22-10:31:47.765896 2edc          Options.level0_slowdown_writes_trigger: 20
+2025/07/22-10:31:47.765901 2edc              Options.level0_stop_writes_trigger: 36
+2025/07/22-10:31:47.765906 2edc                   Options.target_file_size_base: 67108864
+2025/07/22-10:31:47.765911 2edc             Options.target_file_size_multiplier: 1
+2025/07/22-10:31:47.765916 2edc                Options.max_bytes_for_level_base: 268435456
+2025/07/22-10:31:47.765921 2edc Options.level_compaction_dynamic_level_bytes: 0
+2025/07/22-10:31:47.765927 2edc          Options.max_bytes_for_level_multiplier: 10.000000
+2025/07/22-10:31:47.765932 2edc Options.max_bytes_for_level_multiplier_addtl[0]: 1
+2025/07/22-10:31:47.765937 2edc Options.max_bytes_for_level_multiplier_addtl[1]: 1
+2025/07/22-10:31:47.765942 2edc Options.max_bytes_for_level_multiplier_addtl[2]: 1
+2025/07/22-10:31:47.765947 2edc Options.max_bytes_for_level_multiplier_addtl[3]: 1
+2025/07/22-10:31:47.765952 2edc Options.max_bytes_for_level_multiplier_addtl[4]: 1
+2025/07/22-10:31:47.765957 2edc Options.max_bytes_for_level_multiplier_addtl[5]: 1
+2025/07/22-10:31:47.765962 2edc Options.max_bytes_for_level_multiplier_addtl[6]: 1
+2025/07/22-10:31:47.765967 2edc       Options.max_sequential_skip_in_iterations: 8
+2025/07/22-10:31:47.765972 2edc                    Options.max_compaction_bytes: 1677721600
+2025/07/22-10:31:47.765977 2edc   Options.ignore_max_compaction_bytes_for_input: true
+2025/07/22-10:31:47.765982 2edc                        Options.arena_block_size: 1048576
+2025/07/22-10:31:47.765987 2edc   Options.soft_pending_compaction_bytes_limit: 68719476736
+2025/07/22-10:31:47.765992 2edc   Options.hard_pending_compaction_bytes_limit: 274877906944
+2025/07/22-10:31:47.765997 2edc                Options.disable_auto_compactions: 0
+2025/07/22-10:31:47.766003 2edc                        Options.compaction_style: kCompactionStyleLevel
+2025/07/22-10:31:47.766008 2edc                          Options.compaction_pri: kMinOverlappingRatio
+2025/07/22-10:31:47.766013 2edc Options.compaction_options_universal.size_ratio: 1
+2025/07/22-10:31:47.766018 2edc Options.compaction_options_universal.min_merge_width: 2
+2025/07/22-10:31:47.766024 2edc Options.compaction_options_universal.max_merge_width: 4294967295
+2025/07/22-10:31:47.766029 2edc Options.compaction_options_universal.max_size_amplification_percent: 200
+2025/07/22-10:31:47.766034 2edc Options.compaction_options_universal.compression_size_percent: -1
+2025/07/22-10:31:47.766039 2edc Options.compaction_options_universal.stop_style: kCompactionStopStyleTotalSize
+2025/07/22-10:31:47.766044 2edc Options.compaction_options_fifo.max_table_files_size: 1073741824
+2025/07/22-10:31:47.766049 2edc Options.compaction_options_fifo.allow_compaction: 0
+2025/07/22-10:31:47.766055 2edc                   Options.table_properties_collectors: 
+2025/07/22-10:31:47.766063 2edc                   Options.inplace_update_support: 0
+2025/07/22-10:31:47.766068 2edc                 Options.inplace_update_num_locks: 10000
+2025/07/22-10:31:47.766074 2edc               Options.memtable_prefix_bloom_size_ratio: 0.000000
+2025/07/22-10:31:47.766079 2edc               Options.memtable_whole_key_filtering: 0
+2025/07/22-10:31:47.766102 2edc   Options.memtable_huge_page_size: 0
+2025/07/22-10:31:47.766108 2edc                           Options.bloom_locality: 0
+2025/07/22-10:31:47.766113 2edc                    Options.max_successive_merges: 0
+2025/07/22-10:31:47.766118 2edc                Options.optimize_filters_for_hits: 0
+2025/07/22-10:31:47.766123 2edc                Options.paranoid_file_checks: 0
+2025/07/22-10:31:47.766137 2edc                Options.force_consistency_checks: 1
+2025/07/22-10:31:47.766142 2edc                Options.report_bg_io_stats: 0
+2025/07/22-10:31:47.766147 2edc                               Options.ttl: 2592000
+2025/07/22-10:31:47.766152 2edc          Options.periodic_compaction_seconds: 0
+2025/07/22-10:31:47.766157 2edc  Options.preclude_last_level_data_seconds: 0
+2025/07/22-10:31:47.766162 2edc    Options.preserve_internal_time_seconds: 0
+2025/07/22-10:31:47.766167 2edc                       Options.enable_blob_files: false
+2025/07/22-10:31:47.766172 2edc                           Options.min_blob_size: 0
+2025/07/22-10:31:47.766177 2edc                          Options.blob_file_size: 268435456
+2025/07/22-10:31:47.766182 2edc                   Options.blob_compression_type: NoCompression
+2025/07/22-10:31:47.766187 2edc          Options.enable_blob_garbage_collection: false
+2025/07/22-10:31:47.766193 2edc      Options.blob_garbage_collection_age_cutoff: 0.250000
+2025/07/22-10:31:47.766198 2edc Options.blob_garbage_collection_force_threshold: 1.000000
+2025/07/22-10:31:47.766203 2edc          Options.blob_compaction_readahead_size: 0
+2025/07/22-10:31:47.766208 2edc                Options.blob_file_starting_level: 0
+2025/07/22-10:31:47.766214 2edc Options.experimental_mempurge_threshold: 0.000000
+2025/07/22-10:31:47.766350 2edc               Options.comparator: leveldb.BytewiseComparator
+2025/07/22-10:31:47.766356 2edc           Options.merge_operator: None
+2025/07/22-10:31:47.766361 2edc        Options.compaction_filter: None
+2025/07/22-10:31:47.766366 2edc        Options.compaction_filter_factory: None
+2025/07/22-10:31:47.766371 2edc  Options.sst_partitioner_factory: None
+2025/07/22-10:31:47.766376 2edc         Options.memtable_factory: SkipListFactory
+2025/07/22-10:31:47.766381 2edc            Options.table_factory: BlockBasedTable
+2025/07/22-10:31:47.766399 2edc            table_factory options:   flush_block_policy_factory: FlushBlockBySizePolicyFactory (00000190212A6CD0)
+  cache_index_and_filter_blocks: 0
+  cache_index_and_filter_blocks_with_high_priority: 1
+  pin_l0_filter_and_index_blocks_in_cache: 0
+  pin_top_level_index_and_filter: 1
+  index_type: 0
+  data_block_index_type: 0
+  index_shortening: 1
+  data_block_hash_table_util_ratio: 0.750000
+  checksum: 4
+  no_block_cache: 0
+  block_cache: 000001901C843340
+  block_cache_name: LRUCache
+  block_cache_options:
+    capacity : 8388608
+    num_shard_bits : 4
+    strict_capacity_limit : 0
+    memory_allocator : None
+    high_pri_pool_ratio: 0.000
+    low_pri_pool_ratio: 0.000
+  block_cache_compressed: 0000000000000000
+  persistent_cache: 0000000000000000
+  block_size: 4096
+  block_size_deviation: 10
+  block_restart_interval: 16
+  index_block_restart_interval: 1
+  metadata_block_size: 4096
+  partition_filters: 0
+  use_delta_encoding: 1
+  filter_policy: nullptr
+  whole_key_filtering: 1
+  verify_compression: 0
+  read_amp_bytes_per_bit: 0
+  format_version: 5
+  enable_index_compression: 1
+  block_align: 0
+  max_auto_readahead_size: 262144
+  prepopulate_block_cache: 0
+  initial_auto_readahead_size: 8192
+  num_file_reads_for_auto_readahead: 2
+2025/07/22-10:31:47.766405 2edc        Options.write_buffer_size: 67108864
+2025/07/22-10:31:47.766410 2edc  Options.max_write_buffer_number: 2
+2025/07/22-10:31:47.766415 2edc          Options.compression: Snappy
+2025/07/22-10:31:47.766420 2edc                  Options.bottommost_compression: Disabled
+2025/07/22-10:31:47.766425 2edc       Options.prefix_extractor: nullptr
+2025/07/22-10:31:47.766430 2edc   Options.memtable_insert_with_hint_prefix_extractor: nullptr
+2025/07/22-10:31:47.766435 2edc             Options.num_levels: 7
+2025/07/22-10:31:47.766441 2edc        Options.min_write_buffer_number_to_merge: 1
+2025/07/22-10:31:47.766447 2edc     Options.max_write_buffer_number_to_maintain: 0
+2025/07/22-10:31:47.766452 2edc     Options.max_write_buffer_size_to_maintain: 0
+2025/07/22-10:31:47.766457 2edc            Options.bottommost_compression_opts.window_bits: -14
+2025/07/22-10:31:47.766466 2edc                  Options.bottommost_compression_opts.level: 32767
+2025/07/22-10:31:47.766472 2edc               Options.bottommost_compression_opts.strategy: 0
+2025/07/22-10:31:47.766477 2edc         Options.bottommost_compression_opts.max_dict_bytes: 0
+2025/07/22-10:31:47.766482 2edc         Options.bottommost_compression_opts.zstd_max_train_bytes: 0
+2025/07/22-10:31:47.766487 2edc         Options.bottommost_compression_opts.parallel_threads: 1
+2025/07/22-10:31:47.766492 2edc                  Options.bottommost_compression_opts.enabled: false
+2025/07/22-10:31:47.766497 2edc         Options.bottommost_compression_opts.max_dict_buffer_bytes: 0
+2025/07/22-10:31:47.766502 2edc         Options.bottommost_compression_opts.use_zstd_dict_trainer: true
+2025/07/22-10:31:47.766507 2edc            Options.compression_opts.window_bits: -14
+2025/07/22-10:31:47.766512 2edc                  Options.compression_opts.level: 32767
+2025/07/22-10:31:47.766517 2edc               Options.compression_opts.strategy: 0
+2025/07/22-10:31:47.766522 2edc         Options.compression_opts.max_dict_bytes: 0
+2025/07/22-10:31:47.766528 2edc         Options.compression_opts.zstd_max_train_bytes: 0
+2025/07/22-10:31:47.766533 2edc         Options.compression_opts.use_zstd_dict_trainer: true
+2025/07/22-10:31:47.766537 2edc         Options.compression_opts.parallel_threads: 1
+2025/07/22-10:31:47.766542 2edc                  Options.compression_opts.enabled: false
+2025/07/22-10:31:47.766547 2edc         Options.compression_opts.max_dict_buffer_bytes: 0
+2025/07/22-10:31:47.766552 2edc      Options.level0_file_num_compaction_trigger: 4
+2025/07/22-10:31:47.766557 2edc          Options.level0_slowdown_writes_trigger: 20
+2025/07/22-10:31:47.766562 2edc              Options.level0_stop_writes_trigger: 36
+2025/07/22-10:31:47.766567 2edc                   Options.target_file_size_base: 67108864
+2025/07/22-10:31:47.766572 2edc             Options.target_file_size_multiplier: 1
+2025/07/22-10:31:47.766577 2edc                Options.max_bytes_for_level_base: 268435456
+2025/07/22-10:31:47.766582 2edc Options.level_compaction_dynamic_level_bytes: 0
+2025/07/22-10:31:47.766587 2edc          Options.max_bytes_for_level_multiplier: 10.000000
+2025/07/22-10:31:47.766593 2edc Options.max_bytes_for_level_multiplier_addtl[0]: 1
+2025/07/22-10:31:47.766598 2edc Options.max_bytes_for_level_multiplier_addtl[1]: 1
+2025/07/22-10:31:47.766603 2edc Options.max_bytes_for_level_multiplier_addtl[2]: 1
+2025/07/22-10:31:47.766608 2edc Options.max_bytes_for_level_multiplier_addtl[3]: 1
+2025/07/22-10:31:47.766613 2edc Options.max_bytes_for_level_multiplier_addtl[4]: 1
+2025/07/22-10:31:47.766617 2edc Options.max_bytes_for_level_multiplier_addtl[5]: 1
+2025/07/22-10:31:47.766622 2edc Options.max_bytes_for_level_multiplier_addtl[6]: 1
+2025/07/22-10:31:47.766628 2edc       Options.max_sequential_skip_in_iterations: 8
+2025/07/22-10:31:47.766633 2edc                    Options.max_compaction_bytes: 1677721600
+2025/07/22-10:31:47.766638 2edc   Options.ignore_max_compaction_bytes_for_input: true
+2025/07/22-10:31:47.766643 2edc                        Options.arena_block_size: 1048576
+2025/07/22-10:31:47.766648 2edc   Options.soft_pending_compaction_bytes_limit: 68719476736
+2025/07/22-10:31:47.766653 2edc   Options.hard_pending_compaction_bytes_limit: 274877906944
+2025/07/22-10:31:47.766658 2edc                Options.disable_auto_compactions: 0
+2025/07/22-10:31:47.766663 2edc                        Options.compaction_style: kCompactionStyleLevel
+2025/07/22-10:31:47.766668 2edc                          Options.compaction_pri: kMinOverlappingRatio
+2025/07/22-10:31:47.766673 2edc Options.compaction_options_universal.size_ratio: 1
+2025/07/22-10:31:47.766679 2edc Options.compaction_options_universal.min_merge_width: 2
+2025/07/22-10:31:47.766685 2edc Options.compaction_options_universal.max_merge_width: 4294967295
+2025/07/22-10:31:47.766690 2edc Options.compaction_options_universal.max_size_amplification_percent: 200
+2025/07/22-10:31:47.766695 2edc Options.compaction_options_universal.compression_size_percent: -1
+2025/07/22-10:31:47.766700 2edc Options.compaction_options_universal.stop_style: kCompactionStopStyleTotalSize
+2025/07/22-10:31:47.766705 2edc Options.compaction_options_fifo.max_table_files_size: 1073741824
+2025/07/22-10:31:47.766710 2edc Options.compaction_options_fifo.allow_compaction: 0
+2025/07/22-10:31:47.766716 2edc                   Options.table_properties_collectors: 
+2025/07/22-10:31:47.766721 2edc                   Options.inplace_update_support: 0
+2025/07/22-10:31:47.766726 2edc                 Options.inplace_update_num_locks: 10000
+2025/07/22-10:31:47.766731 2edc               Options.memtable_prefix_bloom_size_ratio: 0.000000
+2025/07/22-10:31:47.766736 2edc               Options.memtable_whole_key_filtering: 0
+2025/07/22-10:31:47.766741 2edc   Options.memtable_huge_page_size: 0
+2025/07/22-10:31:47.766746 2edc                           Options.bloom_locality: 0
+2025/07/22-10:31:47.766751 2edc                    Options.max_successive_merges: 0
+2025/07/22-10:31:47.766756 2edc                Options.optimize_filters_for_hits: 0
+2025/07/22-10:31:47.766761 2edc                Options.paranoid_file_checks: 0
+2025/07/22-10:31:47.766766 2edc                Options.force_consistency_checks: 1
+2025/07/22-10:31:47.766771 2edc                Options.report_bg_io_stats: 0
+2025/07/22-10:31:47.766776 2edc                               Options.ttl: 2592000
+2025/07/22-10:31:47.766781 2edc          Options.periodic_compaction_seconds: 0
+2025/07/22-10:31:47.766786 2edc  Options.preclude_last_level_data_seconds: 0
+2025/07/22-10:31:47.766791 2edc    Options.preserve_internal_time_seconds: 0
+2025/07/22-10:31:47.766796 2edc                       Options.enable_blob_files: false
+2025/07/22-10:31:47.766801 2edc                           Options.min_blob_size: 0
+2025/07/22-10:31:47.766806 2edc                          Options.blob_file_size: 268435456
+2025/07/22-10:31:47.766811 2edc                   Options.blob_compression_type: NoCompression
+2025/07/22-10:31:47.766816 2edc          Options.enable_blob_garbage_collection: false
+2025/07/22-10:31:47.766821 2edc      Options.blob_garbage_collection_age_cutoff: 0.250000
+2025/07/22-10:31:47.766826 2edc Options.blob_garbage_collection_force_threshold: 1.000000
+2025/07/22-10:31:47.766832 2edc          Options.blob_compaction_readahead_size: 0
+2025/07/22-10:31:47.766837 2edc                Options.blob_file_starting_level: 0
+2025/07/22-10:31:47.766842 2edc Options.experimental_mempurge_threshold: 0.000000
+2025/07/22-10:31:47.794387 2edc DB pointer 000001902151A7C0

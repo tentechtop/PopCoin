@@ -5,9 +5,8 @@ import com.pop.popcoinsystem.network.common.Bucket;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.common.RoutingTable;
-import com.pop.popcoinsystem.network.exception.FullBucketException;
+import com.pop.popcoinsystem.exception.FullBucketException;
 import com.pop.popcoinsystem.network.protocol.message.*;
-import com.pop.popcoinsystem.util.BeanCopyUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 

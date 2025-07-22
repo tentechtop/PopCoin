@@ -8,7 +8,22 @@ import java.io.Serializable;
 @Slf4j
 @Data
 public class Wallet implements Serializable {
-    public String name;//钱包名称
-    public String privateKeyHex;
-    public String publicKeyHex;
+    private String name;//钱包名称
+    private String privateKeyHex;
+    private String publicKeyHex;
+
+    //钱包类型
+    /**
+     * {@link WalletType}
+     */
+    private int walletType;
+
+    private String password;
+
+    private String passwordHash;
+
+
+
+
+
 }

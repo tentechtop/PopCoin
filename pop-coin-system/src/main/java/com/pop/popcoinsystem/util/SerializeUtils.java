@@ -8,6 +8,7 @@ import com.esotericsoftware.kryo.pool.KryoPool;
 import com.pop.popcoinsystem.data.transaction.UTXO;
 import com.pop.popcoinsystem.network.protocol.message.*;
 
+import java.math.BigInteger;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 
@@ -33,6 +34,9 @@ public class SerializeUtils {
         kryo.register(PublicKey.class);
 
         kryo.register(UTXO.class);
+
+        kryo.register(BigInteger.class);  // 假设包含 BigInteger 等基础类型外的类
+        kryo.register(byte[].class);  // 若有字节数组也需注册
 
         // 配置Kryo（根据需要调整）
         kryo.setRegistrationRequired(false);

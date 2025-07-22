@@ -1,17 +1,16 @@
 package com.pop.popcoinsystem;
 
-import com.pop.popcoinsystem.application.service.TemplateStorage;
 import com.pop.popcoinsystem.application.service.Wallet;
+import com.pop.popcoinsystem.application.service.WalletStorage;
 import com.pop.popcoinsystem.data.storage.POPStorage;
+import com.pop.popcoinsystem.data.storage.ShardMetadata;
 import com.pop.popcoinsystem.data.transaction.UTXO;
 import com.pop.popcoinsystem.util.CryptoUtil;
 
-import java.math.BigDecimal;
 import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
@@ -33,10 +32,7 @@ public class UTXOTestGenerator {
         this.storage = storage;
     }
 
-    /**
-     * 生成指定数量的UTXO测试数据
-     * @param count 需要生成的UTXO数量
-     */
+
     public void generateUTXOs(int count) {
         log.info("开始生成 " + count + " 个UTXO测试数据...");
         long startTime = System.currentTimeMillis();
@@ -47,7 +43,7 @@ public class UTXOTestGenerator {
         // 使用多线程加速生成过程
         ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 
-        for (int i = 0; i <= batches; i++) {
+        for (int i = 0; i < batches; i++) {
             executor.submit(() -> {
                 List<UTXO> batch = new ArrayList<>(BATCH_SIZE);
                 for (int j = 0; j < BATCH_SIZE; j++) {
@@ -91,14 +87,12 @@ public class UTXOTestGenerator {
 
     }
 
-    /**
-     * 创建一个随机的UTXO
-     */
+
     private UTXO createRandomUTXO() {
         try {
             // 生成随机密钥对
-            TemplateStorage instance = TemplateStorage.getInstance();
-            Wallet  walleta = instance.getWallet("wallet-b");
+            WalletStorage instance = WalletStorage.getInstance();
+            Wallet walleta = instance.getWallet("wallet-test");
             String publicKeyHex = walleta.getPublicKeyHex();
 
 
@@ -128,19 +122,35 @@ public class UTXOTestGenerator {
 
     // 示例用法
     public static void main(String[] args) {
-        POPStorage storage = POPStorage.getInstance();
-        UTXOTestGenerator generator = new UTXOTestGenerator(storage);
-
+        WalletStorage walletStorage = WalletStorage.getInstance();
+        Wallet walleta = walletStorage.getWallet("wallet-test");
+        if (walleta == null){
+            KeyPair keyPairA = CryptoUtil.ECDSASigner.generateKeyPair();
+            PrivateKey privateKey = keyPairA.getPrivate();
+            PublicKey publicKey = keyPairA.getPublic();
+            walleta = new Wallet();
+            walleta.setName("wallet-test");
+            walleta.setPublicKeyHex(CryptoUtil.bytesToHex(publicKey.getEncoded()));
+            walleta.setPrivateKeyHex(CryptoUtil.bytesToHex(privateKey.getEncoded()));
+            walletStorage.addWallet(walleta);
+        }
+        POPStorage instance1 = POPStorage.getInstance();
+        UTXOTestGenerator generator = new UTXOTestGenerator(instance1);
         // 生成100万个UTXO
-/*        generator.generateUTXOs(1_000_000);*/
-
-        TemplateStorage instance = TemplateStorage.getInstance();
-        Wallet  walleta = instance.getWallet("wallet-b");
+     /*   generator.generateUTXOs(1_000_000);*/
         String publicKeyHex = walleta.getPublicKeyHex();
         String address  = CryptoUtil.ECDSASigner.createP2PKHAddressByPK(CryptoUtil.hexToBytes(publicKeyHex));
+/*        List<ShardMetadata> shardMetadataByAddress = instance1.getShardMetadataByAddress(address);*/
 
-/*        List<UTXO> utxosByAddress = storage.getUtxosByAddress(address);
-        log.info("地址: " + address + " 的UTXO数量: " + utxosByAddress.size());*/
+        List<UTXO> utxosByAddress = instance1.getUtxosByAddress(address);
+        log.info("地址: " + address + " 的UTXO数量: " + utxosByAddress.size());
+        for (UTXO utxo : utxosByAddress) {
+            log.info("UTXO: " + utxo);
+            instance1.deleteUtxo(utxo);
+        }
+
+
+
 
     }
 }

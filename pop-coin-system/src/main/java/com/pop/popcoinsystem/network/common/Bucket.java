@@ -1,13 +1,10 @@
 package com.pop.popcoinsystem.network.common;
 
-import com.pop.popcoinsystem.network.exception.FullBucketException;
 import lombok.Data;
-import org.checkerframework.checker.units.qual.N;
 
 import java.math.BigInteger;
 import java.util.LinkedList;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 @Data
 public class Bucket {

@@ -1,6 +1,6 @@
 package com.pop.popcoinsystem.network.common;
 
-import com.pop.popcoinsystem.network.exception.FullBucketException;
+import com.pop.popcoinsystem.exception.FullBucketException;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 

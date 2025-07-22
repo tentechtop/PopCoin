@@ -1,9 +1,13 @@
 package com.pop.popcoinsystem.application.controller;
 
+import com.pop.popcoinsystem.application.service.Wallet;
 import com.pop.popcoinsystem.application.service.WalletService;
+import com.pop.popcoinsystem.application.service.WalletVO;
+import com.pop.popcoinsystem.data.vo.result.Result;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -22,34 +26,10 @@ public class WalletController {
      * 创建钱包
      */
     @PostMapping("/create")
-    public String createWallet() {
-        return "create wallet success";
+    public Result<Wallet> createWallet(@RequestBody WalletVO wallet) {
+        return walletService.createWallet(wallet);
     }
 
-    /**
-     * 创建密码钱包
-     */
-    @PostMapping("/createPasswordWallet")
-    public String createPasswordWallet() {
-        return "create password wallet success";
-    }
-
-    /**
-     * 创建助记词钱包
-     */
-    @PostMapping("/createMnemonicWallet")
-    public String createMnemonicWallet() {
-        return "create mnemonic wallet success";
-    }
-
-
-    /**
-     * 创建密码助记词钱包
-     */
-    @PostMapping("/createPasswordMnemonicWallet")
-    public String createPasswordMnemonicWallet() {
-        return "create password mnemonic wallet success";
-    }
 
     /**
      * 发送

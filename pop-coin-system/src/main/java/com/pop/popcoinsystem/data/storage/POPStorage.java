@@ -15,9 +15,8 @@ import org.rocksdb.*;
 import java.io.File;
 import java.io.Serializable;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
@@ -28,11 +27,17 @@ import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
 
 @Slf4j
 public class POPStorage {
-
+    // 数据库存储路径
+    private static final String DB_PATH = "rocksDb/popCoin.db/blockChain" + POP_NET_VERSION + ".db/";
     private static final byte[] KEY_LAST_BLOCK_CHAIN = "key_last_block_chain".getBytes();
     private static final byte[] KEY_LAST_BLOCK_HASH = "key_last_block_hash".getBytes();
     private static final byte[] KEY_NODE_SETTING = "key_node_setting".getBytes();
     private static final byte[] KEY_MINER = "key_miner".getBytes();
+    // 分片元数据相关键
+    private static final byte[] KEY_UTXO_SHARD_INFO = "key_utxo_shard_info".getBytes();
+    private static final byte[] KEY_UTXO_COUNT = "key_utxo_count".getBytes();
+    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+
 
     // 使用枚举管理列族
     private enum ColumnFamily {
@@ -43,12 +48,15 @@ public class POPStorage {
 
         UTXO("CF_UTXO", "utxo",new ColumnFamilyOptions()
                 .setTableFormatConfig(new BlockBasedTableConfig()
-                        .setBlockCacheSize(64 * 1024 * 1024) // 64MB 块缓存
+                        .setBlockCacheSize(128 * 1024 * 1024) // 64MB 块缓存
                         .setCacheIndexAndFilterBlocks(true)) ),
         ADDRESS_UTXO("CF_ADDRESS_UTXO", "addressUtxo",new ColumnFamilyOptions()),
         MINER("CF_MINER", "miner",new ColumnFamilyOptions()),
         NODE("CF_NODE", "node",new ColumnFamilyOptions()),
         WALLET("CF_WALLET", "wallet",new ColumnFamilyOptions()),
+        UTXO_SHARD_META("CF_UTXO_SHARD_META", "utxoShardMeta", new ColumnFamilyOptions()),
+        UTXO_SHARD_PREFIX("CF_UTXO_SHARD_", "utxoShardMeta", new ColumnFamilyOptions()),
+
         ;
         private final String logicalName;
         private final String actualName;
@@ -63,10 +71,12 @@ public class POPStorage {
         private ColumnFamilyHandle handle;
     }
 
-    // 数据库存储路径
-    private static final String DB_PATH = "rocksDb/popCoin.db/blockChain" + POP_NET_VERSION + ".db/";
+
+
+
+
     private final RocksDB db;
-    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+
 
     private static class InstanceHolder {
         private static final POPStorage INSTANCE = new POPStorage();
@@ -159,25 +169,15 @@ public class POPStorage {
      * 内部关闭方法，统一处理资源释放
      */
     private void closeInternal() {
-        try {
-            // 使用线程安全的方式释放资源
-            rwLock.writeLock().lock();
-            try {
-                // 释放列族句柄
-                for (ColumnFamily cf : ColumnFamily.values()) {
-                    if (cf.getHandle() != null) {
-                        cf.getHandle().close();
-                    }
-                }
-                // 关闭数据库
-                if (db != null) {
-                    db.close();
-                }
-            } finally {
-                rwLock.writeLock().unlock();
+        // 释放列族句柄
+        for (ColumnFamily cf : ColumnFamily.values()) {
+            if (cf.getHandle() != null) {
+                cf.getHandle().close();
             }
-        } catch (Exception e) {
-            log.error("数据库关闭失败", e);
+        }
+        // 关闭数据库
+        if (db != null) {
+            db.close();
         }
     }
 
@@ -186,7 +186,6 @@ public class POPStorage {
      * 保存区块
      */
     public void putBlock(Block block) {
-        rwLock.writeLock().lock();
         try {
             byte[] blockHash = block.getHash();
             byte[] blockData = SerializeUtils.serialize(block);
@@ -196,17 +195,17 @@ public class POPStorage {
             db.put(ColumnFamily.BLOCK_HASH.handle, KEY_LAST_BLOCK_HASH, blockHash);
             //高度→区块哈希 索引
             db.put(ColumnFamily.BLOCK_INDEX.handle, ByteUtils.toBytes(block.getHeight()), blockHash);
+
+            //交易id -> 区块哈希
+
         } catch (RocksDBException e) {
             log.error("保存区块失败: blockHash={}", block.getHash(), e);
             throw new RuntimeException("保存区块失败", e);
-        } finally {
-            rwLock.writeLock().unlock();
         }
     }
 
     //通过高度查询区块
     public Block getBlockByHeight(long height){
-        rwLock.readLock().lock();
         try {
             byte[] blockData = db.get(ColumnFamily.BLOCK_INDEX.handle, ByteUtils.toBytes(height));
             if (blockData == null) {
@@ -215,8 +214,6 @@ public class POPStorage {
             return (Block) SerializeUtils.deSerialize(blockData);
         } catch (RocksDBException e) {
             throw new RuntimeException("查询区块失败", e);
-        } finally {
-            rwLock.readLock().unlock();
         }
     }
 
@@ -225,7 +222,6 @@ public class POPStorage {
      * 查询区块
      */
     public Block getBlock(byte[] blockHash) {
-        rwLock.readLock().lock();
         try {
             byte[] blockData = db.get(ColumnFamily.BLOCK.handle, blockHash);
             if (blockData == null) {
@@ -235,8 +231,6 @@ public class POPStorage {
         } catch (RocksDBException e) {
             log.error("查询区块失败: blockHash={}", CryptoUtil.bytesToHex(blockHash), e);
             throw new RuntimeException("查询区块失败", e);
-        } finally {
-            rwLock.readLock().unlock();
         }
     }
 
@@ -246,7 +240,6 @@ public class POPStorage {
      * @return 前100个区块（按顺序：前1个 -> 前100个），不足100个则返回实际数量
      */
     public List<Block> getPrevious100Blocks(byte[] blockHash) {
-        rwLock.readLock().lock();
         try {
             List<Block> result = new ArrayList<>(100);
             Block currentBlock = getBlock(blockHash); // 先获取目标区块
@@ -269,8 +262,6 @@ public class POPStorage {
         } catch (RuntimeException e) {
             log.error("查询前100个区块失败: 起始区块哈希={}", blockHash, e);
             throw e;
-        } finally {
-            rwLock.readLock().unlock();
         }
     }
 
@@ -285,7 +276,6 @@ public class POPStorage {
         if (count <= 0 || count > 1000) {
             throw new IllegalArgumentException("查询数量必须在1-1000之间");
         }
-        rwLock.readLock().lock();
         try {
             List<Block> result = new ArrayList<>(count);
             Block currentBlock = getBlock(blockHash); // 获取目标区块
@@ -306,8 +296,6 @@ public class POPStorage {
         } catch (RuntimeException e) {
             log.error("查询前序区块失败: 起始区块哈希={}, 查询数量={}", blockHash, count, e);
             throw e;
-        } finally {
-            rwLock.readLock().unlock();
         }
     }
 
@@ -316,7 +304,6 @@ public class POPStorage {
         if (count <= 0 || count > 1000) {
             throw new IllegalArgumentException("查询数量必须在1-1000之间");
         }
-        rwLock.readLock().lock();
         try {
             List<Block> result = new ArrayList<>(count);
             Block currentBlock = getBlock(blockHash); // 获取目标区块
@@ -340,28 +327,22 @@ public class POPStorage {
         } catch (RuntimeException e) {
             log.error("查询前序区块失败: 起始区块哈希={}, 查询数量={}", blockHash, count, e);
             throw e;
-        } finally {
-            rwLock.readLock().unlock();
         }
     }
 
     //新增或者修改-本节点的设置信息 key - NODE_SETTING_KEY
     public void addOrUpdateNodeSetting(NodeSettings value) {
-        rwLock.writeLock().lock();
         try {
             byte[] valueBytes = SerializeUtils.serialize(value);
             db.put(ColumnFamily.NODE.handle, KEY_NODE_SETTING, valueBytes);
         } catch (RocksDBException e) {
             log.error("节点状态失败: key={}", KEY_NODE_SETTING, e);
             throw new RuntimeException("节点状态失败", e);
-        } finally {
-            rwLock.writeLock().unlock();
         }
     }
 
     //获取本节点的设置信息
     public NodeSettings getNodeSetting() {
-        rwLock.readLock().lock();
         try {
             byte[] valueBytes = db.get(ColumnFamily.NODE.handle, KEY_NODE_SETTING);
             if (valueBytes == null) {
@@ -371,8 +352,6 @@ public class POPStorage {
         } catch (RocksDBException e) {
             log.error("获取节点状态失败: key={}", KEY_NODE_SETTING, e);
             throw new RuntimeException("获取节点状态失败", e);
-        } finally {
-            rwLock.readLock().unlock();
         }
     }
 
@@ -380,22 +359,18 @@ public class POPStorage {
      * 新增或者修改本节点的矿工信息
      */
     public void addOrUpdateMiner(Miner value) {
-        rwLock.writeLock().lock();
         try {
             byte[] valueBytes = SerializeUtils.serialize(value);
             db.put(ColumnFamily.MINER.handle, KEY_MINER, valueBytes);
         } catch (RocksDBException e) {
             log.error("保存矿工信息失败: key={}", KEY_MINER, e);
             throw new RuntimeException("保存矿工信息失败", e);
-        } finally {
-            rwLock.writeLock().unlock();
         }
     }
     /**
      * 获取本节点的矿工信息
      */
     public Miner getMiner() {
-        rwLock.readLock().lock();
         try {
             byte[] valueBytes = db.get(ColumnFamily.MINER.handle, KEY_MINER);
             if (valueBytes == null) {
@@ -405,26 +380,531 @@ public class POPStorage {
         } catch (RocksDBException e) {
             log.error("获取矿工信息失败: key={}", KEY_MINER, e);
             throw new RuntimeException("获取矿工信息失败", e);
+        }
+    }
+
+
+
+
+
+
+
+
+    //UTXO.............................................................................................................
+
+
+
+
+
+
+
+
+
+    /**
+     * UTXO集合
+     */
+    // UTXO分片大小（可根据实际场景调整）
+    private static final int UTXO_SHARD_SIZE = 1000;
+    // 分片计数器键前缀（地址→分片数量）
+    private static final String SHARD_COUNT_PREFIX = "shardCount:";
+    // 分片数据键前缀（地址+分片索引→UTXO键集合）
+    private static final String SHARD_DATA_PREFIX = "shardData:";
+    // 反向索引键前缀（UTXO键→所属分片标识）
+    private static final String REVERSE_INDEX_PREFIX = "reverseIndex:";
+    // 分片元数据键前缀（地址+分片索引→分片元数据）
+    private static final String SHARD_META_PREFIX = "shardMeta:";
+
+
+
+    //新增UTXO（优化分片存储）
+    public void addUtxo(UTXO value) {
+        rwLock.writeLock().lock();
+        try {
+            String utxoKey = CryptoUtil.bytesToHex(value.getTxId()) + ":" + value.getVout() + ":" + value.getValue();
+            String address = value.getAddress();
+            long amount = value.getValue();
+
+            // 1. 存储单个UTXO（键：utxoKey，值：UTXO对象）
+            byte[] utxoData = SerializeUtils.serialize(value);
+            db.put(ColumnFamily.UTXO.handle, utxoKey.getBytes(), utxoData);
+
+            // 2. 维护地址→UTXO分片映射
+            // 2.1 获取当前地址的分片数量
+            String shardCountKey = SHARD_COUNT_PREFIX + address;
+            byte[] shardCountBytes = db.get(ColumnFamily.UTXO.handle, shardCountKey.getBytes());
+            int shardCount = shardCountBytes == null ? 0 : (int) ByteUtils.fromBytesToInt(shardCountBytes);
+
+            // 2.2 确定目标分片索引
+            int targetShardIndex;
+            Set<String> targetShard;
+            ShardMetadata targetMetadata;
+
+            if (shardCount == 0) {
+                // 无分片时创建第一个分片
+                targetShardIndex = 0;
+                targetShard = new HashSet<>();
+                targetMetadata = new ShardMetadata();
+                shardCount = 1;
+            } else {
+                // 有分片时，尝试找到合适的分片
+                targetShardIndex = -1;
+                // 遍历现有分片，寻找金额范围合适的分片
+                for (int i = 0; i < shardCount; i++) {
+                    String metaKey = SHARD_META_PREFIX + address + ":" + i;
+                    byte[] metaBytes = db.get(ColumnFamily.UTXO.handle, metaKey.getBytes());
+
+                    if (metaBytes != null) {
+                        ShardMetadata metadata = (ShardMetadata) SerializeUtils.deSerialize(metaBytes);
+
+                        // 如果金额在分片范围内且未满，使用该分片
+                        if (amount >= metadata.getMinAmount() && amount <= metadata.getMaxAmount()
+                                && metadata.getUtxoCount() < UTXO_SHARD_SIZE) {
+                            targetShardIndex = i;
+                            break;
+                        }
+                    }
+                }
+                // 如果没找到合适的分片，使用最后一个分片
+                if (targetShardIndex == -1) {
+                    targetShardIndex = shardCount - 1;
+                }
+                // 加载目标分片和元数据
+                String targetShardKey = SHARD_DATA_PREFIX + address + ":" + targetShardIndex;
+                byte[] shardBytes = db.get(ColumnFamily.UTXO.handle, targetShardKey.getBytes());
+                targetShard = shardBytes == null ? new HashSet<>() : (Set<String>) SerializeUtils.deSerialize(shardBytes);
+
+                String metaKey = SHARD_META_PREFIX + address + ":" + targetShardIndex;
+                byte[] metaBytes = db.get(ColumnFamily.UTXO.handle, metaKey.getBytes());
+                targetMetadata = metaBytes == null ? new ShardMetadata() : (ShardMetadata) SerializeUtils.deSerialize(metaBytes);
+
+                // 最后一个分片已满，创建新分片
+                if (targetShard.size() >= UTXO_SHARD_SIZE) {
+                    targetShardIndex = shardCount;
+                    targetShard = new HashSet<>();
+                    targetMetadata = new ShardMetadata();
+                    shardCount++;
+                }
+            }
+
+            // 2.3 更新分片数据和元数据
+            targetShard.add(utxoKey);
+            targetMetadata.update(amount);
+
+            // 写入目标分片
+            String targetShardKey = SHARD_DATA_PREFIX + address + ":" + targetShardIndex;
+            db.put(ColumnFamily.UTXO.handle, targetShardKey.getBytes(), SerializeUtils.serialize(targetShard));
+
+            // 写入分片元数据
+            String metaKey = SHARD_META_PREFIX + address + ":" + targetShardIndex;
+            db.put(ColumnFamily.UTXO.handle, metaKey.getBytes(), SerializeUtils.serialize(targetMetadata));
+
+            // 2.4 更新分片数量
+            db.put(ColumnFamily.UTXO.handle, shardCountKey.getBytes(), ByteUtils.intToBytes(shardCount));
+
+            // 3. 维护反向索引（UTXO键→分片标识）
+            String reverseIndexKey = REVERSE_INDEX_PREFIX + utxoKey;
+            String shardIdentifier = address + ":" + targetShardIndex;
+            db.put(ColumnFamily.UTXO.handle, reverseIndexKey.getBytes(), shardIdentifier.getBytes());
+
+        } catch (RocksDBException e) {
+            log.error("保存UTXO信息失败", e);
+            throw new RuntimeException("保存UTXO信息失败", e);
+        } finally {
+            rwLock.writeLock().unlock();
+        }
+    }
+
+    public void addUtxos(List<UTXO> batch) {
+        rwLock.writeLock().lock();
+        WriteBatch writeBatch = null;
+        try {
+            writeBatch = new WriteBatch();
+            WriteOptions writeOptions = new WriteOptions();
+
+            // 按地址分组UTXO，以便批量处理同一地址的UTXO分片
+            Map<String, List<UTXO>> addressGroups = new HashMap<>();
+
+            // 为每个UTXO构建基础数据并按地址分组
+            for (UTXO utxo : batch) {
+                String utxoKey = CryptoUtil.bytesToHex(utxo.getTxId()) + ":" + utxo.getVout() + ":" + utxo.getValue();
+                String address = utxo.getAddress();
+
+                // 1. 序列化UTXO数据并添加到批量写
+                byte[] utxoData = SerializeUtils.serialize(utxo);
+                writeBatch.put(ColumnFamily.UTXO.handle, utxoKey.getBytes(), utxoData);
+
+                // 按地址分组
+                addressGroups.computeIfAbsent(address, k -> new ArrayList<>()).add(utxo);
+            }
+
+            // 2. 批量处理每个地址的UTXO分片
+            for (Map.Entry<String, List<UTXO>> entry : addressGroups.entrySet()) {
+                String address = entry.getKey();
+                List<UTXO> addressUtxos = entry.getValue();
+
+                // 获取当前地址的分片数量
+                String shardCountKey = SHARD_COUNT_PREFIX + address;
+                byte[] shardCountBytes = db.get(ColumnFamily.UTXO.handle, shardCountKey.getBytes());
+                int shardCount = shardCountBytes == null ? 0 : (int) ByteUtils.fromBytesToInt(shardCountBytes);
+
+                // 确定当前使用的分片
+                int currentShardIndex = shardCount == 0 ? 0 : shardCount - 1;
+                Set<String> currentShard = loadShard(address, currentShardIndex);
+                ShardMetadata currentMetadata = loadMetadata(address, currentShardIndex);
+
+                // 逐个处理UTXO，必要时创建新分片
+                for (UTXO utxo : addressUtxos) {
+                    String utxoKey = CryptoUtil.bytesToHex(utxo.getTxId()) + ":" + utxo.getVout() + ":" + utxo.getValue();
+                    long amount = utxo.getValue();
+
+                    // 检查当前分片是否已满
+                    if (currentShard.size() >= UTXO_SHARD_SIZE) {
+                        // 保存当前分片和元数据
+                        saveShard(writeBatch, address, currentShardIndex, currentShard);
+                        saveMetadata(writeBatch, address, currentShardIndex, currentMetadata);
+
+                        // 创建新分片
+                        currentShardIndex = shardCount++;
+                        currentShard = new HashSet<>();
+                        currentMetadata = new ShardMetadata();
+                    }
+
+                    // 添加UTXO到分片并更新元数据
+                    currentShard.add(utxoKey);
+                    currentMetadata.update(amount);
+
+                    // 3. 维护反向索引（UTXO键→分片标识）
+                    String reverseIndexKey = REVERSE_INDEX_PREFIX + utxoKey;
+                    String shardIdentifier = address + ":" + currentShardIndex;
+                    writeBatch.put(ColumnFamily.UTXO.handle, reverseIndexKey.getBytes(), shardIdentifier.getBytes());
+                }
+
+                // 保存最后处理的分片和元数据
+                saveShard(writeBatch, address, currentShardIndex, currentShard);
+                saveMetadata(writeBatch, address, currentShardIndex, currentMetadata);
+
+                // 更新分片数量
+                writeBatch.put(ColumnFamily.UTXO.handle, shardCountKey.getBytes(), ByteUtils.intToBytes(shardCount));
+            }
+
+            // 执行批量写入
+            db.write(writeOptions, writeBatch);
+
+        } catch (RocksDBException e) {
+            log.error("批量保存UTXO信息失败", e);
+            throw new RuntimeException("批量保存UTXO信息失败", e);
+        } finally {
+            // 确保资源释放
+            if (writeBatch != null) {
+                writeBatch.close();
+            }
+            rwLock.writeLock().unlock();
+        }
+    }
+
+
+    //删除UTXO（优化分片存储）
+    public void deleteUtxo(UTXO value) {
+        rwLock.writeLock().lock();
+        try {
+            String utxoKey = CryptoUtil.bytesToHex(value.getTxId()) + ":" + value.getVout() + ":" + value.getValue();
+            // 1. 通过反向索引找到所属分片
+            String reverseIndexKey = REVERSE_INDEX_PREFIX + utxoKey;
+            byte[] shardIdBytes = db.get(ColumnFamily.UTXO.handle, reverseIndexKey.getBytes());
+            if (shardIdBytes == null) {
+                log.warn("UTXO不存在，无需删除: {}", utxoKey);
+                return;
+            }
+            String shardIdentifier = new String(shardIdBytes);
+            String[] parts = shardIdentifier.split(":", 2);
+            if (parts.length != 2) {
+                log.error("无效的分片标识: {}", shardIdentifier);
+                return;
+            }
+            String address = parts[0];
+            int shardIndex = Integer.parseInt(parts[1]);
+
+            // 2. 从分片移除UTXO键
+            String shardKey = SHARD_DATA_PREFIX + address + ":" + shardIndex;
+            byte[] shardBytes = db.get(ColumnFamily.UTXO.handle, shardKey.getBytes());
+            if (shardBytes == null) {
+                log.error("分片不存在: {}", shardKey);
+                return;
+            }
+            Set<String> shard = (Set<String>) SerializeUtils.deSerialize(shardBytes);
+            if (!shard.contains(utxoKey)) {
+                log.warn("UTXO不在分片: {}", utxoKey);
+                return;
+            }
+            shard.remove(utxoKey);
+            db.put(ColumnFamily.UTXO.handle, shardKey.getBytes(), SerializeUtils.serialize(shard));
+
+            // 3. 更新分片元数据（需要重新计算）
+            String metaKey = SHARD_META_PREFIX + address + ":" + shardIndex;
+            ShardMetadata metadata = loadMetadata(address, shardIndex);
+            metadata.recalculate(shard);
+            db.put(ColumnFamily.UTXO.handle, metaKey.getBytes(), SerializeUtils.serialize(metadata));
+
+            // 4. 删除反向索引和UTXO数据
+            db.delete(ColumnFamily.UTXO.handle, reverseIndexKey.getBytes());
+            db.delete(ColumnFamily.UTXO.handle, utxoKey.getBytes());
+
+        } catch (RocksDBException e) {
+            log.error("删除UTXO失败", e);
+            throw new RuntimeException("删除UTXO失败", e);
+        } finally {
+            rwLock.writeLock().unlock();
+        }
+    }
+
+    //获取地址对应的所有UTXO
+    public List<UTXO> getUtxosByAddressback(String address) {
+        rwLock.readLock().lock();
+        try {
+            // 1. 准备读取选项
+            ReadOptions readOptions = new ReadOptions()
+                    .setFillCache(true)  // 按需填充缓存
+                    .setVerifyChecksums(false)  // 非关键场景关闭校验和（节省CPU）
+                    .setSnapshot(db.getSnapshot())  // 使用快照读取，避免读取过程中数据变更导致的重试
+                    .setPinData(true);  // 锁定数据到缓存，避免频繁换出（适合高频访问的批量查询）
+
+            // 2. 获取地址的分片数量
+            String shardCountKey = SHARD_COUNT_PREFIX + address;
+            byte[] shardCountBytes = db.get(ColumnFamily.UTXO.handle, shardCountKey.getBytes());
+
+            int shardCount = shardCountBytes == null ? 0 : ByteUtils.fromBytesToInt(shardCountBytes);
+            if (shardCount == 0) {
+                return Collections.emptyList();
+            }
+
+            // 3. 并行读取所有分片，收集UTXO键
+            Set<String> allUtxoKeys = Collections.synchronizedSet(new HashSet<>());
+            IntStream.range(0, shardCount).parallel().forEach(shardIndex -> {
+                try {
+                    String shardKey = SHARD_DATA_PREFIX + address + ":" + shardIndex;
+                    byte[] shardBytes = db.get(ColumnFamily.UTXO.handle, shardKey.getBytes());
+
+                    if (shardBytes != null) {
+                        Set<String> shard = (Set<String>) SerializeUtils.deSerialize(shardBytes);
+                        allUtxoKeys.addAll(shard);
+                    }
+                } catch (RocksDBException e) {
+                    throw new RuntimeException("读取分片失败", e);
+                }
+            });
+
+            if (allUtxoKeys.isEmpty()) {
+                return Collections.emptyList();
+            }
+
+            // 4. 批量读取UTXO
+            List<byte[]> keys = allUtxoKeys.stream()
+                    .map(String::getBytes)
+                    .collect(Collectors.toList());
+            log.info("批量读取UTXO数量: " + keys.size());
+
+            // 批量获取所有UTXO的字节数据
+            long l = System.currentTimeMillis();
+            List<ColumnFamilyHandle> columnFamilies = Collections.nCopies(keys.size(), ColumnFamily.UTXO.handle);
+            List<byte[]> utxoBytesList = db.multiGetAsList(readOptions, columnFamilies, keys);
+            log.info("批量读取耗时: " + (System.currentTimeMillis() - l));
+
+            // 5. 批量反序列化为UTXO对象
+            List<UTXO> result = new ArrayList<>(allUtxoKeys.size());
+            Iterator<String> keyIter = allUtxoKeys.iterator();
+
+            long l1 = System.currentTimeMillis();
+            for (byte[] utxoBytes : utxoBytesList) {
+                if (utxoBytes != null) {
+                    UTXO utxo = (UTXO) SerializeUtils.deSerialize(utxoBytes);
+                    log.info("utxo:"+utxo);
+                    result.add(utxo);
+                } else {
+                    // 处理数据不一致
+                    String missingKey = keyIter.next();
+                    log.warn("UTXO数据不一致: 地址={}, 缺失UTXO键={}", address, missingKey);
+                }
+            }
+            log.info("批量反序列化耗时: " + (System.currentTimeMillis() - l1));
+
+            return result;
+        } catch (RocksDBException e) {
+            log.error("查询地址UTXO失败: address={}", address, e);
+            throw new RuntimeException("查询地址UTXO失败", e);
         } finally {
             rwLock.readLock().unlock();
         }
     }
 
+
+    public List<UTXO> getUtxosByAddress(String address) {
+        try {
+            // 1. 获取地址的分片数量（保持原有逻辑不变）
+            ReadOptions readOptions = new ReadOptions()
+                    .setFillCache(true)  // 按需填充缓存
+                    .setVerifyChecksums(false)  // 非关键场景关闭校验和（节省CPU）
+                    .setSnapshot(db.getSnapshot())  // 使用快照读取，避免读取过程中数据变更导致的重试
+                    .setPinData(true);  // 锁定数据到缓存，避免频繁换出（适合高频访问的批量查询）
+
+            String shardCountKey = SHARD_COUNT_PREFIX + address;
+            byte[] shardCountBytes = db.get(ColumnFamily.UTXO.handle, shardCountKey.getBytes());
+            int shardCount = shardCountBytes == null ? 0 : ByteUtils.fromBytesToInt(shardCountBytes);
+            if (shardCount == 0) return Collections.emptyList();
+            log.info("地址分片数量: " + shardCount);
+
+            // 2. 并行读取所有分片，收集UTXO键（保持原有逻辑不变）
+            long l = System.currentTimeMillis();
+            Set<String> allUtxoKeys = Collections.synchronizedSet(new HashSet<>());
+            IntStream.range(0, shardCount).parallel().forEach(shardIndex -> {
+                try {
+                    String shardKey = SHARD_DATA_PREFIX + address + ":" + shardIndex;
+                    byte[] shardBytes = db.get(ColumnFamily.UTXO.handle, shardKey.getBytes());
+                    if (shardBytes != null) {
+                        Set<String> shard = (Set<String>) SerializeUtils.deSerialize(shardBytes);
+                        allUtxoKeys.addAll(shard);
+                    }
+                } catch (RocksDBException e) {
+                    throw new RuntimeException("读取分片失败", e);
+                }
+            });
+            log.info("批量读取分片耗时: " + (System.currentTimeMillis() - l));
+
+            long l2 = System.currentTimeMillis();
+            if (allUtxoKeys.isEmpty()) return Collections.emptyList();
+            // 3. 批量读取UTXO数据（保持原有逻辑不变）
+            List<byte[]> keys = allUtxoKeys.stream().map(String::getBytes).collect(Collectors.toList());
+            List<ColumnFamilyHandle> columnFamilies = Collections.nCopies(keys.size(), ColumnFamily.UTXO.handle);
+            List<byte[]> utxoBytesList = db.multiGetAsList(readOptions, columnFamilies, keys);
+            log.info("批量读取耗时: " + (System.currentTimeMillis() - l2));
+
+            // 4. 并行批量反序列化（核心优化）
+            long l1 = System.currentTimeMillis();
+            List<UTXO> utxos = parallelDeserialize(utxoBytesList, allUtxoKeys, address);
+            log.info("批量反序列化耗时: " + (System.currentTimeMillis() - l1));
+            return utxos;
+        } catch (RocksDBException e) {
+            log.error("查询地址UTXO失败: address={}", address, e);
+            throw new RuntimeException("查询地址UTXO失败", e);
+        }
+    }
+
+    // 并行反序列化方法
+    private List<UTXO> parallelDeserialize(List<byte[]> utxoBytesList, Set<String> allUtxoKeys, String address) {
+        // 创建线程池，根据CPU核心数调整
+        int coreCount = Runtime.getRuntime().availableProcessors();
+        ExecutorService executor = Executors.newFixedThreadPool(coreCount);
+
+        // 每批处理的大小（可根据数据量调整）
+        int batchSize = 1000;
+        int totalBatches = (int) Math.ceil((double) utxoBytesList.size() / batchSize);
+
+        // 提交所有批处理任务
+        List<CompletableFuture<List<UTXO>>> futures = new ArrayList<>(totalBatches);
+        Iterator<String> keyIter = allUtxoKeys.iterator();
+
+        for (int i = 0; i < totalBatches; i++) {
+            final int batchIndex = i;
+            CompletableFuture<List<UTXO>> future = CompletableFuture.supplyAsync(() -> {
+                int start = batchIndex * batchSize;
+                int end = Math.min(start + batchSize, utxoBytesList.size());
+                List<UTXO> batchResult = new ArrayList<>(end - start);
+
+                for (int j = start; j < end; j++) {
+                    byte[] utxoBytes = utxoBytesList.get(j);
+                    if (utxoBytes != null) {
+                        try {
+                            UTXO utxo = (UTXO) SerializeUtils.deSerialize(utxoBytes);
+                            batchResult.add(utxo);
+                        } catch (Exception e) {
+                            // 处理反序列化异常
+                            String missingKey = keyIter.next();
+                            log.error("反序列化UTXO失败: address={}, key={}", address, missingKey, e);
+                        }
+                    } else {
+                        // 处理数据不一致
+                        String missingKey = keyIter.next();
+                        log.warn("UTXO数据不一致: address={}, 缺失UTXO键={}", address, missingKey);
+                    }
+                }
+                return batchResult;
+            }, executor);
+
+            futures.add(future);
+        }
+
+        // 等待所有任务完成并合并结果
+        List<UTXO> result = futures.stream()
+                .map(CompletableFuture::join)
+                .flatMap(List::stream)
+                .collect(Collectors.toList());
+
+        // 关闭线程池
+        executor.shutdown();
+        return result;
+    }
+
+
+
+
     /**
-     * UTXO集合
+     * 获取地址的UTXO分片元数据
      */
-    public void addUtxo(UTXO utxo) {
+    public List<ShardMetadata> getShardMetadataByAddress(String address) {
+        rwLock.readLock().lock();
+        try {
+            List<ShardMetadata> result = new ArrayList<>();
+            // 获取分片数量
+            String shardCountKey = SHARD_COUNT_PREFIX + address;
+            byte[] shardCountBytes = db.get(ColumnFamily.UTXO.handle, shardCountKey.getBytes());
+            int shardCount = shardCountBytes == null ? 0 : ByteUtils.fromBytesToInt(shardCountBytes);
 
+            // 读取所有分片元数据
+            for (int i = 0; i < shardCount; i++) {
+                String metaKey = SHARD_META_PREFIX + address + ":" + i;
+                byte[] metaBytes = db.get(ColumnFamily.UTXO.handle, metaKey.getBytes());
+
+                if (metaBytes != null) {
+                    ShardMetadata metadata = (ShardMetadata) SerializeUtils.deSerialize(metaBytes);
+                    result.add(metadata);
+                }
+            }
+
+            return result;
+        } catch (RocksDBException e) {
+            log.error("查询分片元数据失败: address={}", address, e);
+            throw new RuntimeException("查询分片元数据失败", e);
+        } finally {
+            rwLock.readLock().unlock();
+        }
     }
-    public void addUtxos(List<UTXO> batch) {
 
+    // 辅助方法：从数据库加载分片数据
+    private Set<String> loadShard(String address, int shardIndex) throws RocksDBException {
+        String shardKey = SHARD_DATA_PREFIX + address + ":" + shardIndex;
+        byte[] shardBytes = db.get(ColumnFamily.UTXO.handle, shardKey.getBytes());
+        return shardBytes == null ? new HashSet<>() : (Set<String>) SerializeUtils.deSerialize(shardBytes);
     }
 
+    // 辅助方法：从数据库加载分片元数据
+    private ShardMetadata loadMetadata(String address, int shardIndex) throws RocksDBException {
+        String metaKey = SHARD_META_PREFIX + address + ":" + shardIndex;
+        byte[] metaBytes = db.get(ColumnFamily.UTXO.handle, metaKey.getBytes());
+        return metaBytes == null ? new ShardMetadata() : (ShardMetadata) SerializeUtils.deSerialize(metaBytes);
+    }
 
+    // 辅助方法：将分片数据添加到批量写操作
+    private void saveShard(WriteBatch writeBatch, String address, int shardIndex, Set<String> shard)
+            throws RocksDBException {
+        String shardKey = SHARD_DATA_PREFIX + address + ":" + shardIndex;
+        writeBatch.put(ColumnFamily.UTXO.handle, shardKey.getBytes(), SerializeUtils.serialize(shard));
+    }
 
-
-
-
+    // 辅助方法：将分片元数据添加到批量写操作
+    private void saveMetadata(WriteBatch writeBatch, String address, int shardIndex, ShardMetadata metadata)
+            throws RocksDBException {
+        String metaKey = SHARD_META_PREFIX + address + ":" + shardIndex;
+        writeBatch.put(ColumnFamily.UTXO.handle, metaKey.getBytes(), SerializeUtils.serialize(metadata));
+    }
 
 
 

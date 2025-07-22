@@ -4,16 +4,30 @@ import com.pop.popcoinsystem.PopCoinSystemApplication;
 import com.pop.popcoinsystem.data.transaction.TxSigType;
 import com.pop.popcoinsystem.network.enums.NETVersion;
 import lombok.extern.slf4j.Slf4j;
+import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPrivateKey;
+import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPublicKey;
+import org.bouncycastle.jcajce.provider.digest.Keccak;
+import org.bouncycastle.jce.ECNamedCurveTable;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.jce.spec.ECNamedCurveParameterSpec;
+import org.bouncycastle.jce.spec.ECPrivateKeySpec;
+import org.bouncycastle.math.ec.ECPoint;
+
+import javax.crypto.Cipher;
+import javax.crypto.Mac;
+import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.security.*;
-import java.security.spec.ECGenParameterSpec;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.security.spec.X509EncodedKeySpec;
+import java.security.spec.*;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Map;
@@ -91,6 +105,58 @@ public class CryptoUtil {
                 throw new RuntimeException("验证签名失败", e);
             }
         }
+
+
+        /**
+         * 从种子(seed)生成ECDSA密钥对（遵循BIP-32派生规则，基于secp256k1曲线）
+         * @param seed 种子字节数组（通常由助记词生成）
+         * @return 密钥对（包含公钥和私钥）
+         */
+        public static KeyPair generateKeyPairFromSeed(byte[] seed) {
+            try {
+                // 1. 使用HMAC-SHA512从种子派生私钥（BIP-32标准）
+                Mac hmacSha512 = Mac.getInstance("HmacSHA512", "BC");
+                SecretKeySpec hmacKey = new SecretKeySpec("Bitcoin seed".getBytes(StandardCharsets.UTF_8), "HmacSHA512");
+                hmacSha512.init(hmacKey);
+                byte[] hmacResult = hmacSha512.doFinal(seed); // 64字节结果：前32字节=私钥，后32字节=链码
+
+                // 2. 提取前32字节作为私钥字节
+                byte[] privateKeyBytes = Arrays.copyOfRange(hmacResult, 0, 32);
+                BigInteger privateKeyInt = new BigInteger(1, privateKeyBytes); // 转换为正整数
+
+                // 3. 获取secp256k1曲线参数（使用Bouncy Castle的ECNamedCurveParameterSpec）
+                ECNamedCurveParameterSpec curveSpec = ECNamedCurveTable.getParameterSpec("secp256k1");
+                BigInteger n = curveSpec.getN(); // 曲线的阶（order）
+
+                // 4. 验证私钥有效性（必须在[1, n-1]范围内）
+                if (privateKeyInt.compareTo(BigInteger.ONE) < 0 || privateKeyInt.compareTo(n.subtract(BigInteger.ONE)) > 0) {
+                    throw new IllegalArgumentException("派生的私钥超出secp256k1曲线的有效范围");
+                }
+                // 5. 生成私钥（确保参数类型正确）
+                org.bouncycastle.jce.spec.ECParameterSpec ecParams = curveSpec; // ECNamedCurveParameterSpec extends ECParameterSpec
+                ECPrivateKeySpec privateKeySpec = new ECPrivateKeySpec(privateKeyInt, ecParams);
+                KeyFactory keyFactory = KeyFactory.getInstance("EC", "BC");
+                PrivateKey privateKey = keyFactory.generatePrivate(privateKeySpec);
+                // 6. 从私钥推导公钥（公钥 = 私钥 * 基点G）
+                ECPoint multiply = curveSpec.getG().multiply(privateKeyInt);// 计算公钥点
+                org.bouncycastle.jce.spec.ECPublicKeySpec ecPublicKeySpec = new org.bouncycastle.jce.spec.ECPublicKeySpec(multiply, ecParams);
+                PublicKey publicKey = keyFactory.generatePublic(ecPublicKeySpec);
+                return new KeyPair(publicKey, privateKey);
+            } catch (Exception e) {
+                throw new RuntimeException("从种子生成密钥对失败", e);
+            }
+        }
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -530,6 +596,7 @@ public class CryptoUtil {
 
 
 
+
     /**
      * 编码一个整数为VarInt格式（比特币协议中的可变长度整数）
      * @param size 要编码的整数
@@ -607,6 +674,106 @@ public class CryptoUtil {
 
 
 
+
+
+
+    public static byte[] sha3(byte[] input) {
+        Keccak.DigestKeccak kecc = new Keccak.Digest256();
+        kecc.update(input, 0, input.length);
+        return kecc.digest();
+    }
+
+
+
+
+
+
+
+
+
+
+    private static final String ALGORITHM = "AES";
+    private static final String TRANSFORMATION = "AES/CBC/PKCS5Padding";
+    private static final String KEY_DERIVATION_ALGORITHM = "PBKDF2WithHmacSHA256";
+    private static final int ITERATIONS = 65536;
+    private static final int KEY_LENGTH = 256; // in bits
+    private static final int SALT_LENGTH = 16; // in bytes
+    private static final int IV_LENGTH = 16; // in bytes for AES
+
+    public static String encryptWithPassword(byte[] encoded, String password) {
+        try {
+            // 生成盐值
+            SecureRandom random = SecureRandom.getInstanceStrong();
+            byte[] salt = new byte[SALT_LENGTH];
+            random.nextBytes(salt);
+
+            // 从密码派生密钥
+            SecretKeyFactory factory = SecretKeyFactory.getInstance(KEY_DERIVATION_ALGORITHM);
+            PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), salt, ITERATIONS, KEY_LENGTH);
+            SecretKey tmp = factory.generateSecret(spec);
+            SecretKeySpec secretKey = new SecretKeySpec(tmp.getEncoded(), ALGORITHM);
+
+            // 生成随机IV
+            byte[] iv = new byte[IV_LENGTH];
+            random.nextBytes(iv);
+            IvParameterSpec ivSpec = new IvParameterSpec(iv);
+
+            // 初始化加密器
+            Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey, ivSpec);
+
+            // 执行加密
+            byte[] encryptedBytes = cipher.doFinal(encoded);
+
+            // 组合盐值、IV和密文
+            byte[] combined = new byte[salt.length + iv.length + encryptedBytes.length];
+            System.arraycopy(salt, 0, combined, 0, salt.length);
+            System.arraycopy(iv, 0, combined, salt.length, iv.length);
+            System.arraycopy(encryptedBytes, 0, combined, salt.length + iv.length, encryptedBytes.length);
+
+            // Base64编码结果
+            return Base64.getEncoder().encodeToString(combined);
+        } catch (Exception e) {
+            throw new RuntimeException("加密过程失败", e);
+        }
+    }
+
+    // 对应的解密方法
+    public static byte[] decryptWithPassword(String encryptedData, String password) {
+        try {
+            // 解码Base64数据
+            byte[] combined = Base64.getDecoder().decode(encryptedData);
+
+            // 提取盐值、IV和密文
+            byte[] salt = new byte[SALT_LENGTH];
+            byte[] iv = new byte[IV_LENGTH];
+            byte[] encryptedBytes = new byte[combined.length - SALT_LENGTH - IV_LENGTH];
+
+            System.arraycopy(combined, 0, salt, 0, SALT_LENGTH);
+            System.arraycopy(combined, SALT_LENGTH, iv, 0, IV_LENGTH);
+            System.arraycopy(combined, SALT_LENGTH + IV_LENGTH, encryptedBytes, 0, encryptedBytes.length);
+
+            // 从密码派生密钥
+            SecretKeyFactory factory = SecretKeyFactory.getInstance(KEY_DERIVATION_ALGORITHM);
+            PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), salt, ITERATIONS, KEY_LENGTH);
+            SecretKey tmp = factory.generateSecret(spec);
+            SecretKeySpec secretKey = new SecretKeySpec(tmp.getEncoded(), ALGORITHM);
+
+            // 初始化解密器
+            Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+            IvParameterSpec ivSpec = new IvParameterSpec(iv);
+            cipher.init(Cipher.DECRYPT_MODE, secretKey, ivSpec);
+
+            // 执行解密
+            return cipher.doFinal(encryptedBytes);
+        } catch (Exception e) {
+            throw new RuntimeException("解密过程失败", e);
+        }
+    }
+
+    public static String hashPassword(String password) {
+        return Base64.getEncoder().encodeToString(applySHA256(password.getBytes()));
+    }
 
 
 

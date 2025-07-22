@@ -26,6 +26,29 @@ public class ByteUtils {
         return ArrayUtils.toPrimitive(stream.toArray(Byte[]::new));
     }
 
+
+    /**
+     * 两个byte[]数组相加
+     *
+     * @param data1
+     * @param data2
+     * @return
+     */
+    public static byte[] add(byte[] data1, byte[] data2)
+    {
+
+        byte[] result = new byte[data1.length + data2.length];
+        System.arraycopy(data1, 0, result, 0, data1.length);
+        System.arraycopy(data2, 0, result, data1.length, data2.length);
+
+        return result;
+    }
+
+
+
+
+
+
     /**
      * long 类型转 byte[]
      *
