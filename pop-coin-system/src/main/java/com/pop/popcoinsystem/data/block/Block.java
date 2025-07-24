@@ -8,7 +8,9 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static com.pop.popcoinsystem.util.Numeric.hexStringToByteArray;
 import static com.pop.popcoinsystem.util.TypeUtils.reverseBytes;
@@ -25,8 +27,6 @@ public class Block implements Serializable {
     private byte[] hash;
     //前一个区块的哈希值
     private byte[] previousHash;
-    //确认区块数量
-    private long confirmations;
     //版本号
     private int version;
     // 表示该区块中所有交易的默克尔树根哈希值。它用于快速验证区块中的交易是否被篡改。
@@ -83,7 +83,82 @@ public class Block implements Serializable {
         return reverseBytes(finalHash);
     }
 
+    /**
+     * 计算并设置当前区块的默克尔根
+     */
+    public void calculateAndSetMerkleRoot() {
+        this.merkleRoot = calculateMerkleRoot(this.transactions);
+    }
 
+
+
+    /**
+     * 计算交易列表的默克尔根
+     * @param transactions 区块中的交易列表
+     * @return 默克尔根哈希（字节数组）
+     */
+    public static byte[] calculateMerkleRoot(List<Transaction> transactions) {
+        if (transactions == null || transactions.isEmpty()) {
+            return new byte[32]; // 返回32字节的零数组
+        }
+
+        // 1. 计算所有交易的哈希值
+        List<byte[]> transactionHashes = transactions.stream()
+                .map(Transaction::getTxId) // 假设Transaction类有getHash()方法返回交易哈希
+                .collect(Collectors.toList());
+
+        // 2. 开始构建默克尔树
+        return buildMerkleTree(transactionHashes);
+    }
+
+    /**
+     * 递归构建默克尔树并返回根哈希
+     * @param hashes 当前层的哈希列表
+     * @return 根哈希
+     */
+    private static byte[] buildMerkleTree(List<byte[]> hashes) {
+        // 如果列表为空，返回空哈希
+        if (hashes.isEmpty()) {
+            return new byte[32];
+        }
+
+        // 如果只有一个哈希，那就是根哈希（特殊情况，如创世块）
+        if (hashes.size() == 1) {
+            return hashes.get(0);
+        }
+
+        // 存储下一层的哈希值
+        List<byte[]> nextLevel = new ArrayList<>();
+
+        // 处理当前层的哈希对
+        for (int i = 0; i < hashes.size(); i += 2) {
+            // 获取左右节点
+            byte[] left = hashes.get(i);
+            byte[] right = (i + 1 < hashes.size()) ? hashes.get(i + 1) : left; // 奇数节点时使用自身
+
+            // 合并两个哈希并计算新哈希
+            byte[] merged = new byte[left.length + right.length];
+            System.arraycopy(left, 0, merged, 0, left.length);
+            System.arraycopy(right, 0, merged, left.length, right.length);
+
+            // 计算双SHA-256哈希
+            byte[] combinedHash = doubleSHA256(merged);
+            nextLevel.add(combinedHash);
+        }
+
+        // 递归处理下一层
+        return buildMerkleTree(nextLevel);
+    }
+
+    /**
+     * 执行双SHA-256哈希计算（两次SHA-256）
+     * @param data 输入数据
+     * @return 哈希结果
+     */
+    private static byte[] doubleSHA256(byte[] data) {
+        byte[] firstHash = CryptoUtil.applySHA256(data);
+        return CryptoUtil.applySHA256(firstHash);
+    }
 
     /**
      * 序列化区块头（严格遵循比特币协议）

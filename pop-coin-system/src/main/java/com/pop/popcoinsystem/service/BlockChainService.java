@@ -6,10 +6,7 @@ import com.pop.popcoinsystem.data.block.BlockVO;
 import com.pop.popcoinsystem.data.blockChain.BlockChain;
 import com.pop.popcoinsystem.data.enums.UTXOStatus;
 import com.pop.popcoinsystem.data.storage.POPStorage;
-import com.pop.popcoinsystem.data.transaction.TXInput;
-import com.pop.popcoinsystem.data.transaction.Transaction;
-import com.pop.popcoinsystem.data.transaction.TxSigType;
-import com.pop.popcoinsystem.data.transaction.UTXO;
+import com.pop.popcoinsystem.data.transaction.*;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import jakarta.annotation.Resource;
@@ -17,9 +14,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
+import java.math.BigInteger;
 import java.util.*;
 
 import static com.pop.popcoinsystem.util.CryptoUtil.ECDSASigner.verifySignature;
+import static com.pop.popcoinsystem.util.Numeric.hexStringToByteArray;
 
 @Slf4j
 @Service
@@ -30,8 +29,118 @@ public class BlockChainService {
     private MiningService miningService;
 
 
+    // 系统启动时执行
+    private void initBlockChain() {
+        // 检查是否已存在创世区块
+        if (getBlockByHash(getGenesisBlockHash()) == null) {
+            Block genesisBlock = createGenesisBlock();
+            //创建创世区块并保存
+
+        }
+    }
+
+
+
     // CoinBase交易成熟度要求
     private static final int COINBASE_MATURITY = 100;
+
+
+    //创建创世区块
+    /**
+     * 创建创世区块（区块链的第一个区块）
+     * 创世区块特殊性：
+     * 1. 没有前序区块（previousHash为全零）
+     * 2. 高度为0
+     * 3. 仅包含一笔CoinBase交易（挖矿奖励）
+     * 4. 时间戳通常设置为项目启动时间
+     */
+    public Block createGenesisBlock() {
+        // 1. 初始化区块基本信息
+        Block genesisBlock = new Block();
+        genesisBlock.setHeight(0); // 创世区块高度为0
+        genesisBlock.setPreviousHash(new byte[32]); // 前序哈希为全零
+        genesisBlock.setVersion(1); // 版本号
+
+
+        // 2. 设置时间戳（使用比特币创世时间类似的格式，这里使用系统启动时间）
+        long genesisTime = 1620000000; // 示例时间戳（2021-05-03）
+        genesisBlock.setTime(genesisTime);
+        genesisBlock.setMedianTime(genesisTime);
+
+        // 3. 设置难度相关参数（创世区块难度通常较低）
+        genesisBlock.setDifficulty(1);
+        // 比特币创世区块难度目标：0x1d00ffff（这里使用相同值）
+        genesisBlock.setDifficultyTarget(hexStringToByteArray("1d00ffff"));
+        genesisBlock.setChainWork("0000000000000000000000000000000000000000000000000000000100010001");
+
+        // 4. 创建创世区块的CoinBase交易（唯一交易）
+        Transaction coinbaseTx = createGenesisCoinbaseTransaction();
+        List<Transaction> transactions = new ArrayList<>();
+        transactions.add(coinbaseTx);
+        genesisBlock.setTransactions(transactions);
+        genesisBlock.setTxCount(1);
+
+        // 5. 计算默克尔根（仅一个交易，默克尔根就是该交易的哈希）
+        byte[] merkleRoot = Block.calculateMerkleRoot(transactions);
+        genesisBlock.setMerkleRoot(merkleRoot);
+
+        // 6. 设置区块大小信息
+        genesisBlock.setStrippedSize(285); // 示例值
+        genesisBlock.setSize(285);
+        genesisBlock.setWeight(1140); // 4倍size（隔离见证权重计算）
+
+        // 7. 计算区块哈希（需要找到符合难度的nonce）
+        // 创世区块的nonce是固定值，通过暴力计算得到
+        genesisBlock.setNonce(2083236893); // 示例nonce值（类似比特币创世块）
+        byte[] blockHash = Block.calculateHash(genesisBlock);
+        genesisBlock.setHash(blockHash);
+
+        // 8. 设置工作量证明和确认数
+        genesisBlock.setChainWork("0000000000000000000000000000000000000000000000000000000100010001");
+
+
+        log.info("创世区块创建成功，哈希: {}", CryptoUtil.bytesToHex(blockHash));
+        return genesisBlock;
+    }
+
+    /**
+     * 创建创世区块的CoinBase交易
+     * CoinBase交易特殊性：
+     * 1. 没有输入（或输入为特殊值）
+     * 2. 输出为初始挖矿奖励
+     */
+    private Transaction createGenesisCoinbaseTransaction() {
+        Transaction coinbaseTx = new Transaction();
+        coinbaseTx.setSegWit(0); // 创世区块使用普通交易格式
+
+        // 创建特殊输入（引用自身）
+        TXInput input = new TXInput();
+        input.setTxId(new byte[32]); // 全零交易ID
+        input.setVout(-1); // 特殊值表示CoinBase交易
+        byte[] bytes = "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks".getBytes();
+        input.setScriptSig(null); // 创世信息
+        List<TXInput> inputs = new ArrayList<>();
+        inputs.add(input);
+        coinbaseTx.setInputs(inputs);
+
+        // 创建输出（初始奖励50 BTC = 50*1e8聪）
+        TXOutput output = new TXOutput();
+        output.setValue(50L * 100000000); // 50 BTC in satoshi
+        // 创世区块奖励地址（可以替换为你的项目地址）
+        String address = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa";
+        output.setScriptPubKey(null);
+
+        List<TXOutput> outputs = new ArrayList<>();
+        outputs.add(output);
+        coinbaseTx.setOutputs(outputs);
+
+        // 计算交易ID
+        byte[] txId = Transaction.calculateTxId(coinbaseTx);
+        coinbaseTx.setTxId(txId);
+
+        return coinbaseTx;
+    }
+
 
     /**
      * 验证交易
@@ -56,14 +165,7 @@ public class BlockChainService {
                 return Result.error("交易ID不匹配");
             }
             List<TXInput> inputs = transaction.getInputs();
-            if (inputs.isEmpty()){
-                //coinBase交易
-               boolean isValid = isValidCoinBaseTransaction(transaction);
-               if (!isValid){
-                   log.error("coinBase交易无效");
-                   return Result.error("coinBase交易无效");
-               }
-            }
+
 
 
             for (TXInput input : transaction.getInputs()) {
@@ -74,6 +176,13 @@ public class BlockChainService {
                     return Result.error("引用的UTXO不存在");
                 }
                 // 检查是否已花费  只要是没删除的都是可以花费的
+
+
+                //UTXO 是否是coinBase UTXO 是否成熟
+
+                //通过UTXO 查询交易 通过交易查询所在区块  看看区块高度是否满足要求
+
+
 
 
                 // 验证数字签名
@@ -147,22 +256,116 @@ public class BlockChainService {
         return Result.OK("交易验证成功");
     }
 
-    private boolean isValidCoinBaseTransaction(Transaction tx) {
+
+    /**
+     * 验证区块中的所有交易
+     */
+    private boolean validateTransactionsInBlock(Block block) {
+        // 1. 验证CoinBase交易
+        Transaction coinbaseTx = block.getTransactions().get(0);
+        if (!isValidCoinBaseTransaction(coinbaseTx, block.getHeight())) {
+            log.error("CoinBase交易无效");
+            return false;
+        }
+        // 3. 按顺序验证所有交易（包括CoinBase）
+        for (int i = 0; i < block.getTransactions().size(); i++) {
+            Transaction tx = block.getTransactions().get(i);
+            // 特殊处理CoinBase交易
+            if (i == 0) {
+                int segWit = tx.getSegWit();
+                if (segWit == 0){
+
+                }else {
+
+                }
+                // 添加CoinBase交易的输出到临时UTXO集合
+                for (int j = 0; j < tx.getOutputs().size(); j++) {
+                    UTXO utxo = new UTXO();
+                    utxo.setTxId(tx.getTxId());
+                    utxo.setVout(j);
+                    utxo.setValue(tx.getOutputs().get(j).getValue());
+
+                }
+                continue;
+            }
+            int segWit = tx.getSegWit();
+            if (segWit == 0){
+                // 验证普通交易
+                for (TXInput input : tx.getInputs()) {
+                    UTXO utxo = getUTXO(input.getTxId(), input.getVout());
+                    String utxoKey = getUTXOKey(input.getTxId(), input.getVout());
+                    if (utxo == null) {
+                        log.error("交易引用的UTXO不存在: {}", utxoKey);
+                        return false;
+                    }
+                    // 验证数字签名
+
+                    // 标记为已花费
+                }
+                // 添加交易输出到临时UTXO集合
+                for (int j = 0; j < tx.getOutputs().size(); j++) {
+                    UTXO utxo = new UTXO();
+                    utxo.setTxId(tx.getTxId());
+                    utxo.setVout(j);
+                }
+            }else {
+
+
+
+
+
+
+
+            }
+        }
+
+        return true;
+    }
+
+
+
+
+    /**
+     * 验证CoinBase交易
+     */
+    private boolean isValidCoinBaseTransaction(Transaction tx, long blockHeight) {
         if (tx == null || tx.getInputs() == null || tx.getInputs().size() != 1) {
             return false;
         }
         TXInput input = tx.getInputs().get(0);
-        if (input.getTxId() == null || !Arrays.equals(input.getTxId(), new byte[32])) {
+        if (input.getTxId() == null || !Arrays.equals(input.getTxId(), getGenesisBlockHash())) {
             return false;
         }
         if (input.getVout() != 0) {
             return false;
         }
         // 验证CoinBase奖励金额
+        //获取交易所在区块高度
+
+        long coinbaseReward = calculateCoinbaseReward(blockHeight);
         long totalOutput = tx.getOutputs().stream()
                 .mapToLong(output -> output.getValue())
                 .sum();
+        if (totalOutput > coinbaseReward) {
+            return false;
+        }
         return true;
+    }
+
+    private long calculateCoinbaseReward(long blockHeight) {
+        // 初始奖励（单位：聪）
+        long initialReward = 50 * 100000000; // 50 BTC
+
+        // 每210000个区块减半
+        long halvings = blockHeight / 210000;
+
+        // 超过64次减半后奖励为0
+        if (halvings >= 64) {
+            return 0;
+        }
+
+        // 计算当前奖励
+        return initialReward >> halvings;
     }
 
 
@@ -247,10 +450,14 @@ public class BlockChainService {
      * 处理链分叉，实现最长链原则  最长一定是工作量最大
      */
     private void handleChainFork(Block newBlock) {
-        long blockHeight = newBlock.getHeight();
+        //0 1 2 3 4
+        //        4
+        //分叉的产生：当两个或多个节点在几乎同一时间，基于主链的同一个 “末端区块” 挖出了新的区块时，网络会暂时出现两条并行的链（例如：主链原本是 A→B→C，此时节点 1 挖出 C→D，节点 2 挖出 C→E，形成 A→B→C→D 和 A→B→C→E 两条链）。
+        //此时，节点 2 挖出的区块 E 就不是 “主链（此时可能是 C→D 链）” 的延续，而是另一条分支链的延续。
 
+        long blockHeight = newBlock.getHeight();  //对比新区块的父哈希与主链哈希，检测是否为分叉。
         // 如果新区块不是主链的延续，检查是否应该切换到新链
-        if (!Arrays.equals(newBlock.getPreviousHash(), getBlockHashByHeight(blockHeight - 1)  )) {
+        if (!Arrays.equals(newBlock.getPreviousHash(), getMainBlockHashByHeight(blockHeight - 1)  )) {
             // 计算新链的总难度
             long newChainDifficulty = calculateChainDifficulty(newBlock);
 
@@ -268,9 +475,8 @@ public class BlockChainService {
 
     private long calculateCurrentChainDifficulty() {
         long difficulty = 0;
-
         for (long i = 0; i <= getMainCurrentHeight(); i++) {
-            byte[] blockHash = getMainBlockByHeight(i);
+            byte[] blockHash = getMainBlockHashByHeight(i);
             if (blockHash != null) {
                 Block block = getBlockByHash(blockHash);
                 if (block != null) {
@@ -288,7 +494,7 @@ public class BlockChainService {
             // 简化处理，实际中应该根据区块难度目标计算
             difficulty += calculateDifficulty(current.getDifficultyTarget());
             // 检查是否是创世区块
-            if (Arrays.equals(current.getPreviousHash(), new byte[32])) {
+            if (Arrays.equals(current.getPreviousHash(), getGenesisBlockHash())) {
                 break;
             }
             current = getBlockByHash(current.getPreviousHash());
@@ -301,17 +507,39 @@ public class BlockChainService {
     /**
      * 根据难度目标计算难度值
      */
+    /**
+     * 根据难度目标计算难度值
+     */
     private long calculateDifficulty(byte[] difficultyTarget) {
-        // 简化处理，实际实现需要根据比特币难度目标算法计算
-        // 这里仅作为示例
+        // 创世区块的目标值 (0x1d00ffff)
+        // 这个值对应于比特币创世区块的难度目标
+        // 实际实现中应该从配置中获取
+        BigInteger genesisTarget = new BigInteger("00000000FFFF000000000000000000000000000000000000000000000000", 16);
 
+        // 将难度目标字节数组转换为BigInteger
+        // 注意：需要处理比特币的"紧凑格式"（Compact Size）
+        // 难度目标以"紧凑格式"存储，前导字节表示指数，后面3字节表示系数
+        // 格式：0xWWXXYYZZ → 0xXXYYZZ * 2^(8*(WW-3))
+        if (difficultyTarget == null || difficultyTarget.length != 4) {
+            return 1; // 默认为最低难度
+        }
 
+        // 解析紧凑格式的难度目标
+        int exponent = difficultyTarget[0] & 0xFF;
+        byte[] coefficientBytes = new byte[4];
+        coefficientBytes[0] = 0; // 确保是正数
+        coefficientBytes[1] = difficultyTarget[1];
+        coefficientBytes[2] = difficultyTarget[2];
+        coefficientBytes[3] = difficultyTarget[3];
 
-
-
-
-
-        return 1;
+        BigInteger coefficient = new BigInteger(coefficientBytes);
+        BigInteger target = coefficient.shiftLeft(8 * (exponent - 3));
+        // 计算难度值：创世目标 / 当前目标
+        // 由于Java的BigInteger不能直接转换为long而不丢失精度
+        // 我们使用double来近似表示，但在实际应用中可能需要更精确的表示
+        double difficulty = genesisTarget.doubleValue() / target.doubleValue();
+        // 转换为long（取整）
+        return (long) difficulty;
     }
 
 
@@ -332,12 +560,12 @@ public class BlockChainService {
         long blockHeight = block.getHeight();
         long currentHeight = getMainCurrentHeight();
         if (blockHeight > currentHeight ||
-                (blockHeight == currentHeight && isDifficultyGreater(block.getHash(), getBlockHashByHeight(currentHeight)))) {
+                (blockHeight == currentHeight && isDifficultyGreater(block.getHash(), getMainBlockHashByHeight(currentHeight)))) {
             // 如果新区块的父区块不是当前主链的最后一个区块，说明出现了分叉
-            if (!Arrays.equals(block.getPreviousHash(), getBlockHashByHeight(currentHeight) )) {
+            if (!Arrays.equals(block.getPreviousHash(), getMainBlockHashByHeight(currentHeight) )) {
                 log.info("检测到分叉，高度: {}, 主链: {}, 新链: {}",
                         blockHeight,
-                        CryptoUtil.bytesToHex(getBlockHashByHeight(currentHeight)),
+                        CryptoUtil.bytesToHex(getMainBlockHashByHeight(currentHeight)),
                         CryptoUtil.bytesToHex(block.getHash()));
 
                 // 切换到更长/更难的链
@@ -370,7 +598,7 @@ public class BlockChainService {
         // 2. 回滚当前主链到共同祖先
         List<Block> blocksToUndo = new ArrayList<>();
         for (long i = getMainCurrentHeight(); i > ancestorHeight; i--) {
-            byte[] blockHash = getMainBlockByHeight(i);
+            byte[] blockHash = getMainBlockHashByHeight(i);
             if (blockHash != null) {
                 Block block = getBlockByHash(blockHash);
                 if (block != null) {
@@ -439,14 +667,14 @@ public class BlockChainService {
             byte[] hash = current.getHash();
             newChainHashes.add(hash);
             // 检查是否是创世区块
-            if (Arrays.equals(current.getPreviousHash(), new byte[32])) {
+            if (Arrays.equals(current.getPreviousHash(), getGenesisBlockHash())) {
                 break;
             }
             current = getBlockByHash(hash);
         }
 
         // 从当前主链顶端开始向下查找共同祖先
-        current = getBlockByHash(  getMainBlockByHeight(getMainCurrentHeight()) );
+        current = getBlockByHash(  getMainBlockHashByHeight(getMainCurrentHeight()) );
         while (current != null) {
             String hashStr = CryptoUtil.bytesToHex(current.getHash());
             if (newChainHashes.contains(hashStr)) {
@@ -454,10 +682,9 @@ public class BlockChainService {
             }
 
             // 检查是否是创世区块
-            if (Arrays.equals(current.getPreviousHash(), new byte[32])) {
+            if (Arrays.equals(current.getPreviousHash(), getGenesisBlockHash())) {
                 break;
             }
-
             current = getBlockByHash(current.getPreviousHash());
         }
 
@@ -465,13 +692,20 @@ public class BlockChainService {
         return getGenesisBlock();
     }
 
+    /**
+     * 获取创世区块
+     */
     private Block getGenesisBlock() {
-        byte[] bytes = new byte[32];
 
-
-        // 实际实现中应该从存储中获取创世区块
-        // 这里简化处理
         return null;
+    }
+
+    /**
+     * 获取创世区块hash
+     * @return
+     */
+    public byte[] getGenesisBlockHash() {
+        return getGenesisBlock().getHash();
     }
 
 
@@ -479,11 +713,14 @@ public class BlockChainService {
     public long getMainCurrentHeight() {
         return 0;
     }
-
-    //通过高度获取主链条区块hash
-    public byte[] getBlockHashByHeight(long height) {
+    /**
+     * 主链 通过高度获取区块hash
+     */
+    public byte[] getMainBlockHashByHeight(long height) {
+        // 从数据库中获取区块
         return null;
     }
+
 
 
 
@@ -542,15 +779,7 @@ public class BlockChainService {
         
     }
 
-    private boolean validateTransactionsInBlock(Block block) {
-        for (Transaction transaction : block.getTransactions()) {
-            if (verifyTransaction(transaction).getCode() != 200) {
-                log.warn("交易验证失败，交易ID：{}", CryptoUtil.bytesToHex(transaction.getTxId()));
-                return false;
-            }
-        }
-        return true;
-    }
+
 
     /**
      * 验证区块合法性
@@ -575,24 +804,19 @@ public class BlockChainService {
             return false;
         }
 
-
-
-
-
-
-
         // 4. 验证交易合法性（略，需结合UTXO验证）
         return true;
     }
 
 
-    /**
-     * 主链 通过高度获取 区块hash
-     */
-    public byte[] getMainBlockByHeight(long height) {
+    //根据hash获取区块
+    public Block getBlockByHash(byte[] hash) {
         // 从数据库中获取区块
         return null;
     }
+
+
+
     //备选链 通过高度获取 区块hash
     public byte[] getBackupBlockByHeight(long height) {
         // 从数据库中获取区块
@@ -606,17 +830,23 @@ public class BlockChainService {
      * 检查哈希是否满足难度目标
      */
     private boolean isValidHash(byte[] hash, byte[] difficultyTarget) {
-
-
+        if (hash == null || difficultyTarget == null || hash.length != 32 || difficultyTarget.length != 32) {
+            return false;
+        }
+        // 难度目标格式为: [前导零字节数, 目标值的剩余部分]
+        // 简化处理，假设difficultyTarget直接是目标哈希值
+        for (int i = 0; i < hash.length; i++) {
+            if (hash[i] < difficultyTarget[i]) {
+                return true;
+            } else if (hash[i] > difficultyTarget[i]) {
+                return false;
+            }
+        }
         return true;
     }
 
 
-    //根据hash获取区块
-    public Block getBlockByHash(byte[] hash) {
-        // 从数据库中获取区块
-        return null;
-    }
+
 
 
     /**
@@ -651,6 +881,10 @@ public class BlockChainService {
      * 获取区块高度
      */
     public long getBlockHeight(byte[] hash) {
+        //获取区块
+        //获取高度
+
+
         return 100;
     }
 

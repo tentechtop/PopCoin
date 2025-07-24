@@ -152,6 +152,13 @@
             <groupId>io.netty</groupId>
             <artifactId>netty-transport</artifactId>
         </dependency>
+
+        <!--并行事件处理-->
+        <dependency>
+            <groupId>com.lmax</groupId>
+            <artifactId>disruptor</artifactId>
+            <version>3.4.4</version> <!-- 使用最新稳定版本 -->
+        </dependency>
     </dependencies>
 
 

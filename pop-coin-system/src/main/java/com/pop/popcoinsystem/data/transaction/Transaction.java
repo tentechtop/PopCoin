@@ -68,7 +68,7 @@ public class Transaction {
     private List<TXOutput> outputs = new ArrayList<>();;//交易的输出，可以有多个，本次交易的钱我可以转给多个不同的地址，包括给自己找零的钱。可以理解为 我本次交易的钱都给了哪些人。
 
     /**
-     * 是否隔离见证 0不是隔离见证  1是隔离见证
+     * 是否隔离见证 0普通交易  1隔离见证交易  未来可能还会有 方便扩展用策略模式
      */
     private int segWit;
     /**
