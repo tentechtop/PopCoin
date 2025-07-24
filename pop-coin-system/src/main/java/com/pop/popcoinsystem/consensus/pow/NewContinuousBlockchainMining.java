@@ -400,6 +400,9 @@ public class NewContinuousBlockchainMining {
                 MiningResult result = mineBlock(newBlock, threadCount);
                 long endTime = System.currentTimeMillis();
 
+
+
+
                 // 关键校验：只有找到有效哈希时才添加区块
                 if (result != null && result.found) {
                     newBlock.setNonce(result.nonce);

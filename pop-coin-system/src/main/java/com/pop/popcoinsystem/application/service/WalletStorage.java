@@ -32,7 +32,6 @@ public class WalletStorage {
     private static final String DB_PATH = "rocksDb/popCoin.db/blockChain" + POP_NET_VERSION + ".db/wallet";
     private static final String LOG_PATH = DB_PATH + "rocksdb_logs/"; // 单独目录存放 RocksDB 日志
 
-
     private static final byte[] KEY_LAST_BLOCK_CHAIN = "key_last_block_chain".getBytes();
     private static final byte[] KEY_LAST_BLOCK_HASH = "key_last_block_hash".getBytes();
     private static final byte[] KEY_NODE_SETTING = "key_node_setting".getBytes();
@@ -41,7 +40,6 @@ public class WalletStorage {
     // 使用枚举管理列族
     private enum ColumnFamily {
         WALLET("CF_WALLET", "wallet",new ColumnFamilyOptions()),
-
 
         ;
         private final String logicalName;

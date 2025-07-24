@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -221,7 +222,49 @@ public class WalletService {
 
         boolean b = CryptoUtil.ECDSASigner.verifySignature(keyPair.getPublic(), txToSign, signature);
         log.info("signature: {}",b);
+
+
+
+
+        // 4. 生成根私钥和根链码（BIP-32）
+        byte[] hmacResult = CryptoUtil.hmacSha512("Bitcoin seed".getBytes(), seed);
+        byte[] masterPrivKeyBytes = Arrays.copyOfRange(hmacResult, 0, 32); // 根私钥（32字节）
+        byte[] masterChainCode = Arrays.copyOfRange(hmacResult, 32, 64); // 根链码
+        // 5. 派生默认路径子私钥（如以太坊：m/44'/60'/0'/0/0）
+        List<Integer> defaultPath = Arrays.asList(
+                44 | 0x80000000,  // 44'（强化派生）
+                60 | 0x80000000,  // 60'（以太坊币种）
+                0 | 0x80000000,   // 0'（账户0）
+                0,                // 0（外部链）
+                2                 // 0（第一个地址）
+        );
+        PrivateKey childPrivKey = CryptoUtil.deriveChildPrivateKey(masterPrivKeyBytes, masterChainCode, defaultPath);
+
+        // 6. 生成公钥和地址
+        PublicKey pubKey = CryptoUtil.derivePublicKey(childPrivKey);
+        String pubKeyHex = CryptoUtil.bytesToHex(pubKey.getEncoded());
+        String address = CryptoUtil.ECDSASigner.createP2PKHAddressByPK(pubKey.getEncoded()); // 实现地址生成方法
+        log.info("address: {}", address);
+
+
+        byte[] signature2 = CryptoUtil.ECDSASigner.applySignature(childPrivKey, txToSign);
+
+        boolean b2 = CryptoUtil.ECDSASigner.verifySignature(pubKey, txToSign, signature2);
+        log.info("signature: {}",b2);
+
+
+        ///m/44'/60'/0'/0/0：以太坊主账户的第一个接收地址
+        //m/44'/60'/0'/0/1：以太坊主账户的第二个接收地址
+        //m/44'/60'/0'/1/0：以太坊主账户的第一个 Change 地址（用于找零）
+
+
+
+        //而是采用按需派生和 ** 间隙检测（Gap Limit）** 的策略。以下是详细解释：
+
     }
+
+
+
 
     private Wallet createPasswordMnemonicWallet(WalletVO walletVO) {
 

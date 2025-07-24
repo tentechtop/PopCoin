@@ -39,4 +39,10 @@ public class UTXO {
     private ScriptPubKey scriptPubKey;  // 锁定脚本，定义资金使用条件
 
 
+    /**
+     * UTXO状态   0 未花费   1 已花费   2 待花费无法被选中  3 已经在交易池中待打包确认
+     */
+    private int status;
+
+
 }

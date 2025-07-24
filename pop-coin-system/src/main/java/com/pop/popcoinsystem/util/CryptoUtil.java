@@ -4,6 +4,10 @@ import com.pop.popcoinsystem.PopCoinSystemApplication;
 import com.pop.popcoinsystem.data.transaction.TxSigType;
 import com.pop.popcoinsystem.network.enums.NETVersion;
 import lombok.extern.slf4j.Slf4j;
+import org.bouncycastle.asn1.x9.X9ECParameters;
+import org.bouncycastle.crypto.digests.SHA512Digest;
+import org.bouncycastle.crypto.macs.HMac;
+import org.bouncycastle.crypto.params.KeyParameter;
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPrivateKey;
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPublicKey;
 import org.bouncycastle.jcajce.provider.digest.Keccak;
@@ -11,7 +15,9 @@ import org.bouncycastle.jce.ECNamedCurveTable;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.jce.spec.ECNamedCurveParameterSpec;
 import org.bouncycastle.jce.spec.ECPrivateKeySpec;
+import org.bouncycastle.jce.spec.ECPublicKeySpec;
 import org.bouncycastle.math.ec.ECPoint;
+import org.bouncycastle.math.ec.FixedPointCombMultiplier;
 
 import javax.crypto.Cipher;
 import javax.crypto.Mac;
@@ -30,6 +36,7 @@ import java.security.*;
 import java.security.spec.*;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 
 
@@ -43,6 +50,120 @@ public class CryptoUtil {
     public static int POP_NET_VERSION = 1; //默认主网
     public static byte PRE_P2PKH = 0x00;
     public static byte PRE_P2SH = 0x05;
+
+
+    // secp256k1曲线参数（比特币/以太坊使用）
+    private static final X9ECParameters SECP256K1_PARAMS = org.bouncycastle.asn1.sec.SECNamedCurves.getByName("secp256k1");
+    private static final BigInteger CURVE_ORDER = SECP256K1_PARAMS.getN(); // 曲线阶数（私钥必须小于该值）
+    private static final ECPoint G = SECP256K1_PARAMS.getG(); // 生成点
+
+
+    // ------------------------------
+    // 1. 实现HMAC-SHA512算法（BIP-32基础）
+    // ------------------------------
+    public static byte[] hmacSha512(byte[] key, byte[] data) {
+        HMac hmac = new HMac(new SHA512Digest());
+        hmac.init(new KeyParameter(key));
+        hmac.update(data, 0, data.length);
+        byte[] result = new byte[hmac.getMacSize()];
+        hmac.doFinal(result, 0);
+        return result;
+    }
+
+
+    // ------------------------------
+    // 2. 从私钥派生公钥（secp256k1曲线）
+    // ------------------------------
+    public static PublicKey derivePublicKey(PrivateKey privateKey) {
+        try {
+            BigInteger privKey = ((java.security.interfaces.ECPrivateKey) privateKey).getS();
+            ECPoint publicPoint = new FixedPointCombMultiplier().multiply(G, privKey);
+
+            ECNamedCurveParameterSpec curveSpec = ECNamedCurveTable.getParameterSpec("secp256k1");
+            // 直接使用SECP256K1_SPEC作为参数
+            ECPublicKeySpec ecPublicKeySpec = new ECPublicKeySpec(publicPoint, curveSpec);
+
+            KeyFactory keyFactory = KeyFactory.getInstance("EC", "BC");
+            return keyFactory.generatePublic(ecPublicKeySpec);
+        } catch (NoSuchAlgorithmException | InvalidKeySpecException | NoSuchProviderException e) {
+            throw new RuntimeException("公钥派生失败", e);
+        }
+    }
+
+
+    // ------------------------------
+    // 3. 派生子私钥（BIP-32分层派生）
+    // 输入：父私钥、父链码、派生路径（如[44|0x80000000, 60|0x80000000, ...]）
+    // 输出：子私钥
+    // ------------------------------
+    public static PrivateKey deriveChildPrivateKey(byte[] parentPrivKeyBytes, byte[] parentChainCode, List<Integer> path) {
+        BigInteger parentPrivKey = new BigInteger(1, parentPrivKeyBytes);
+        byte[] currentChainCode = parentChainCode;
+
+        for (int index : path) {
+            // 1. 构建HMAC-SHA512的输入数据（区分强化派生和普通派生）
+            byte[] data = new byte[37]; // 32字节公钥/私钥 + 4字节索引
+            if ((index & 0x80000000) != 0) {
+                // 强化派生（索引 >= 0x80000000）：输入父私钥（需补0x00前缀）
+                data[0] = 0x00;
+                System.arraycopy(parentPrivKey.toByteArray(), 0, data, 1, 32);
+            } else {
+                // 普通派生：输入父公钥
+                PublicKey parentPubKey = derivePublicKey(
+                        bytesToPrivateKey(parentPrivKeyBytes)
+                );
+                byte[] pubKeyBytes = parentPubKey.getEncoded();
+                System.arraycopy(pubKeyBytes, 0, data, 0, 33); // 33字节压缩公钥
+            }
+            // 写入4字节索引（大端模式）
+            data[33] = (byte) (index >> 24);
+            data[34] = (byte) (index >> 16);
+            data[35] = (byte) (index >> 8);
+            data[36] = (byte) index;
+
+            // 2. 计算HMAC-SHA512得到派生结果（64字节：前32字节=k，后32字节=新链码）
+            byte[] hmacResult = hmacSha512(currentChainCode, data);
+            byte[] k = Arrays.copyOfRange(hmacResult, 0, 32);
+            currentChainCode = Arrays.copyOfRange(hmacResult, 32, 64);
+
+            // 3. 计算子私钥 = (父私钥 + k) mod 曲线阶数
+            BigInteger kInt = new BigInteger(1, k);
+            BigInteger childPrivKey = parentPrivKey.add(kInt).mod(CURVE_ORDER);
+
+            // 4. 更新父私钥为当前子私钥（用于下一层派生）
+            parentPrivKey = childPrivKey;
+        }
+
+        // 5. 转换为PrivateKey对象
+        return bytesToPrivateKey(parentPrivKey.toByteArray());
+    }
+
+
+    // ------------------------------
+    // 辅助方法：字节数组转私钥对象
+    // ------------------------------
+    // 修正的字节转私钥方法
+    public static PrivateKey bytesToPrivateKey(byte[] privKeyBytes) {
+        try {
+            byte[] normalized = new byte[32];
+            System.arraycopy(privKeyBytes, Math.max(0, privKeyBytes.length - 32), normalized, Math.max(0, 32 - privKeyBytes.length), Math.min(32, privKeyBytes.length));
+
+            BigInteger privKey = new BigInteger(1, normalized);
+
+            // 3. 获取secp256k1曲线参数（使用Bouncy Castle的ECNamedCurveParameterSpec）
+            ECNamedCurveParameterSpec curveSpec = ECNamedCurveTable.getParameterSpec("secp256k1");
+
+            // 直接使用SECP256K1_SPEC作为参数
+            ECPrivateKeySpec privKeySpec = new ECPrivateKeySpec(privKey, curveSpec);
+
+            KeyFactory keyFactory = KeyFactory.getInstance("EC", "BC");
+            return keyFactory.generatePrivate(privKeySpec);
+        } catch (NoSuchAlgorithmException | InvalidKeySpecException | NoSuchProviderException e) {
+            throw new RuntimeException("私钥转换失败", e);
+        }
+    }
+
+
 
     static {
         // 从类路径根目录加载application.yml

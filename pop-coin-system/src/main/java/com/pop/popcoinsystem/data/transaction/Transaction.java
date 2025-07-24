@@ -43,11 +43,6 @@ public class Transaction {
     private long size;
 
     /**
-     * 交易手续费
-     */
-    private long fee;
-
-    /**
      * 权重
      */
     private long weight;
@@ -73,9 +68,9 @@ public class Transaction {
     private List<TXOutput> outputs = new ArrayList<>();;//交易的输出，可以有多个，本次交易的钱我可以转给多个不同的地址，包括给自己找零的钱。可以理解为 我本次交易的钱都给了哪些人。
 
     /**
-     * 是否隔离见证
+     * 是否隔离见证 0不是隔离见证  1是隔离见证
      */
-    private boolean segWit;
+    private int segWit;
     /**
      * 见证数据
      */
@@ -83,15 +78,15 @@ public class Transaction {
 
 
     /**
-     * 获取这笔交易的hash
-     * 计算交易哈希时，应排除txId字段，避免递归计算
+     * 计算交易ID
+     * 后面改成隔离见证
      */
-    public void setTxId() {
-        // 先临时将txId设为null，避免递归计算
-        this.txId = null;
-        // 序列化交易数据并计算哈希
-        this.txId = CryptoUtil.applySHA256(SerializeUtils.serialize(this));
+    public static byte[] calculateTxId(Transaction transaction) {
+        return DigestUtils.sha256(SerializeUtils.serialize(transaction));
     }
+
+
+
 
     /**
      * 计算交易权重
@@ -218,7 +213,40 @@ public class Transaction {
 
 
     public long getFeePerByte() {
-        return fee / size;
+        return calculateFee() / size;
+    }
+
+
+    // 在创建交易时计算手续费
+    public long calculateFee() {
+        long fee = 0;
+        long inputSum = 0;
+        for (TXInput input : inputs) {
+            // 获取该输入引用的输出金额（需要从UTXO集获取）
+            TXOutput referencedOutput = getReferencedOutput(input);
+            if (referencedOutput != null) {
+                inputSum += referencedOutput.getValue();
+            }
+        }
+
+        long outputSum = 0;
+        for (TXOutput output : outputs) {
+            outputSum += output.getValue();
+        }
+
+        fee = inputSum - outputSum;
+        if (fee < 0) {
+            throw new IllegalArgumentException("交易输出总额超过输入总额");
+        }
+        return fee;
+    }
+
+
+
+    // 获取引用的输出（需要从UTXO集获取，这里只是示例方法）
+    private TXOutput getReferencedOutput(TXInput input) {
+        // 实现从UTXO集获取引用的输出
+        return null;
     }
 
 
@@ -230,5 +258,6 @@ public class Transaction {
 
         return new Transaction();
     }
+
 
 }

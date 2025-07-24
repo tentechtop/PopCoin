@@ -22,7 +22,6 @@ public class ByteUtils {
         for (byte[] b : bytes) {
             stream=Stream.concat(stream, Arrays.stream(ArrayUtils.toObject(b)));
         }
-
         return ArrayUtils.toPrimitive(stream.toArray(Byte[]::new));
     }
 
@@ -36,18 +35,11 @@ public class ByteUtils {
      */
     public static byte[] add(byte[] data1, byte[] data2)
     {
-
         byte[] result = new byte[data1.length + data2.length];
         System.arraycopy(data1, 0, result, 0, data1.length);
         System.arraycopy(data2, 0, result, data1.length, data2.length);
-
         return result;
     }
-
-
-
-
-
 
     /**
      * long 类型转 byte[]
@@ -58,6 +50,24 @@ public class ByteUtils {
     public static byte[] toBytes(long val) {
         return ByteBuffer.allocate(Long.BYTES).putLong(val).array();
     }
+
+    /**
+     * byte[] to LONG
+     */
+    public static long bytesToLong(byte[] bytes) {
+        return ByteBuffer.wrap(bytes).getLong();
+    }
+
+    //测试
+    public static void main(String[] args) {
+        long myLong = 123456789L;
+        byte[] bytes = ByteUtils.toBytes(myLong);
+        System.out.println(Arrays.toString( ByteUtils.toBytes(myLong)) );
+        System.out.println(ByteUtils.bytesToLong(bytes));
+    }
+
+
+
 
     /**
      * 字节数组转十六进制字符串
@@ -82,6 +92,7 @@ public class ByteUtils {
         }
         return data;
     }
+
 
 
 

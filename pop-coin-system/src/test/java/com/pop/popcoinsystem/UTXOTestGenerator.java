@@ -3,7 +3,6 @@ package com.pop.popcoinsystem;
 import com.pop.popcoinsystem.application.service.Wallet;
 import com.pop.popcoinsystem.application.service.WalletStorage;
 import com.pop.popcoinsystem.data.storage.POPStorage;
-import com.pop.popcoinsystem.data.storage.ShardMetadata;
 import com.pop.popcoinsystem.data.transaction.UTXO;
 import com.pop.popcoinsystem.util.CryptoUtil;
 
@@ -50,7 +49,7 @@ public class UTXOTestGenerator {
                     batch.add(createRandomUTXO());
                 }
                 // 批量添加到存储
-                storage.addUtxos(batch);
+                storage.putUTXOBatch(batch);
                 int completed = progress.addAndGet(BATCH_SIZE);
                 if (completed % (BATCH_SIZE * 100) == 0) {
                     log.info("已生成: " + completed + "/" + count);
@@ -66,7 +65,7 @@ public class UTXOTestGenerator {
                 for (int j = 0; j < remaining; j++) {
                     batch.add(createRandomUTXO());
                 }
-                storage.addUtxos(batch);
+                storage.putUTXOBatch(batch);
                 log.info("已生成: " + count + "/" + count);
             });
         }
@@ -137,16 +136,24 @@ public class UTXOTestGenerator {
         POPStorage instance1 = POPStorage.getInstance();
         UTXOTestGenerator generator = new UTXOTestGenerator(instance1);
         // 生成100万个UTXO
-     /*   generator.generateUTXOs(1_000_000);*/
+/*        generator.generateUTXOs(1_000_000);*/
         String publicKeyHex = walleta.getPublicKeyHex();
         String address  = CryptoUtil.ECDSASigner.createP2PKHAddressByPK(CryptoUtil.hexToBytes(publicKeyHex));
-/*        List<ShardMetadata> shardMetadataByAddress = instance1.getShardMetadataByAddress(address);*/
 
-        List<UTXO> utxosByAddress = instance1.getUtxosByAddress(address);
-        log.info("地址: " + address + " 的UTXO数量: " + utxosByAddress.size());
-        for (UTXO utxo : utxosByAddress) {
-            log.info("UTXO: " + utxo);
-            instance1.deleteUtxo(utxo);
+        POPStorage.PageResult<UTXO> utxoPageResult = instance1.queryUTXOPage(5000, null);
+        log.info("查询结果：" + utxoPageResult.getData().size());
+        List<UTXO> data = utxoPageResult.getData();
+        for (UTXO utxo : data) {
+            log.info("查询结果：" + CryptoUtil.bytesToHex(utxo.getTxId()) + ":" + utxo.getVout());
+        }
+        //获得最后一个
+        UTXO lastUTXO = data.get(data.size() - 1);
+        log.info("最后查询结果：" + CryptoUtil.bytesToHex(lastUTXO.getTxId()) + ":" + lastUTXO.getVout());
+        String key = CryptoUtil.bytesToHex(lastUTXO.getTxId()) + ":" + lastUTXO.getVout();
+        POPStorage.PageResult<UTXO> utxoPageResult1 = instance1.queryUTXOPage(5000, key);
+        log.info("查询结果：" + utxoPageResult1.getData().size());
+        for (UTXO utxo : utxoPageResult1.getData()) {
+            log.info("查询结果：" + CryptoUtil.bytesToHex(utxo.getTxId()) + ":" + utxo.getVout());
         }
 
 
