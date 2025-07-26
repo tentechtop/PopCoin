@@ -5,6 +5,9 @@ import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.block.BlockVO;
 import com.pop.popcoinsystem.data.blockChain.BlockChain;
 import com.pop.popcoinsystem.data.enums.UTXOStatus;
+import com.pop.popcoinsystem.data.script.Script;
+import com.pop.popcoinsystem.data.script.ScriptPubKey;
+import com.pop.popcoinsystem.data.script.ScriptSig;
 import com.pop.popcoinsystem.data.storage.POPStorage;
 import com.pop.popcoinsystem.data.transaction.*;
 import com.pop.popcoinsystem.data.vo.result.Result;
@@ -17,6 +20,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigInteger;
 import java.util.*;
 
+import static com.pop.popcoinsystem.data.script.Script.OP_RETURN;
 import static com.pop.popcoinsystem.util.CryptoUtil.ECDSASigner.verifySignature;
 import static com.pop.popcoinsystem.util.Numeric.hexStringToByteArray;
 
@@ -28,7 +32,6 @@ public class BlockChainService {
     @Resource
     private MiningService miningService;
 
-
     // 系统启动时执行
     private void initBlockChain() {
         // 检查是否已存在创世区块
@@ -39,11 +42,8 @@ public class BlockChainService {
         }
     }
 
-
-
     // CoinBase交易成熟度要求
     private static final int COINBASE_MATURITY = 100;
-
 
     //创建创世区块
     /**
@@ -60,7 +60,6 @@ public class BlockChainService {
         genesisBlock.setHeight(0); // 创世区块高度为0
         genesisBlock.setPreviousHash(new byte[32]); // 前序哈希为全零
         genesisBlock.setVersion(1); // 版本号
-
 
         // 2. 设置时间戳（使用比特币创世时间类似的格式，这里使用系统启动时间）
         long genesisTime = 1620000000; // 示例时间戳（2021-05-03）
@@ -111,36 +110,34 @@ public class BlockChainService {
      */
     private Transaction createGenesisCoinbaseTransaction() {
         Transaction coinbaseTx = new Transaction();
-        coinbaseTx.setSegWit(0); // 创世区块使用普通交易格式
-
         // 创建特殊输入（引用自身）
         TXInput input = new TXInput();
         input.setTxId(new byte[32]); // 全零交易ID
-        input.setVout(-1); // 特殊值表示CoinBase交易
+        input.setVout(0); // 特殊值表示CoinBase交易
         byte[] bytes = "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks".getBytes();
-        input.setScriptSig(null); // 创世信息
+        ScriptSig scriptSig = new ScriptSig(bytes);
+        input.setScriptSig(scriptSig);
+        input.setScriptSig(null); // 创世信息   解锁脚本
         List<TXInput> inputs = new ArrayList<>();
         inputs.add(input);
         coinbaseTx.setInputs(inputs);
-
         // 创建输出（初始奖励50 BTC = 50*1e8聪）
         TXOutput output = new TXOutput();
         output.setValue(50L * 100000000); // 50 BTC in satoshi
         // 创世区块奖励地址（可以替换为你的项目地址）
         String address = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa";
-        output.setScriptPubKey(null);
-
+        //获取地址公钥哈希
+        byte[] addressHash = CryptoUtil.ECDSASigner.getAddressHash(address);
+        ScriptPubKey pubKey = new ScriptPubKey(addressHash);
+        output.setScriptPubKey(pubKey);
         List<TXOutput> outputs = new ArrayList<>();
         outputs.add(output);
         coinbaseTx.setOutputs(outputs);
-
         // 计算交易ID
         byte[] txId = Transaction.calculateTxId(coinbaseTx);
         coinbaseTx.setTxId(txId);
-
         return coinbaseTx;
     }
-
 
     /**
      * 验证交易
@@ -155,8 +152,8 @@ public class BlockChainService {
             return Result.error("交易格式无效");
         }
         //是普通交易 还是 隔离见证交易
-        int segWit = transaction.getSegWit();
-        if (segWit == 0){
+
+        if (transaction.isSegWit()){
             //普通交易验证
             // 2. 验证交易ID
             byte[] calculatedTxId = Transaction.calculateTxId(transaction);
@@ -165,8 +162,6 @@ public class BlockChainService {
                 return Result.error("交易ID不匹配");
             }
             List<TXInput> inputs = transaction.getInputs();
-
-
 
             for (TXInput input : transaction.getInputs()) {
                 UTXO utxo = getUTXO(input.getTxId(), input.getVout());
@@ -186,13 +181,8 @@ public class BlockChainService {
 
 
                 // 验证数字签名
-                String address = utxo.getAddress();  //在普通交易中 地址类型只有两种 P2PKH 和 P2SH
-                TxSigType addressType = CryptoUtil.ECDSASigner.getAddressType(address);
-                //如果不等于这两种类型
-                if (addressType != TxSigType.P2PKH && addressType != TxSigType.P2SH) {
-                    log.error("地址类型无效");
-                    return Result.error("地址类型无效");
-                }
+
+
             }
             // 添加交易输出到临时UTXO集合
             for (int j = 0; j < transaction.getOutputs().size(); j++) {
@@ -201,7 +191,6 @@ public class BlockChainService {
                 utxo.setTxId(transaction.getTxId());
                 utxo.setVout(j);
                 utxo.setValue(transaction.getOutputs().get(j).getValue());
-                utxo.setAddress(utxo.getAddress());
                 utxo.setScriptPubKey(utxo.getScriptPubKey());
                 //TODO 保存
             }
@@ -237,13 +226,6 @@ public class BlockChainService {
 
 
 
-
-
-
-
-
-
-
         //验证通过后
 
         //广播交易
@@ -272,12 +254,7 @@ public class BlockChainService {
             Transaction tx = block.getTransactions().get(i);
             // 特殊处理CoinBase交易
             if (i == 0) {
-                int segWit = tx.getSegWit();
-                if (segWit == 0){
 
-                }else {
-
-                }
                 // 添加CoinBase交易的输出到临时UTXO集合
                 for (int j = 0; j < tx.getOutputs().size(); j++) {
                     UTXO utxo = new UTXO();
@@ -288,35 +265,12 @@ public class BlockChainService {
                 }
                 continue;
             }
-            int segWit = tx.getSegWit();
-            if (segWit == 0){
-                // 验证普通交易
-                for (TXInput input : tx.getInputs()) {
-                    UTXO utxo = getUTXO(input.getTxId(), input.getVout());
-                    String utxoKey = getUTXOKey(input.getTxId(), input.getVout());
-                    if (utxo == null) {
-                        log.error("交易引用的UTXO不存在: {}", utxoKey);
-                        return false;
-                    }
-                    // 验证数字签名
-
-                    // 标记为已花费
-                }
-                // 添加交易输出到临时UTXO集合
-                for (int j = 0; j < tx.getOutputs().size(); j++) {
-                    UTXO utxo = new UTXO();
-                    utxo.setTxId(tx.getTxId());
-                    utxo.setVout(j);
-                }
-            }else {
 
 
 
 
 
 
-
-            }
         }
 
         return true;
@@ -705,7 +659,11 @@ public class BlockChainService {
      * @return
      */
     public byte[] getGenesisBlockHash() {
-        return getGenesisBlock().getHash();
+
+
+
+
+        return null;
     }
 
 

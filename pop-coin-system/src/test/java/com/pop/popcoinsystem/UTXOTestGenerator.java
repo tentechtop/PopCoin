@@ -104,7 +104,6 @@ public class UTXOTestGenerator {
 
             // 创建UTXO
             UTXO utxo = new UTXO();
-            utxo.setAddress(address);
             // 生成随机金额 (0.00000001 - 10 BTC)
             long satoshiValue = (long) ((random.nextDouble() * 10 + 0.00000001) * 100000000);
             utxo.setValue(satoshiValue);

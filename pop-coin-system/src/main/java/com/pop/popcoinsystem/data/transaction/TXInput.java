@@ -37,4 +37,11 @@ public class TXInput {
     /** 序列号（用于时间锁定，默认0xFFFFFFFF） */
     private long sequence = 0xFFFFFFFFL;
 
+
+    public TXInput(byte[] txId, int vout, ScriptSig scriptSig) {
+        this.txId = txId;
+        this.vout = vout;
+        this.scriptSig = scriptSig;
+    }
+
 }

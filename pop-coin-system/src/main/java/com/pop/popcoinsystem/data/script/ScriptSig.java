@@ -19,27 +19,46 @@ import java.util.List;
 @Data
 public class ScriptSig extends Script {
 
-    //输入脚本（ScriptSig）的构成要素有数字签名和公钥
-    //谁能提供签名和公钥并通过验证 谁就能拥有未花费输出
+    //创建
+    public ScriptSig(byte[] embeddedMessage) {
+        super();
+        // 添加嵌入的文本（如果有）
+        addOpCode(OP_RETURN);
+        addData(embeddedMessage);
+    }
 
-    // 公钥
-    private PublicKey publicKey;
-    // 签名
-    private byte[] signature;
 
-    // 标准构造函数
     public ScriptSig(byte[] signature, PublicKey publicKey) {
         super();
-        this.signature = signature;
-        this.publicKey = publicKey;
         // 添加签名
         addData(signature);
         // 添加公钥
         addData(publicKey.getEncoded());
     }
 
+
+    public ScriptSig(byte[] signature, PublicKey publicKey, byte[] embeddedMessage) {
+        super();
+        // 添加签名
+        addData(signature);
+        // 添加公钥
+        addData(publicKey.getEncoded());
+        // 添加嵌入的文本（如果有）
+
+    }
+
     // 从私钥生成解锁脚本
     public static ScriptSig fromPrivateKey(PrivateKey privateKey, PublicKey publicKey, Transaction transaction) {
+        //对交易进行hash
+        byte[] serialize = SerializeUtils.serialize(transaction);
+        byte[] bytes = CryptoUtil.applySHA256(serialize);//这笔交易的 hash
+        //对交易进行签名
+        byte[] signature = CryptoUtil.ECDSASigner.applySignature(privateKey, bytes);
+        return new ScriptSig(signature, publicKey);
+    }
+
+    //创建P2PKH
+    public static ScriptSig createP2PKH(PrivateKey privateKey, PublicKey publicKey, Transaction transaction) {
         //对交易进行hash
         byte[] serialize = SerializeUtils.serialize(transaction);
         byte[] bytes = CryptoUtil.applySHA256(serialize);//这笔交易的 hash
@@ -93,9 +112,6 @@ public class ScriptSig extends Script {
         return script;
     }
 
-
-
-
     // 创建P2WPKH解锁脚本
 
 
@@ -126,12 +142,8 @@ public class ScriptSig extends Script {
         }
     }
 
-
-
-
-
     // 私有构造函数
-    private ScriptSig() {
+    public ScriptSig() {
         super();
     }
 

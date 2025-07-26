@@ -303,6 +303,8 @@ public class MiningService {
 
                 ArrayList<Transaction> blockTransactions = new ArrayList<>();
                 //创建CoinBase交易 放在第一位
+
+
                 Transaction coinBaseTransaction = Transaction.createCoinBaseTransaction(miner.getAddress());
                 blockTransactions.add(coinBaseTransaction);
                 blockTransactions.addAll(transactions);

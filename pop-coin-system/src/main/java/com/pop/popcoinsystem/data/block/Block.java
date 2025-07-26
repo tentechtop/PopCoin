@@ -101,12 +101,10 @@ public class Block implements Serializable {
         if (transactions == null || transactions.isEmpty()) {
             return new byte[32]; // 返回32字节的零数组
         }
-
         // 1. 计算所有交易的哈希值
         List<byte[]> transactionHashes = transactions.stream()
-                .map(Transaction::getTxId) // 假设Transaction类有getHash()方法返回交易哈希
+                .map(Transaction::getTxId) // 方法返回交易哈希
                 .collect(Collectors.toList());
-
         // 2. 开始构建默克尔树
         return buildMerkleTree(transactionHashes);
     }

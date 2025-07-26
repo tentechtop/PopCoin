@@ -22,6 +22,55 @@ import static com.pop.popcoinsystem.util.CryptoUtil.bytesToHex;
 @Slf4j
 public class Script {
 
+    /**
+     * ScriptSig().getData() 的核心是提取解锁脚本中用于验证交易合法性的原始数据，这些数据通常包括交易签名、公钥等关键信息，是证明 “
+     * 当前转账者有权限花费该笔比特币” 的核心依据。在代码层面，
+     * 它通过获取 Script 中所有 “数据类型元素” 的字节数组，为后续的脚本执行（如签名验证、哈希匹配）提供原始素材。
+     */
+    /**
+     * 获取 ScriptSig 中所有数据元素的字节数组列表
+     * （即所有非操作码的元素，如签名、公钥等）
+     * @return 数据元素列表，每个元素为字节数组
+     */
+    public List<byte[]> getData() {
+        List<byte[]> dataList = new ArrayList<>();
+        // 遍历脚本中的所有元素
+        for (ScriptElement element : getElements()) {
+            // 仅收集非操作码的元素（数据类型）
+            if (!element.isOpCode()) {
+                dataList.add(element.getData()); // 调用 ScriptElement 的 getData() 获取原始字节
+            }
+        }
+        return dataList;
+    }
+
+    /**
+     * 简化版：获取 ScriptSig 中第一个数据元素（常用于单签名场景）
+     * 例如 P2PKH 交易中，第一个数据为签名，第二个为完整公钥
+     * @return 第一个数据元素的字节数组，若不存在则返回空数组
+     */
+    public byte[] getFirstData() {
+        List<byte[]> dataList = getData();
+        return dataList.isEmpty() ? new byte[0] : dataList.get(0);
+    }
+
+    /**
+     * 合并所有数据元素为一个字节数组（按顺序拼接）
+     * 用于需要整体处理数据的场景（如序列化、哈希计算）
+     * @return 合并后的字节数组
+     */
+    public byte[] getCombinedData() {
+        try (ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
+            for (byte[] data : getData()) {
+                bos.write(data);
+            }
+            return bos.toByteArray();
+        } catch (IOException e) {
+            throw new RuntimeException("合并数据元素失败", e);
+        }
+    }
+
+
     // 脚本元素类
     public static class ScriptElement {
         private int opCode;
@@ -1243,4 +1292,24 @@ public class Script {
 
     }
 
+
+    // 类型
+    private int type;
+    // hex表示 脚本表示
+    private String hex;
+
+    // 提供受保护的设置方法
+    protected void setType(int type) {
+        this.type = type;
+    }
+    protected void setHex() {
+        this.hex = bytesToHex(serialize());
+    }
+    public int getType() {
+        return type;
+    }
+
+    public String getHex() {
+        return hex;
+    }
 }

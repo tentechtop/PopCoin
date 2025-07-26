@@ -2,9 +2,6 @@ package com.pop.popcoinsystem.data.storage;
 
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.miner.Miner;
-import com.pop.popcoinsystem.data.storage.back.TestStorage2;
-import com.pop.popcoinsystem.data.transaction.TXOutput;
-import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.data.transaction.UTXO;
 import com.pop.popcoinsystem.network.common.NodeSettings;
 import com.pop.popcoinsystem.util.ByteUtils;
@@ -16,14 +13,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.rocksdb.*;
 
 import java.io.File;
-import java.io.Serializable;
 import java.util.*;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
 
@@ -32,121 +24,14 @@ import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
 public class POPStorage {
     // 数据库存储路径
     private static final String DB_PATH = "rocksDb/popCoin.db/blockChain" + POP_NET_VERSION + ".db/";
-
     //这些KEY都保存在BLOCK_CHAIN 中 因为他们单独特殊
     private static final byte[] KEY_UTXO_COUNT = "key_utxo_count".getBytes();//UTXO总数
-
-    private static final byte[] KEY_GENESIS_BLOCK = "key_genesis_block_hash".getBytes();//创世区块hash
+    private static final byte[] KEY_GENESIS_BLOCK_HASH = "key_genesis_block_hash".getBytes();//创世区块hash
     private static final byte[] KEY_MAIN_CURRENT_HEIGHT = "key_main_current_height".getBytes();//主链当前高度
-
 
     private static final byte[] KEY_NODE_SETTING = "key_node_setting".getBytes();
     private static final byte[] KEY_MINER = "key_miner".getBytes();
 
-
-    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
-    private final RocksDB db;
-    private static class InstanceHolder {
-        private static final POPStorage INSTANCE = new POPStorage();
-    }
-    public static POPStorage getInstance() {
-        return POPStorage.InstanceHolder.INSTANCE;
-    }
-
-    private POPStorage() {
-        try {
-            this.db = openRocksDBWithColumnFamilies();
-            registerShutdownHook();
-        } catch (RocksDBException e) {
-            log.error("初始化数据库失败", e);
-            throw new RuntimeException("数据库初始化失败", e);
-        }
-    }
-
-    private RocksDB openRocksDBWithColumnFamilies() throws RocksDBException {
-        File dbDir = new File(DB_PATH);
-        if (!dbDir.exists()) {
-            boolean mkdirs = dbDir.mkdirs();
-            if (!mkdirs) {
-                throw new RuntimeException("创建数据库目录失败: " + DB_PATH);
-            }
-        }
-
-        // 1. 读取现有列族
-        List<byte[]> bytes = RocksDB.listColumnFamilies(new Options(), DB_PATH);
-        List<String> existingCfNames = new ArrayList<>();
-        for (byte[] bytes1 : bytes) {
-            existingCfNames.add(new String(bytes1));
-        }
-        List<ColumnFamilyDescriptor> cfDescriptors = new ArrayList<>();
-        List<ColumnFamilyHandle> cfHandles = new ArrayList<>();
-
-        // 2. 配置默认列族（必须包含）
-        cfDescriptors.add(new ColumnFamilyDescriptor(RocksDB.DEFAULT_COLUMN_FAMILY, new ColumnFamilyOptions()));
-
-        // 3. 配置自定义列族（不存在则创建）
-        for (ColumnFamily cf : ColumnFamily.values()) {
-            String cfName = cf.actualName;
-            ColumnFamilyOptions options = cf.options;
-            cfDescriptors.add(new ColumnFamilyDescriptor(cfName.getBytes(), options));
-        }
-
-        // 4. 打开数据库并获取列族句柄
-        DBOptions options = new DBOptions()
-                .setCreateIfMissing(true) // 保持原有的"如果不存在则创建"行为
-                .setCreateMissingColumnFamilies(true)
-                .setInfoLogLevel(InfoLogLevel.ERROR_LEVEL) // 禁用INFO日志（LOG文件）
-                .setMaxLogFileSize(1024 * 1024) // 限制日志文件大小和保留数量（避免无限增长）
-                .setKeepLogFileNum(2); // 最多保留 2 个日志文件
-
-        // 配置日志
-        String logDir = DB_PATH + "rocksdb_logs/"; // 单独目录存放 RocksDB 日志
-        new File(logDir).mkdirs(); // 确保目录存在
-        options.setDbLogDir(logDir);
-
-        RocksDB db = RocksDB.open(options, DB_PATH, cfDescriptors, cfHandles);
-
-        // 5. 绑定列族句柄（索引对应cfDescriptors顺序）
-        // 跳过默认列族（索引0），从1开始绑定自定义列族
-        for (int i = 0; i < ColumnFamily.values().length; i++) {
-            ColumnFamily.values()[i].setHandle(cfHandles.get(i + 1));
-        }
-        return db;
-    }
-
-    /**
-     * 注册JVM关闭钩子，确保资源释放
-     */
-    private void registerShutdownHook() {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            log.info("关闭数据库资源...");
-            closeInternal();
-        }));
-    }
-
-    /**
-     * 手动关闭数据库（一般无需调用，依赖关闭钩子）
-     */
-    public void close() {
-        log.info("手动关闭数据库资源...");
-        closeInternal();
-    }
-
-    /**
-     * 内部关闭方法，统一处理资源释放
-     */
-    private void closeInternal() {
-        // 释放列族句柄
-        for (ColumnFamily cf : ColumnFamily.values()) {
-            if (cf.getHandle() != null) {
-                cf.getHandle().close();
-            }
-        }
-        // 关闭数据库
-        if (db != null) {
-            db.close();
-        }
-    }
 
     // ------------------------------ 数据操作 ------------------------------
     /**
@@ -427,5 +312,111 @@ public class POPStorage {
         }
     }
 
+
+
+    //
+    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+    private final RocksDB db;
+    private static class InstanceHolder {
+        private static final POPStorage INSTANCE = new POPStorage();
+    }
+    public static POPStorage getInstance() {
+        return POPStorage.InstanceHolder.INSTANCE;
+    }
+
+    private POPStorage() {
+        try {
+            this.db = openRocksDBWithColumnFamilies();
+            registerShutdownHook();
+        } catch (RocksDBException e) {
+            log.error("初始化数据库失败", e);
+            throw new RuntimeException("数据库初始化失败", e);
+        }
+    }
+
+    private RocksDB openRocksDBWithColumnFamilies() throws RocksDBException {
+        File dbDir = new File(DB_PATH);
+        if (!dbDir.exists()) {
+            boolean mkdirs = dbDir.mkdirs();
+            if (!mkdirs) {
+                throw new RuntimeException("创建数据库目录失败: " + DB_PATH);
+            }
+        }
+
+        // 1. 读取现有列族
+        List<byte[]> bytes = RocksDB.listColumnFamilies(new Options(), DB_PATH);
+        List<String> existingCfNames = new ArrayList<>();
+        for (byte[] bytes1 : bytes) {
+            existingCfNames.add(new String(bytes1));
+        }
+        List<ColumnFamilyDescriptor> cfDescriptors = new ArrayList<>();
+        List<ColumnFamilyHandle> cfHandles = new ArrayList<>();
+
+        // 2. 配置默认列族（必须包含）
+        cfDescriptors.add(new ColumnFamilyDescriptor(RocksDB.DEFAULT_COLUMN_FAMILY, new ColumnFamilyOptions()));
+
+        // 3. 配置自定义列族（不存在则创建）
+        for (ColumnFamily cf : ColumnFamily.values()) {
+            String cfName = cf.actualName;
+            ColumnFamilyOptions options = cf.options;
+            cfDescriptors.add(new ColumnFamilyDescriptor(cfName.getBytes(), options));
+        }
+
+        // 4. 打开数据库并获取列族句柄
+        DBOptions options = new DBOptions()
+                .setCreateIfMissing(true) // 保持原有的"如果不存在则创建"行为
+                .setCreateMissingColumnFamilies(true)
+                .setInfoLogLevel(InfoLogLevel.ERROR_LEVEL) // 禁用INFO日志（LOG文件）
+                .setMaxLogFileSize(1024 * 1024) // 限制日志文件大小和保留数量（避免无限增长）
+                .setKeepLogFileNum(2); // 最多保留 2 个日志文件
+
+        // 配置日志
+        String logDir = DB_PATH + "rocksdb_logs/"; // 单独目录存放 RocksDB 日志
+        new File(logDir).mkdirs(); // 确保目录存在
+        options.setDbLogDir(logDir);
+
+        RocksDB db = RocksDB.open(options, DB_PATH, cfDescriptors, cfHandles);
+
+        // 5. 绑定列族句柄（索引对应cfDescriptors顺序）
+        // 跳过默认列族（索引0），从1开始绑定自定义列族
+        for (int i = 0; i < ColumnFamily.values().length; i++) {
+            ColumnFamily.values()[i].setHandle(cfHandles.get(i + 1));
+        }
+        return db;
+    }
+
+    /**
+     * 注册JVM关闭钩子，确保资源释放
+     */
+    private void registerShutdownHook() {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            log.info("关闭数据库资源...");
+            closeInternal();
+        }));
+    }
+
+    /**
+     * 手动关闭数据库（一般无需调用，依赖关闭钩子）
+     */
+    public void close() {
+        log.info("手动关闭数据库资源...");
+        closeInternal();
+    }
+
+    /**
+     * 内部关闭方法，统一处理资源释放
+     */
+    private void closeInternal() {
+        // 释放列族句柄
+        for (ColumnFamily cf : ColumnFamily.values()) {
+            if (cf.getHandle() != null) {
+                cf.getHandle().close();
+            }
+        }
+        // 关闭数据库
+        if (db != null) {
+            db.close();
+        }
+    }
 
 }
