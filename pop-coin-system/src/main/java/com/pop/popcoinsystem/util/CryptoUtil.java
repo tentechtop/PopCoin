@@ -695,6 +695,9 @@ public class CryptoUtil {
      * 字节数组转十六进制字符串
      */
     public static String bytesToHex(byte[] bytes) {
+        if (bytes == null) {
+            return null;
+        }
         StringBuilder result = new StringBuilder();
         for (byte b : bytes) {
             result.append(String.format("%02x", b));

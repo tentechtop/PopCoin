@@ -5,13 +5,17 @@ import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.block.BlockVO;
 import com.pop.popcoinsystem.data.blockChain.BlockChain;
 import com.pop.popcoinsystem.data.enums.UTXOStatus;
+import com.pop.popcoinsystem.data.miner.Miner;
 import com.pop.popcoinsystem.data.script.Script;
 import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.data.script.ScriptSig;
 import com.pop.popcoinsystem.data.storage.POPStorage;
 import com.pop.popcoinsystem.data.transaction.*;
 import com.pop.popcoinsystem.data.vo.result.Result;
+import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
+import com.pop.popcoinsystem.util.DifficultyUtils;
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
@@ -21,6 +25,7 @@ import java.math.BigInteger;
 import java.util.*;
 
 import static com.pop.popcoinsystem.data.script.Script.OP_RETURN;
+import static com.pop.popcoinsystem.data.storage.POPStorage.getUTXOKey;
 import static com.pop.popcoinsystem.util.CryptoUtil.ECDSASigner.verifySignature;
 import static com.pop.popcoinsystem.util.Numeric.hexStringToByteArray;
 
@@ -28,24 +33,42 @@ import static com.pop.popcoinsystem.util.Numeric.hexStringToByteArray;
 @Service
 public class BlockChainService {
 
-    @Lazy
-    @Resource
+    private static final int COINBASE_MATURITY = 100;// CoinBase交易成熟度要求
+    public static final String GENESIS_BLOCK_HASH_HEX = "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f";
+    private static final byte[] GENESIS_BLOCK_HASH = CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX);
+
+    private POPStorage popStorage;
+
     private MiningService miningService;
 
-    // 系统启动时执行
-    private void initBlockChain() {
-        // 检查是否已存在创世区块
-        if (getBlockByHash(getGenesisBlockHash()) == null) {
-            Block genesisBlock = createGenesisBlock();
-            //创建创世区块并保存
-
+    @PostConstruct
+    private void initBlockChain() throws Exception {
+        miningService = new MiningService(this);
+        popStorage = POPStorage.getInstance();
+        log.info("初始化区块链服务...");
+        // 检查是否已存在创世区块  不存在就创建
+        Block genesisBlock = getBlockByHash(GENESIS_BLOCK_HASH);
+        if (getBlockByHash(GENESIS_BLOCK_HASH) == null) {
+            log.info("创世区块是空的");
+            genesisBlock = createGenesisBlock();
+            //保存区块
+            popStorage.addBlock(genesisBlock);
+            //保存最新的区块hash
+            popStorage.updateMainLatestBlockHash(GENESIS_BLOCK_HASH);
+            log.info("创世区块hash:"+GENESIS_BLOCK_HASH_HEX);
+            //最新区块高度
+            popStorage.updateMainLatestHeight(genesisBlock.getHeight());
+            //保存主链中 高度高度到 hash的索引
+            popStorage.addMainHeightToBlockIndex(genesisBlock.getHeight(), GENESIS_BLOCK_HASH);
+            log.info("创世区块高度:"+genesisBlock.getHeight());
         }
+        Miner miner = new Miner();
+        miner.setAddress("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa");
+        miner.setName("BTC-Miner");
+        miningService.setMiningInfo(miner);
+        miningService.startMining();
     }
 
-    // CoinBase交易成熟度要求
-    private static final int COINBASE_MATURITY = 100;
-
-    //创建创世区块
     /**
      * 创建创世区块（区块链的第一个区块）
      * 创世区块特殊性：
@@ -70,7 +93,7 @@ public class BlockChainService {
         genesisBlock.setDifficulty(1);
         // 比特币创世区块难度目标：0x1d00ffff（这里使用相同值）
         genesisBlock.setDifficultyTarget(hexStringToByteArray("1d00ffff"));
-        genesisBlock.setChainWork("0000000000000000000000000000000000000000000000000000000100010001");
+        genesisBlock.setChainWork(null);
 
         // 4. 创建创世区块的CoinBase交易（唯一交易）
         Transaction coinbaseTx = createGenesisCoinbaseTransaction();
@@ -84,21 +107,19 @@ public class BlockChainService {
         genesisBlock.setMerkleRoot(merkleRoot);
 
         // 6. 设置区块大小信息
-        genesisBlock.setStrippedSize(285); // 示例值
+        genesisBlock.setWitnessSize(285); // 示例值
+
         genesisBlock.setSize(285);
         genesisBlock.setWeight(1140); // 4倍size（隔离见证权重计算）
 
         // 7. 计算区块哈希（需要找到符合难度的nonce）
         // 创世区块的nonce是固定值，通过暴力计算得到
-        genesisBlock.setNonce(2083236893); // 示例nonce值（类似比特币创世块）
-        byte[] blockHash = Block.calculateHash(genesisBlock);
-        genesisBlock.setHash(blockHash);
-
+        genesisBlock.setNonce(1); // 示例nonce值（类似比特币创世块）
+        genesisBlock.setHash(GENESIS_BLOCK_HASH);
         // 8. 设置工作量证明和确认数
-        genesisBlock.setChainWork("0000000000000000000000000000000000000000000000000000000100010001");
+        genesisBlock.setChainWork(null);
 
-
-        log.info("创世区块创建成功，哈希: {}", CryptoUtil.bytesToHex(blockHash));
+        log.info("创世区块创建成功，哈希: {}", GENESIS_BLOCK_HASH_HEX);
         return genesisBlock;
     }
 
@@ -139,6 +160,7 @@ public class BlockChainService {
         return coinbaseTx;
     }
 
+
     /**
      * 验证交易
      * 交易验证成功后 广播交易 如果本节点是矿工节点 则再添加到交易池 由矿工打包
@@ -162,7 +184,6 @@ public class BlockChainService {
                 return Result.error("交易ID不匹配");
             }
             List<TXInput> inputs = transaction.getInputs();
-
             for (TXInput input : transaction.getInputs()) {
                 UTXO utxo = getUTXO(input.getTxId(), input.getVout());
                 String utxoKey = getUTXOKey(input.getTxId(), input.getVout());
@@ -178,11 +199,7 @@ public class BlockChainService {
                 //通过UTXO 查询交易 通过交易查询所在区块  看看区块高度是否满足要求
 
 
-
-
                 // 验证数字签名
-
-
             }
             // 添加交易输出到临时UTXO集合
             for (int j = 0; j < transaction.getOutputs().size(); j++) {
@@ -223,9 +240,6 @@ public class BlockChainService {
             return Result.error("交易输出金额大于输入金额");
         }
 
-
-
-
         //验证通过后
 
         //广播交易
@@ -238,12 +252,11 @@ public class BlockChainService {
         return Result.OK("交易验证成功");
     }
 
-
     /**
      * 验证区块中的所有交易
      */
     private boolean validateTransactionsInBlock(Block block) {
-        // 1. 验证CoinBase交易
+/*        // 1. 验证CoinBase交易
         Transaction coinbaseTx = block.getTransactions().get(0);
         if (!isValidCoinBaseTransaction(coinbaseTx, block.getHeight())) {
             log.error("CoinBase交易无效");
@@ -254,30 +267,19 @@ public class BlockChainService {
             Transaction tx = block.getTransactions().get(i);
             // 特殊处理CoinBase交易
             if (i == 0) {
-
                 // 添加CoinBase交易的输出到临时UTXO集合
                 for (int j = 0; j < tx.getOutputs().size(); j++) {
                     UTXO utxo = new UTXO();
                     utxo.setTxId(tx.getTxId());
                     utxo.setVout(j);
                     utxo.setValue(tx.getOutputs().get(j).getValue());
-
                 }
                 continue;
             }
-
-
-
-
-
-
-        }
+        }*/
 
         return true;
     }
-
-
-
 
     /**
      * 验证CoinBase交易
@@ -287,7 +289,7 @@ public class BlockChainService {
             return false;
         }
         TXInput input = tx.getInputs().get(0);
-        if (input.getTxId() == null || !Arrays.equals(input.getTxId(), getGenesisBlockHash())) {
+        if (input.getTxId() == null || !Arrays.equals(input.getTxId(), GENESIS_BLOCK_HASH)) {
             return false;
         }
         if (input.getVout() != 0) {
@@ -295,7 +297,6 @@ public class BlockChainService {
         }
         // 验证CoinBase奖励金额
         //获取交易所在区块高度
-
         long coinbaseReward = calculateCoinbaseReward(blockHeight);
         long totalOutput = tx.getOutputs().stream()
                 .mapToLong(output -> output.getValue())
@@ -306,6 +307,11 @@ public class BlockChainService {
         return true;
     }
 
+    /**
+     * 计算CoinBase奖励
+     * @param blockHeight
+     * @return
+     */
     private long calculateCoinbaseReward(long blockHeight) {
         // 初始奖励（单位：聪）
         long initialReward = 50 * 100000000; // 50 BTC
@@ -322,36 +328,35 @@ public class BlockChainService {
         return initialReward >> halvings;
     }
 
-
     /**
      * 验证区块
-     * UTXO 并非仅在交易验证成功后产生，而是在交易被成功打包进区块并经过网络确认后，才成为有效的 UTXO。
-     * 一、UTXO 集合更新的核心步骤
-     * 当一个新的区块被确认后，更新 UTXO 集合的正确流程是：
-     *
-     * 遍历区块中的所有交易（包括 CoinBase 交易和普通交易）
-     * 处理每个交易的输入：
-     * 对于每个输入，找到其引用的 UTXO（通过txid:vout定位）
-     * 将这些 UTXO 标记为 “已花费” 并从 UTXO 集合中移除
-     * 处理每个交易的输出：
-     * 对于每个输出，检查其是否有效（如金额为正、脚本格式合法）
-     * 将有效的输出添加到 UTXO 集合中，格式通常为：
-     * {txid:vout → [金额, 锁定脚本, 区块高度]}
-     * 二、关键细节与注意事项
-     * CoinBase 交易的特殊性
-     * CoinBase 交易是区块中的第一笔交易，其输出创建的 UTXO 有成熟度要求（通常需要 100 个确认后才能使用）
-     * CoinBase 交易没有输入，因此无需移除任何 UTXO
-     * 交易验证顺序
-     * 必须按区块中交易的顺序处理，因为后续交易可能依赖前面交易创建的 UTXO
-     * 数据结构优化
-     * 实际系统中，UTXO 集合通常使用键值数据库（如 LevelDB）存储，以高效支持快速查找和更新
-     * 为提高查询效率，可能会维护辅助索引（如地址到 UTXO 的映射）
-     * 回滚机制
-     * 若发生链重组（如分叉被更长链替代），需要反向操作：
-     * 移除该区块添加的 UTXO
-     * 恢复该区块移除的 UTXO
      */
     public boolean verifyBlock(Block block) {
+        //     * UTXO 并非仅在交易验证成功后产生，而是在交易被成功打包进区块并经过网络确认后，才成为有效的 UTXO。
+        //     * 一、UTXO 集合更新的核心步骤
+        //     * 当一个新的区块被确认后，更新 UTXO 集合的正确流程是：
+        //     *
+        //     * 遍历区块中的所有交易（包括 CoinBase 交易和普通交易）
+        //     * 处理每个交易的输入：
+        //     * 对于每个输入，找到其引用的 UTXO（通过txid:vout定位）
+        //     * 将这些 UTXO 标记为 “已花费” 并从 UTXO 集合中移除
+        //     * 处理每个交易的输出：
+        //     * 对于每个输出，检查其是否有效（如金额为正、脚本格式合法）
+        //     * 将有效的输出添加到 UTXO 集合中，格式通常为：
+        //     * {txid:vout → [金额, 锁定脚本, 区块高度]}
+        //     * 二、关键细节与注意事项
+        //     * CoinBase 交易的特殊性
+        //     * CoinBase 交易是区块中的第一笔交易，其输出创建的 UTXO 有成熟度要求（通常需要 100 个确认后才能使用）
+        //     * CoinBase 交易没有输入，因此无需移除任何 UTXO
+        //     * 交易验证顺序
+        //     * 必须按区块中交易的顺序处理，因为后续交易可能依赖前面交易创建的 UTXO
+        //     * 数据结构优化
+        //     * 实际系统中，UTXO 集合通常使用键值数据库（如 LevelDB）存储，以高效支持快速查找和更新
+        //     * 为提高查询效率，可能会维护辅助索引（如地址到 UTXO 的映射）
+        //     * 回滚机制
+        //     * 若发生链重组（如分叉被更长链替代），需要反向操作：
+        //     * 移除该区块添加的 UTXO
+        //     * 恢复该区块移除的 UTXO
         //验证区块
         // 1. 验证区块合法性
         if (!validateBlock(block)) {
@@ -375,19 +380,26 @@ public class BlockChainService {
             return false;
         }
         // 6. 验证区块中的交易
+
         if (!validateTransactionsInBlock(block)) {
             log.warn("区块中的交易验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
             return false;
         }
-        // 7. 处理区块（保存、更新UTXO等）
+
+        // 7. 处理区块（保存、更新UTXO等）  只要区块通过验证就 保存区块 保存区块产生的UTXO
         processValidBlock(block);
-        // 8. 检查并处理分叉
+
+        // 8. 检查并处理分叉  通过后更新索引
         handleChainFork(block);
 
 
         //广播区块
+        new Thread(() -> {
+            log.info("区块验证成功,广播区块");
+        });
 
         //保存区块
+
 
         //更新本地区块信息
 
@@ -399,37 +411,51 @@ public class BlockChainService {
 
         return true;
     }
+    /**
+     * 处理区块
+     */
+    private void processValidBlock(Block block) {
+        // 保存区块到数据库
+        popStorage.addBlock(block);
+        // 更新UTXO集合
+        //updateUTXOSet(block);
+        // 更新链状态
+        updateChainState(block);
+    }
 
     /**
-     * 处理链分叉，实现最长链原则  最长一定是工作量最大
+     * 作用：检测并处理区块链分叉，确保系统始终选择累积难度最大的链作为主链。
+     * 执行时机：在 processValidBlock 之后调用，用于检查新区块是否导致分叉，并决定是否需要切换主链。
+     * @param newBlock
      */
     private void handleChainFork(Block newBlock) {
-        //0 1 2 3 4
-        //        4
         //分叉的产生：当两个或多个节点在几乎同一时间，基于主链的同一个 “末端区块” 挖出了新的区块时，网络会暂时出现两条并行的链（例如：主链原本是 A→B→C，此时节点 1 挖出 C→D，节点 2 挖出 C→E，形成 A→B→C→D 和 A→B→C→E 两条链）。
         //此时，节点 2 挖出的区块 E 就不是 “主链（此时可能是 C→D 链）” 的延续，而是另一条分支链的延续。
-
-        long blockHeight = newBlock.getHeight();  //对比新区块的父哈希与主链哈希，检测是否为分叉。
-        // 如果新区块不是主链的延续，检查是否应该切换到新链
+        long blockHeight = newBlock.getHeight();
+        // 如果新区块不是主链的延续，检查是否应该切换到新链   检查是否出现分叉（父区块不在主链末端） 也就是说这个区块的父hash不是主链最新hash
         if (!Arrays.equals(newBlock.getPreviousHash(), getMainBlockHashByHeight(blockHeight - 1)  )) {
             // 计算新链的总难度
             long newChainDifficulty = calculateChainDifficulty(newBlock);
-
             // 计算当前主链的总难度
             long currentChainDifficulty = calculateCurrentChainDifficulty();
-
             // 如果新链难度更大，则切换到新链
             if (newChainDifficulty > currentChainDifficulty) {
-                log.info("检测到更难的链，准备切换。新链难度: {}, 当前链难度: {}",
-                        newChainDifficulty, currentChainDifficulty);
+                log.info("检测到更难的链，准备切换。新链难度: {}, 当前链难度: {}", newChainDifficulty, currentChainDifficulty);
                 switchToNewChain(newBlock);
+            }else {
+                log.info("分叉区块暂存至备选链，高度: {}", blockHeight);
             }
         }
     }
 
+
+    /**
+     * 计算当前主链的总难度
+     * @return
+     */
     private long calculateCurrentChainDifficulty() {
         long difficulty = 0;
-        for (long i = 0; i <= getMainCurrentHeight(); i++) {
+        for (long i = 0; i <= getMainLatestHeight(); i++) {
             byte[] blockHash = getMainBlockHashByHeight(i);
             if (blockHash != null) {
                 Block block = getBlockByHash(blockHash);
@@ -441,6 +467,11 @@ public class BlockChainService {
         return difficulty;
     }
 
+    /**
+     * 计算链的总难度
+     * @param tipBlock
+     * @return
+     */
     private long calculateChainDifficulty(Block tipBlock) {
         long difficulty = 0;
         Block current = tipBlock;
@@ -458,9 +489,6 @@ public class BlockChainService {
         return 0;
     }
 
-    /**
-     * 根据难度目标计算难度值
-     */
     /**
      * 根据难度目标计算难度值
      */
@@ -497,50 +525,98 @@ public class BlockChainService {
     }
 
 
-    private void processValidBlock(Block block) {
-        // 1. 保存区块到数据库
-
-        // 2. 更新区块索引
-
-        // 3. 更新UTXO集合
-        updateUTXOSet(block);
-
-        // 4. 更新链状态
-        updateChainState(block);
-    }
-
     private void updateChainState(Block block) {
         // 1. 如果新区块高度大于当前主链高度，或者难度更大，则成为新的主链
         long blockHeight = block.getHeight();
-        long currentHeight = getMainCurrentHeight();
-        if (blockHeight > currentHeight ||
-                (blockHeight == currentHeight && isDifficultyGreater(block.getHash(), getMainBlockHashByHeight(currentHeight)))) {
-            // 如果新区块的父区块不是当前主链的最后一个区块，说明出现了分叉
+        byte[] blockHash = block.getHash();
+        long currentHeight = getMainLatestHeight(); // 获取主链最新高度
+
+        //打印这个区块 和 区块难度
+        log.info("区块难度:"+block.getDifficulty());
+
+        log.info("当前高度:"+currentHeight);
+        //这个条件是区块链中实现 “最长链原则” 的核心逻辑，用于判断一个新验证的区块是否应该成为主链的一部分。我来详细解释：
+        // 如果新区块的父区块不是当前主链的最后一个区块，说明出现了分叉
+        //在区块链中，主链必须始终是网络中难度最大的链（即 “最长链”，这里的 “长” 指累积的工作量证明难度，而非单纯的区块数量）。这个条件通过两个维度判断新区块是否能成为主链：
+        //高度优先：如果新区块的高度比当前主链更高，直接接受它；
+        //难度补偿：如果高度相同，但新区块的难度比当前主链末端更大，也接受它。
+        //含义：新区块的高度超过当前主链的高度。
+        //场景：例如当前主链高度是 100，新区块高度是 101，说明它是主链的自然延伸（父区块是高度 100 的区块），直接扩展主链即可。
+
+        //更新主链状态：
+        //如果新区块是主链的直接延伸（高度连续且父哈希匹配），则更新主链高度和最新区块哈希。
+        //若新区块导致分叉，则暂不处理分叉，仅将新区块作为 “备选链” 的一部分保存。
+        //这个条件的意思是 区块高度比当前主链高度高 或者 区块高度相同且难度比当前主链末端更高
+
+        //这个区块是否更高更难
+        if (blockHeight > currentHeight || (blockHeight == currentHeight && isDifficultyGreater(block.getHash(), getMainBlockHashByHeight(currentHeight)))) {
             if (!Arrays.equals(block.getPreviousHash(), getMainBlockHashByHeight(currentHeight) )) {
                 log.info("检测到分叉，高度: {}, 主链: {}, 新链: {}",
                         blockHeight,
                         CryptoUtil.bytesToHex(getMainBlockHashByHeight(currentHeight)),
                         CryptoUtil.bytesToHex(block.getHash()));
-
                 // 切换到更长/更难的链
                 switchToNewChain(block);
             } else {
                 // 正常扩展主链
-                //添加区块
                 //更新主链高度
-
-
+                updateMainChainHeight(blockHeight);
+                //更新主链最新的区块Hash
+                updateMainLatestBlockHash(blockHash);
+                //更新主链高度到区块的索引
+                updateMainHeightToBlockIndex(blockHeight, blockHash);
                 log.info("主链扩展到高度: {}, 哈希: {}", blockHeight, CryptoUtil.bytesToHex(block.getHash()));
+
+
             }
         } else {
-            // 2. 否则，将区块添加到备选链  高度冲突  private final Map<Long, List<byte[]>> alternativeChains = new ConcurrentHashMap<>();
+            // 否则，将区块添加到备选链  高度冲突  private final Map<Long, Set<byte[]>> alternativeChains = new ConcurrentHashMap<>();
 
+            //备选添加
 
             log.info("备选链添加区块，高度: {}, 哈希: {}", blockHeight, CryptoUtil.bytesToHex(block.getHash()));
         }
 
     }
 
+    private void updateMainHeightToBlockIndex(long blockHeight, byte[] blockHash) {
+        popStorage.addMainHeightToBlockIndex(blockHeight, blockHash);
+    }
+
+    private void updateMainLatestBlockHash(byte[] blockHash) {
+        popStorage.updateMainLatestBlockHash(blockHash);
+    }
+
+
+    private void updateMainChainHeight(long blockHeight) {
+        popStorage.updateMainLatestHeight(blockHeight);
+    }
+
+    /**
+     * 比较两个哈希的难度，返回true如果第一个哈希难度更大
+     */
+    private boolean isDifficultyGreater(byte[] hash1, byte[] hash2) {
+        if (hash1 == null || hash2 == null) {
+            return false;
+        }
+        // 比较两个哈希的大小，值越小难度越大
+        for (int i = 0; i < hash1.length; i++) {
+            if (hash1[i] < hash2[i]) {
+                return true;
+            } else if (hash1[i] > hash2[i]) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 主链 通过高度获取区块hash
+     */
+    public byte[] getMainBlockHashByHeight(long height) {
+        // 从数据库中获取区块
+        return popStorage.getMainBlockHashByHeight(height);
+    }
 
     /**
      * 切换到新链，处理分叉回滚
@@ -549,9 +625,13 @@ public class BlockChainService {
         // 1. 找到两个链的共同祖先
         Block commonAncestor = findCommonAncestor(newTipBlock);
         long ancestorHeight = commonAncestor.getHeight();
+        log.info("共同祖先区块: {} (高度: {})", CryptoUtil.bytesToHex(commonAncestor.getHash()), ancestorHeight);
+
+        //从备选链中获取某高度的所有区块，筛选出属于新链的区块
+
         // 2. 回滚当前主链到共同祖先
         List<Block> blocksToUndo = new ArrayList<>();
-        for (long i = getMainCurrentHeight(); i > ancestorHeight; i--) {
+        for (long i = getMainLatestHeight(); i > ancestorHeight; i--) {
             byte[] blockHash = getMainBlockHashByHeight(i);
             if (blockHash != null) {
                 Block block = getBlockByHash(blockHash);
@@ -577,11 +657,10 @@ public class BlockChainService {
         }
         // 6. 更新主链和当前高度
 
-
-         // 7. 清理备选链
+        // 7. 清理备选链
 
         log.info("成功切换到新链，新高度: {}, 新哈希: {}",
-                getMainCurrentHeight(), CryptoUtil.bytesToHex(newTipBlock.getHash()));
+                getMainLatestHeight(), CryptoUtil.bytesToHex(newTipBlock.getHash()));
     }
 
     /**
@@ -593,10 +672,8 @@ public class BlockChainService {
             for (int j = 0; j < tx.getOutputs().size(); j++) {
                 deleteUTXO(tx.getTxId(), j);
 
-
             }
         }
-
         // 2. 恢复区块花费的UTXO
         for (int i = 1; i < block.getTransactions().size(); i++) {
             Transaction tx = block.getTransactions().get(i);
@@ -612,6 +689,12 @@ public class BlockChainService {
         }
     }
 
+
+    /**
+     * 找到两个链的公共祖先
+     * @param block
+     * @return
+     */
     private Block findCommonAncestor(Block block) {
         Set<byte[]> newChainHashes = new HashSet<>();
         Block current = block;
@@ -621,14 +704,14 @@ public class BlockChainService {
             byte[] hash = current.getHash();
             newChainHashes.add(hash);
             // 检查是否是创世区块
-            if (Arrays.equals(current.getPreviousHash(), getGenesisBlockHash())) {
+            if (Arrays.equals(current.getPreviousHash(), getGenesisBlockHash()  )) {
                 break;
             }
             current = getBlockByHash(hash);
         }
 
         // 从当前主链顶端开始向下查找共同祖先
-        current = getBlockByHash(  getMainBlockHashByHeight(getMainCurrentHeight()) );
+        current = getBlockByHash(getMainBlockHashByHeight(getMainLatestHeight()));
         while (current != null) {
             String hashStr = CryptoUtil.bytesToHex(current.getHash());
             if (newChainHashes.contains(hashStr)) {
@@ -646,66 +729,79 @@ public class BlockChainService {
         return getGenesisBlock();
     }
 
-    /**
-     * 获取创世区块
-     */
-    private Block getGenesisBlock() {
-
-        return null;
-    }
 
     /**
      * 获取创世区块hash
      * @return
      */
     public byte[] getGenesisBlockHash() {
-
-
-
-
-        return null;
+        return GENESIS_BLOCK_HASH;
     }
 
-
-    //获取当前主链高度
-    public long getMainCurrentHeight() {
-        return 0;
-    }
     /**
-     * 主链 通过高度获取区块hash
+     * 获取创世区块
+     * @return
      */
-    public byte[] getMainBlockHashByHeight(long height) {
-        // 从数据库中获取区块
-        return null;
+    public Block getGenesisBlock() {
+        return popStorage.getBlockByHash(GENESIS_BLOCK_HASH);
     }
-
-
-
-
 
 
 
     /**
-     * 比较两个哈希的难度，返回true如果第一个哈希难度更大
+     * 验证区块合法性
      */
-    private boolean isDifficultyGreater(byte[] hash1, byte[] hash2) {
-        if (hash1 == null || hash2 == null) {
+    private boolean validateBlock(Block block) {
+        // 验证区块格式
+        if (block == null || block.getTransactions().isEmpty()) {
+            log.error("区块格式无效");
             return false;
         }
-        // 比较两个哈希的大小，值越小难度越大
-        for (int i = 0; i < hash1.length; i++) {
-            if (hash1[i] < hash2[i]) {
-                return true;
-            } else if (hash1[i] > hash2[i]) {
-                return false;
-            }
+        // 验证难度目标
+        if (!DifficultyUtils.isValidHash(block.getHash(), block.getDifficultyTarget())) {
+            log.error("区块哈希不满足难度目标");
+            return false;
         }
-        return false;
+
+        // 4. 验证交易合法性（略，需结合UTXO验证）
+        return true;
+    }
+
+    /**
+     * 检查哈希是否满足难度目标
+     */
+    private boolean isValidHash(byte[] hash, byte[] difficultyTarget) {
+        // 1. 验证输入参数
+        if (hash == null || hash.length != 32) {
+            throw new IllegalArgumentException("哈希值必须为32字节");
+        }
+        if (difficultyTarget == null || difficultyTarget.length != 4) {
+            throw new IllegalArgumentException("难度目标必须为4字节");
+        }
+
+        // 2. 将难度目标（4字节压缩格式）转换为完整的256位目标值
+        BigInteger target = DifficultyUtils.compactToTarget(difficultyTarget);
+
+        // 3. 将哈希字节数组转换为BigInteger（大端序，正数）
+        BigInteger hashValue = new BigInteger(1, hash);
+
+        // 4. 比较哈希值是否小于等于目标值
+        return hashValue.compareTo(target) <= 0;
     }
 
 
+    //根据hash获取区块
+    public Block getBlockByHash(byte[] hash) {
+        // 从数据库中获取区块
+        return popStorage.getBlockByHash(hash);
+    }
+
+
+    /**
+     * 更新UTXO集合
+     * @param block
+     */
     private void updateUTXOSet(Block block) {
-        // 1. 处理所有交易（包括CoinBase）
         // 1. 处理所有交易（包括CoinBase）
         for (int i = 0; i < block.getTransactions().size(); i++) {
             Transaction tx = block.getTransactions().get(i);
@@ -727,161 +823,56 @@ public class BlockChainService {
             for (int j = 0; j < tx.getOutputs().size(); j++) {
                 String utxoKey = CryptoUtil.bytesToHex(tx.getTxId()) + ":" + j;
                 boolean isCoinbase = (i == 0);
-
-
-
-
-
             }
         }
-        
+
     }
-
-
 
     /**
-     * 验证区块合法性
-     */
-    private boolean validateBlock(Block block) {
-        // 1. 验证区块格式
-        if (block == null || block.getTransactions().isEmpty()) {
-            log.error("区块格式无效");
-            return false;
-        }
-        // 2. 验证区块哈希
-        byte[] calculatedHash = Block.calculateHash(block);
-        if (!Arrays.equals(calculatedHash, block.getHash())) {
-            log.error("区块哈希不匹配，计算值: {}, 区块值: {}",
-                    CryptoUtil.bytesToHex(calculatedHash),
-                    CryptoUtil.bytesToHex(block.getHash()));
-            return false;
-        }
-        // 3. 验证难度目标
-        if (!isValidHash(block.getHash(), block.getDifficultyTarget())) {
-            log.error("区块哈希不满足难度目标");
-            return false;
-        }
-
-        // 4. 验证交易合法性（略，需结合UTXO验证）
-        return true;
-    }
-
-
-    //根据hash获取区块
-    public Block getBlockByHash(byte[] hash) {
-        // 从数据库中获取区块
-        return null;
-    }
-
-
-
-    //备选链 通过高度获取 区块hash
-    public byte[] getBackupBlockByHeight(long height) {
-        // 从数据库中获取区块
-        return null;
-    }
-    
-
-
-
-    /**
-     * 检查哈希是否满足难度目标
-     */
-    private boolean isValidHash(byte[] hash, byte[] difficultyTarget) {
-        if (hash == null || difficultyTarget == null || hash.length != 32 || difficultyTarget.length != 32) {
-            return false;
-        }
-        // 难度目标格式为: [前导零字节数, 目标值的剩余部分]
-        // 简化处理，假设difficultyTarget直接是目标哈希值
-        for (int i = 0; i < hash.length; i++) {
-            if (hash[i] < difficultyTarget[i]) {
-                return true;
-            } else if (hash[i] > difficultyTarget[i]) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-
-
-
-
-    /**
-     * 从一个输入中获取UTXO
-     */
-    public UTXO getUTXOByInput(TXInput input) {
-        // 从数据库中获取 UTXO
-
-        return null;
-    }
-    //根据交易ID和vout获取UTXO
-    public UTXO getUTXO(byte[] txId, int vout) {
-        // 从数据库中获取 UTXO
-        String utxoKey = CryptoUtil.bytesToHex(txId) + ":" + vout;
-
-        return null;
-    }
-
-    public String getUTXOKey(byte[] txId, int vout) {
-        // 从数据库中获取 UTXO
-        return CryptoUtil.bytesToHex(txId) + ":" + vout;
-    }
-
-
-    /**
-     * 获取最新区块Hash
-     */
-    public byte[] getLatestBlockHash() {
-        return new byte[]{};
-    }
-    /**
-     * 获取区块高度
-     */
-    public long getBlockHeight(byte[] hash) {
-        //获取区块
-        //获取高度
-
-
-        return 100;
-    }
-
-
-    /**
-     * 获取区块链信息
+     * 获取当前区块信息
      * @return
      */
     public Result<BlockChain> getBlockChainInfo() {
-        return Result.OK();
+        return Result.ok();
     }
 
     /**
-     * 查询区块
-     * @param blockVO
+     * 获取区块信息
+     * @param blockHashHex
      * @return
      */
-    public Result<BlockDTO> getBlock(BlockVO blockVO) {
-
-        return Result.OK();
+    public Result<BlockDTO> getBlock(String blockHashHex) {
+        Block blockByHash = popStorage.getBlockByHash(hexStringToByteArray(blockHashHex));
+        return Result.ok(BeanCopyUtils.copyObject(blockByHash, BlockDTO.class));
     }
 
     /**
-     * 查询区块高度
-     * @param hash
-     * @return
+     * 获取UTXO
      */
-    public Result<Long> getBlockHeight(String hash) {
-        byte[] bytes = CryptoUtil.hexToBytes(hash);
-        POPStorage instance = POPStorage.getInstance();
-        return Result.OK();
+    public UTXO getUTXO(byte[] txId, int vout) {
+        return popStorage.getUTXO(txId, vout);
     }
 
+    /**
+     * 主链最新高度
+     */
+    public long getMainLatestHeight() {
+        return popStorage.getMainLatestHeight();
+    }
 
     /**
      * 删除UTXO
      */
-    public void deleteUTXO(byte[] txId, int vo) {
+    public void deleteUTXO(byte[] txId, int vout) {
         // 从数据库中删除 UTXO
+        popStorage.deleteUTXO(txId, vout);
+    }
 
+    public byte[] getMainLatestBlockHash() {
+        return popStorage.getMainLatestBlockHash();
+    }
+
+    public Block getMainBlockByHeight(long height) {
+        return popStorage.getMainBlockByHeight(height);
     }
 }

@@ -11,11 +11,13 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.rocksdb.*;
+import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.util.*;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+
 
 import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
 
@@ -27,10 +29,134 @@ public class POPStorage {
     //这些KEY都保存在BLOCK_CHAIN 中 因为他们单独特殊
     private static final byte[] KEY_UTXO_COUNT = "key_utxo_count".getBytes();//UTXO总数
     private static final byte[] KEY_GENESIS_BLOCK_HASH = "key_genesis_block_hash".getBytes();//创世区块hash
-    private static final byte[] KEY_MAIN_CURRENT_HEIGHT = "key_main_current_height".getBytes();//主链当前高度
+    private static final byte[] KEY_MAIN_LATEST_HEIGHT = "key_main_latest_height".getBytes();//主链当前高度 最新高度
+    private static final byte[] KEY_MAIN_LATEST_BLOCK_HASH = "key_main_latest_block_hash".getBytes();
+
 
     private static final byte[] KEY_NODE_SETTING = "key_node_setting".getBytes();
     private static final byte[] KEY_MINER = "key_miner".getBytes();
+
+    /*更新主链当前高度*/
+    public void updateMainLatestHeight(long height) {
+        try {
+            byte[] heightBytes = ByteUtils.toBytes(height);
+            db.put(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_MAIN_LATEST_HEIGHT, heightBytes);
+        } catch (RocksDBException e) {
+            log.error("更新主链当前高度失败: height={}", height, e);
+            throw new RuntimeException("更新主链当前高度失败", e);
+        }
+    }
+    public void updateMainLatestBlockHash(byte[] blockHash) {
+        try {
+            db.put(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_MAIN_LATEST_BLOCK_HASH, blockHash);
+        } catch (RocksDBException e) {
+            log.error("更新主链当前区块hash失败: blockHash={}", blockHash, e);
+            throw new RuntimeException("更新主链当前区块hash失败", e);
+        }
+    }
+    //获取主链最新的区块Hash
+    public byte[] getMainLatestBlockHash() {
+        try {
+            return db.get(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_MAIN_LATEST_BLOCK_HASH);
+        } catch (RocksDBException e) {
+            log.error("获取主链当前区块hash失败", e);
+            throw new RuntimeException("获取主链当前区块hash失败", e);
+        }
+    }
+    /*获取主链当前高度*/
+    public long getMainLatestHeight() {
+        try {
+            byte[] heightBytes = db.get(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_MAIN_LATEST_HEIGHT);
+            if (heightBytes == null) {
+                return 0;
+            }
+            return ByteUtils.bytesToLong(heightBytes);
+        } catch (RocksDBException e) {
+            log.error("获取主链当前高度失败", e);
+            throw new RuntimeException("获取主链当前高度失败", e);
+        }
+    }
+    //更新主链高度到区块的索引
+    //保存主链中高度到区块hash索引
+    public void addMainHeightToBlockIndex(long blockHeight, byte[] blockHash) {
+        try {
+            db.put(ColumnFamily.MAIN_BLOCK_CHAIN_INDEX.getHandle(), ByteUtils.toBytes(blockHeight), blockHash);
+        } catch (RocksDBException e) {
+            log.error("更新主链高度到区块的索引失败: blockHeight={}, blockHash={}", blockHeight, blockHash, e);
+            throw new RuntimeException("更新主链高度到区块的索引失败", e);
+        }
+    }
+    //主链索中 通过高度获取区块hash
+    public byte[] getMainBlockHashByHeight(long height) {
+        try {
+            byte[] blockHash = db.get(ColumnFamily.MAIN_BLOCK_CHAIN_INDEX.getHandle(), ByteUtils.toBytes(height));
+            return blockHash;
+        } catch (RocksDBException e) {
+            log.error("通过高度获取区块hash失败: height={}", height, e);
+            throw new RuntimeException("通过高度获取区块hash失败", e);
+        }
+    }
+    //删除主链中高度到区块hash索引
+    public void deleteMainBlockHeight(long height) {
+        try {
+            byte[] heightBytes = ByteUtils.toBytes(height);
+            db.delete(ColumnFamily.MAIN_BLOCK_CHAIN_INDEX.getHandle(), heightBytes);
+        } catch (RocksDBException e) {
+            log.error("删除主链高度失败: height={}", height, e);
+            throw new RuntimeException("删除主链高度失败", e);
+        }
+    }
+
+
+    public Block getMainBlockByHeight(long height) {
+        //先获取hash
+        byte[] blockHash = getMainBlockHashByHeight(height);
+        return getBlockByHash(blockHash);
+    }
+
+
+
+
+    //备选链操作.............................................................................................................
+    //新增备选链条 高度对应的 区块hash 备选链存储，用于处理分叉
+    public void putBackupBlockHeight(long height, byte[] hash) {
+        try {
+            byte[] heightBytes = ByteUtils.toBytes(height);  //List<byte[]>
+            //先获取
+            byte[] oldHash = db.get(ColumnFamily.ALT_BLOCK_CHAIN_INDEX.getHandle(), heightBytes);
+            HashSet<byte[]> blockHash = new HashSet<>();
+            if (oldHash == null) {
+                blockHash.add(hash);
+            }else {
+                blockHash = (HashSet<byte[]>) SerializeUtils.deSerialize(oldHash);
+                blockHash.add(hash);
+            }
+            db.put(ColumnFamily.ALT_BLOCK_CHAIN_INDEX.getHandle(), heightBytes, SerializeUtils.serialize(blockHash));
+        } catch (RocksDBException e) {
+            log.error("保存备选链高度失败: height={}", height, e);
+            throw new RuntimeException("保存备选链高度失败", e);
+        }
+    }
+    //删除备选链 中的一个区块缩影
+    public void deleteBackupBlockHeight(long height, byte[] hash) {
+        try {
+            byte[] heightBytes = ByteUtils.toBytes(height);
+            byte[] oldHash = db.get(ColumnFamily.ALT_BLOCK_CHAIN_INDEX.getHandle(), heightBytes);
+            HashSet<byte[]> blockHash = (HashSet<byte[]>) SerializeUtils.deSerialize(oldHash);
+            blockHash.remove(hash);
+            db.put(ColumnFamily.ALT_BLOCK_CHAIN_INDEX.getHandle(), heightBytes, SerializeUtils.serialize(blockHash));
+        } catch (RocksDBException e) {
+            log.error("删除备选链高度失败: height={}", height, e);
+            throw new RuntimeException("删除备选链高度失败", e);
+        }
+    }
+
+
+
+
+
+
+
 
 
     // ------------------------------ 数据操作 ------------------------------
@@ -43,12 +169,6 @@ public class POPStorage {
             byte[] blockData = SerializeUtils.serialize(block);
             // 直接写入区块列族（键：区块哈希，值：序列化区块）
             db.put(ColumnFamily.BLOCK.getHandle(), blockHash, blockData);
-
-
-
-
-
-
         } catch (RocksDBException e) {
             log.error("保存区块失败: blockHash={}", block.getHash(), e);
             throw new RuntimeException("保存区块失败", e);
@@ -61,16 +181,12 @@ public class POPStorage {
         try {
             writeBatch = new WriteBatch();
             WriteOptions writeOptions = new WriteOptions();
-            long maxHeight = 0;
             for (Block block : blocks) {
-                byte[] blockBytes = SerializeUtils.serialize(block);
-                writeBatch.put(ColumnFamily.UTXO.getHandle(), block.getHash(), blockBytes);
-
-
-
-
-
+                byte[] blockHash = block.getHash();
+                byte[] blockData = SerializeUtils.serialize(block);
+                writeBatch.put(ColumnFamily.BLOCK.getHandle(), blockHash, blockData);
             }
+            db.write(writeOptions, writeBatch);
         }catch (RocksDBException e) {
             log.error("批量保存UTXO信息失败", e);
             throw new RuntimeException("批量保存UTXO信息失败", e);
@@ -82,6 +198,50 @@ public class POPStorage {
             rwLock.writeLock().unlock();
         }
     }
+    //删除区块
+    public void deleteBlock(byte[] hash) {
+        try {
+            db.delete(ColumnFamily.BLOCK.getHandle(), hash);
+        } catch (RocksDBException e) {
+            log.error("删除区块失败: blockHash={}", hash, e);
+            throw new RuntimeException("删除区块失败", e);
+        }
+    }
+    //批量删除区块
+    public void deleteBlockBatch(List<byte[]> hashes) {
+        rwLock.writeLock().lock();
+        WriteBatch writeBatch = null;
+        try {
+            writeBatch = new WriteBatch();
+            WriteOptions writeOptions = new WriteOptions();
+            for (byte[] hash : hashes) {
+                writeBatch.delete(ColumnFamily.BLOCK.getHandle(), hash);
+            }
+            db.write(writeOptions, writeBatch);
+        }catch (RocksDBException e) {
+            log.error("批量删除UTXO信息失败", e);
+            throw new RuntimeException("批量删除UTXO信息失败", e);
+        } finally {
+            // 确保资源释放
+            if (writeBatch != null) {
+                writeBatch.close();
+            }
+        }
+    }
+    //根据hash获取区块
+    public Block getBlockByHash(byte[] hash) {
+        try {
+            byte[] blockData = db.get(ColumnFamily.BLOCK.getHandle(), hash);
+            if (blockData == null) {
+                return null;
+            }
+            return (Block)SerializeUtils.deSerialize(blockData);
+        } catch (RocksDBException e) {
+            log.error("获取区块失败: blockHash={}", hash, e);
+            throw new RuntimeException("获取区块失败", e);
+        }
+    }
+
 
 
 
@@ -115,7 +275,7 @@ public class POPStorage {
             writeBatch = new WriteBatch();
             WriteOptions writeOptions = new WriteOptions();
             for (UTXO utxo : batch) {
-                String utxoKey = CryptoUtil.bytesToHex(utxo.getTxId()) + ":" + utxo.getVout() + ":" + utxo.getValue();
+                String utxoKey = getUTXOKey(utxo.getTxId(), utxo.getVout());
                 // 1. 序列化UTXO数据并添加到批量写
                 byte[] utxoData = SerializeUtils.serialize(utxo);
                 writeBatch.put(ColumnFamily.UTXO.getHandle(), utxoKey.getBytes(), utxoData);
@@ -138,10 +298,10 @@ public class POPStorage {
         }
     }
     //删除UTXO
-    public void deleteUTXO(UTXO utxo) {
+    public void deleteUTXO(byte[] txId, int vout) {
         try {
-            byte[] key = (CryptoUtil.bytesToHex(utxo.getTxId()) + ":" + utxo.getVout()).getBytes();
-            db.delete(ColumnFamily.UTXO.getHandle(), key);
+            String utxoKey = getUTXOKey(txId, vout);
+            db.delete(ColumnFamily.UTXO.getHandle(), utxoKey.getBytes());
             //UTXO总数
             byte[] bytes = db.get(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_UTXO_COUNT);
             long count = bytes == null ? 0 : ByteUtils.bytesToLong(bytes);
@@ -150,11 +310,36 @@ public class POPStorage {
             throw new RuntimeException(e);
         }
     }
+    //批量删除UTXO
+    public void deleteUTXOBatch(List<UTXO> batch) {
+        rwLock.writeLock().lock();
+        WriteBatch writeBatch = null;
+        try {
+            writeBatch = new WriteBatch();
+            WriteOptions writeOptions = new WriteOptions();
+            for (UTXO utxo: batch) {
+                String utxoKey = getUTXOKey(utxo.getTxId(), utxo.getVout());
+                writeBatch.delete(ColumnFamily.UTXO.getHandle(), utxoKey.getBytes());
+            }
+            db.write(writeOptions, writeBatch);
+        }catch (RocksDBException e) {
+            log.error("批量删除UTXO信息失败", e);
+            throw new RuntimeException("批量删除UTXO信息失败", e);
+        } finally {
+            // 确保资源释放
+            if (writeBatch != null) {
+                writeBatch.close();
+            }
+        }
+    }
+
+
+
     //获取UTXO
     public UTXO getUTXO(byte[] txId, int vout) {
         try {
-            byte[] key = (CryptoUtil.bytesToHex(txId) + ":" + vout).getBytes();
-            byte[] valueBytes = db.get(ColumnFamily.UTXO.getHandle(), key);
+            String utxoKey = getUTXOKey(txId, vout);
+            byte[] valueBytes = db.get(ColumnFamily.UTXO.getHandle(), utxoKey.getBytes());
             if (valueBytes == null) {
                 return null; // 不存在返回null，避免抛出异常
             }
@@ -183,7 +368,6 @@ public class POPStorage {
             iterator = db.newIterator(ColumnFamily.UTXO.getHandle());
             List<UTXO> utxoList = new ArrayList<>(pageSize);
             String currentLastKey = null;
-
             // 定位迭代器起始位置：如果有 lastKey，从该键的下一个位置开始；否则从开头开始
             if (lastKey != null && !lastKey.isEmpty()) {
                 byte[] lastKeyBytes = lastKey.getBytes();
@@ -218,6 +402,9 @@ public class POPStorage {
             rwLock.readLock().unlock();
         }
     }
+
+
+
 
     // 分页结果封装类
     @Getter
@@ -418,5 +605,12 @@ public class POPStorage {
             db.close();
         }
     }
+
+
+    public static String getUTXOKey(byte[] txId, int vout) {
+        // 从数据库中获取 UTXO
+        return CryptoUtil.bytesToHex(txId) + ":" + vout;
+    }
+
 
 }

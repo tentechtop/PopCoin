@@ -26,19 +26,5 @@ public class TXOutput {
      */
     private ScriptPubKey scriptPubKey;  // 锁定脚本，定义资金使用条件
 
-
-    // 从scriptPubKey推导地址（如果脚本类型支持）
-    public String getAddress() {
-        if (scriptPubKey == null) return null;
-        // 根据脚本类型解析地址（示例逻辑，需根据实际ScriptPubKey实现）
-
-
-        return null;
-    }
-
-    private String extractP2PKHAddress(ScriptPubKey script) {
-        // 从P2PKH脚本中提取公钥哈希并转换为地址
-
-        return null;
-    }
+    //用户在获取自己的UTXO时 需要将公钥生成解锁脚本并比对hash是否压制
 }

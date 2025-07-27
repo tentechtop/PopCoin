@@ -6,10 +6,7 @@ import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.service.BlockChainService;
 import jakarta.annotation.Resource;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 
 /**
@@ -22,28 +19,21 @@ public class BlockChainController {
     @Resource
     private BlockChainService blockChainService;
 
-    /**
-     * 查询区块高度
-     */
-    @PostMapping("/getBlockHeight")
-    public Result<Long> getBlockHeight(@RequestBody BlockVO blockVO) {
-        return blockChainService.getBlockHeight(blockVO.getHash());
-    }
 
     /**
      * 查询当前区块链信息
      */
-    @PostMapping("/getBlockChainInfo")
+    @GetMapping("/getBlockChainInfo")
     public Result<BlockChain> getBlockChainInfo() {
         return blockChainService.getBlockChainInfo();
     }
 
     /**
-     * 获取区块信息 根据区块hash HEX
+     * 根据区块hash HEX 获取区块信息
      */
-    @PostMapping("/getBlock")
-    public Result<BlockDTO> getBlock(@RequestBody BlockVO blockVO) {
-        return blockChainService.getBlock(blockVO);
+    @GetMapping("/getBlock")
+    public Result<BlockDTO> getBlock(String blockHashHex) {
+        return blockChainService.getBlock(blockHashHex);
     }
 
     /**

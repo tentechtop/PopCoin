@@ -29,7 +29,7 @@ import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
 @Slf4j
 public class WalletStorage {
     // 数据库存储路径
-    private static final String DB_PATH = "rocksDb/popCoin.db/blockChain" + POP_NET_VERSION + ".db/wallet";
+    private static final String DB_PATH = "rocksDb/popCoin.db/wallet/blockChain" + POP_NET_VERSION + ".db";
     private static final String LOG_PATH = DB_PATH + "rocksdb_logs/"; // 单独目录存放 RocksDB 日志
 
     private static final byte[] KEY_LAST_BLOCK_CHAIN = "key_last_block_chain".getBytes();

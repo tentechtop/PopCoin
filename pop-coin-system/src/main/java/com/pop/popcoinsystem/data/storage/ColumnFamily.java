@@ -13,13 +13,10 @@ public enum ColumnFamily {
     BLOCK_BODY("CF_BLOCK_BODY", "blockBody",new ColumnFamilyOptions()),
 
     //主链索引 高度到区块哈希 Map<Long, byte[]>  height -> hash
-    MAIN_BLOCK_INDEX("CF_BMAIN_BLOCK_INDEX", "mainBlockIndex",new ColumnFamilyOptions()),
+    MAIN_BLOCK_CHAIN_INDEX("CF_MAIN_BLOCK_CHAIN_INDEX", "mainBlockChainIndex",new ColumnFamilyOptions()),
+    // 备选链存储，用于处理分叉 Map<Long, Set<byte[]>>  高度到 多个区块hash
+    ALT_BLOCK_CHAIN_INDEX("CF_ALT_BLOCK_CHAIN_INDEX", "altBlockChainIndex",new ColumnFamilyOptions()),
 
-    // 备选链存储，用于处理分叉 Map<Long, List<byte[]>>
-    ALT_BLOCK_INDEX("CF_ALT_BLOCK_INDEX", "altBlockIndex",new ColumnFamilyOptions()),
-
-    //冲突高度  哪些高度冲突了  直接存高度即可 key是高度 value是高度  用迭代器迭代所有的冲突高度
-    BLOCK_HEIGHT_CLASH("CF_BLOCK_HEIGHT_CLASH", "blockHeightClash",new ColumnFamilyOptions()),
 
 
 

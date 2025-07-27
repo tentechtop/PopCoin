@@ -78,6 +78,52 @@ public class Transaction {
 
 
 
+    //设置交易大小
+    public void setSize() {
+        size = calculateBaseSize();
+        if (isSegWit()) {
+            size += calculateWitnessSize();
+        }
+    }
+
+
+
+
+    /**
+     * 计算普通交易的实际字节大小（非隔离见证交易总大小）
+     * 普通交易无见证数据，大小等于非见证数据大小
+     */
+    public long getRegularTransactionSize() {
+        if (isSegWit()) {
+            throw new IllegalStateException("该方法仅适用于非隔离见证交易");
+        }
+        return calculateBaseSize();
+    }
+
+    /**
+     * 计算隔离见证交易的实际总字节大小
+     * 隔离见证交易总大小 = 非见证数据大小 + 见证数据大小
+     */
+    public long getSegWitTransactionTotalSize() {
+        if (!isSegWit()) {
+            throw new IllegalStateException("该方法仅适用于隔离见证交易");
+        }
+        return calculateBaseSize() + calculateWitnessSize();
+    }
+
+    /**
+     * 获取交易实际总字节大小（自动区分交易类型）
+     */
+    public long getActualTotalSize() {
+        if (isSegWit()) {
+            return getSegWitTransactionTotalSize();
+        } else {
+            return getRegularTransactionSize();
+        }
+    }
+
+
+
     // 判断是否为隔离见证交易
     public boolean isSegWit() {
         return !witnesses.isEmpty();
@@ -275,6 +321,8 @@ public class Transaction {
         }
         return size;
     }
+
+
     /**
      * 计算VarInt的大小（以字节为单位）
      */
@@ -366,6 +414,25 @@ public class Transaction {
             System.out.println("隔离见证权重: " + segwitTx.getWeight());
             System.out.println("隔离见证虚拟大小: " + segwitTx.getSize() + " vBytes");
 
+
+            try {
+                System.out.println("===== 测试普通交易 =====");
+
+                // 新增普通交易大小输出
+                System.out.println("普通交易实际大小: " + regularTx.getRegularTransactionSize() + " 字节");
+                System.out.println("普通交易虚拟大小(vSize): " + regularTx.getSize() + " vBytes");
+
+                System.out.println("\n===== 测试隔离见证交易 =====");
+                // 新增隔离见证交易大小输出
+                System.out.println("隔离见证交易非见证数据大小: " + segwitTx.calculateBaseSize() + " 字节");
+                System.out.println("隔离见证交易见证数据大小: " + segwitTx.calculateWitnessSize() + " 字节");
+                System.out.println("隔离见证交易实际总大小: " + segwitTx.getSegWitTransactionTotalSize() + " 字节");
+                System.out.println("隔离见证交易虚拟大小(vSize): " + segwitTx.getSize() + " vBytes");
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -398,9 +465,6 @@ public class Transaction {
         KeyPair keyPair = CryptoUtil.ECDSASigner.generateKeyPair();
         PrivateKey privateKey = keyPair.getPrivate();
         PublicKey publicKey = keyPair.getPublic();
-
-
-
         // 模拟输入：引用之前的交易输出
         TXInput input = new TXInput(
                 publicKey.getEncoded(),
