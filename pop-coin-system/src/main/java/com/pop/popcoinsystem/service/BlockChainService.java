@@ -1,5 +1,7 @@
 package com.pop.popcoinsystem.service;
 
+import com.pop.popcoinsystem.application.service.Wallet;
+import com.pop.popcoinsystem.application.service.WalletStorage;
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.block.BlockVO;
@@ -11,6 +13,10 @@ import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.data.script.ScriptSig;
 import com.pop.popcoinsystem.data.storage.POPStorage;
 import com.pop.popcoinsystem.data.transaction.*;
+import com.pop.popcoinsystem.data.transaction.dto.TXInputDTO;
+import com.pop.popcoinsystem.data.transaction.dto.TXOutputDTO;
+import com.pop.popcoinsystem.data.transaction.dto.TransactionDTO;
+import com.pop.popcoinsystem.data.transaction.dto.WitnessDTO;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.ByteUtils;
@@ -24,10 +30,15 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.math.BigInteger;
+import java.security.KeyPair;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.util.*;
 
 import static com.pop.popcoinsystem.data.script.Script.OP_RETURN;
 import static com.pop.popcoinsystem.data.storage.POPStorage.getUTXOKey;
+import static com.pop.popcoinsystem.data.transaction.Transaction.calculateBlockReward;
+import static com.pop.popcoinsystem.data.vo.result.Result.SC_OK_200;
 import static com.pop.popcoinsystem.util.CryptoUtil.ECDSASigner.verifySignature;
 import static com.pop.popcoinsystem.util.Numeric.hexStringToByteArray;
 
@@ -66,8 +77,22 @@ public class BlockChainService {
             popStorage.addMainHeightToBlockIndex(genesisBlock.getHeight(), GENESIS_BLOCK_HASH);
             log.info("创世区块高度:"+genesisBlock.getHeight());
         }
+        WalletStorage walletStorage = WalletStorage.getInstance();
+        Wallet walleta = walletStorage.getWallet("BTC-Miner");
+        if (walleta == null){
+            KeyPair keyPairA = CryptoUtil.ECDSASigner.generateKeyPair();
+            PrivateKey privateKey = keyPairA.getPrivate();
+            PublicKey publicKey = keyPairA.getPublic();
+            walleta = new Wallet();
+            walleta.setName("BTC-Miner");
+            walleta.setPublicKeyHex(CryptoUtil.bytesToHex(publicKey.getEncoded()));
+            walleta.setPrivateKeyHex(CryptoUtil.bytesToHex(privateKey.getEncoded()));
+            walletStorage.addWallet(walleta);
+        }
+        String p2PKHAddressByPK = CryptoUtil.ECDSASigner.createP2PKHAddressByPK(CryptoUtil.hexToBytes(walleta.getPublicKeyHex()));
+
         Miner miner = new Miner();
-        miner.setAddress("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa");
+        miner.setAddress(p2PKHAddressByPK);
         miner.setName("BTC-Miner");
         miningService.setMiningInfo(miner);
 
@@ -92,7 +117,7 @@ public class BlockChainService {
         genesisBlock.setVersion(1); // 版本号
 
         // 2. 设置时间戳（使用比特币创世时间类似的格式，这里使用系统启动时间）
-        long genesisTime = 1620000000; // 示例时间戳（2021-05-03）
+        long genesisTime = 1753695705;
         genesisBlock.setTime(genesisTime);
         genesisBlock.setMedianTime(genesisTime);
 
@@ -124,8 +149,197 @@ public class BlockChainService {
         genesisBlock.setNonce(1); // 示例nonce值（类似比特币创世块）
         genesisBlock.setHash(GENESIS_BLOCK_HASH);
 
+        genesisBlock.calculateAndSetSize();
+        genesisBlock.calculateAndSetWeight();
         log.info("创世区块创建成功，哈希: {}", GENESIS_BLOCK_HASH_HEX);
         return genesisBlock;
+    }
+
+
+    /**
+     * 验证交易并提交到交易池
+     * 交易验证成功后 广播交易 如果本节点是矿工节点 则再添加到交易池 由矿工打包
+     */
+    public Result<String> verifyAndAddTradingPool(Transaction transaction) {
+        Result<String> verifyResult = verifyTransaction(transaction);
+        if (verifyResult.getCode().equals(SC_OK_200)) {
+            // 验证成功，将交易添加到交易池
+            miningService.addTransaction(transaction);
+            //广播交易
+            new Thread(() -> {
+                log.info("交易验证成功,广播交易");
+            });
+        }
+        return verifyResult;
+    }
+
+    /**
+     * 验证交易
+     */
+    public Result<String> verifyTransaction(Transaction transaction) {
+        // 基础格式验证
+        if (transaction == null || transaction.getInputs() == null || transaction.getOutputs() == null) {
+            log.error("交易格式无效");
+            return Result.error("交易格式无效");
+        }
+        // 交易金额验证
+        long inputSum = transaction.getInputs().stream()
+                .map(input -> {
+                    UTXO utxo = getUTXO(input.getTxId(), input.getVout());
+                    return utxo != null ? utxo.getValue() : 0;
+                })
+                .mapToLong(Long::longValue)
+                .sum();
+        long outputSum = transaction.getOutputs().stream()
+                .mapToLong(TXOutput::getValue)
+                .sum();
+        if (inputSum < outputSum) {
+            log.error("交易输出金额大于输入金额");
+            return Result.error("交易输出金额大于输入金额");
+        }
+
+        // 交易ID验证
+        byte[] calculatedTxId = Transaction.calculateTxId(transaction);
+        if (!Arrays.equals(calculatedTxId, transaction.getTxId())) {
+            log.error("交易ID不匹配");
+            return Result.error("交易ID不匹配");
+        }
+
+        // 验证输入的UTXO是否未花费
+
+
+        if (transaction.isSegWit()){
+            //普通交易验证
+
+        }else {
+            //隔离见证交易验证
+
+        }
+        return Result.OK("交易验证成功");
+    }
+
+
+
+    /**
+     * 验证区块
+     * UTXO 并非仅在交易验证成功后产生，而是在交易被成功打包进区块并经过网络确认后，才成为有效的 UTXO。
+     */
+    public boolean verifyBlock(Block block) {
+        // 1. 验证区块合法性
+        if (!validateBlock(block)) {
+            log.warn("区块验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
+            return false;
+        }
+        // 2. 检查是否是已知区块
+        if (getBlockByHash(block.getHash()) != null) {
+            log.info("区块已存在，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
+            return true;
+        }
+        // 3. 检查区块的父区块是否存在
+        if (getBlockByHash(block.getPreviousHash()) == null) {
+            log.warn("父区块不存在，哈希：{}", CryptoUtil.bytesToHex(block.getPreviousHash()));
+            return false;
+        }
+        // 4. 获取父区块高度 新区块与父区块高度是否连续
+        Block parentBlock = getBlockByHash(block.getPreviousHash());
+        if (parentBlock.getHeight() + 1 != block.getHeight()) {
+            log.warn("区块高度不连续，父区块高度：{}，当前区块高度：{}", parentBlock.getHeight(), block.getHeight());
+            return false;
+        }
+        // 6. 验证区块中的交易
+        Result<String> validateTransactionsInBlock = validateTransactionsInBlock(block);
+        if (!validateTransactionsInBlock.getCode().equals(SC_OK_200)) {
+            log.warn("区块中的交易验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
+            log.error(validateTransactionsInBlock.getMessage());
+            return false;
+        }
+        // 7. 处理区块（保存、更新UTXO等）  只要区块通过验证就 保存区块 保存区块产生的UTXO
+        processValidBlock(block);
+        //广播区块
+        new Thread(() -> {
+            log.info("区块验证成功,广播区块");
+        });
+        return true;
+    }
+
+    /**
+     * 验证CoinBase交易
+     */
+    private Result<String> isValidCoinBaseTransaction(Transaction tx, long blockHeight) {
+        if (tx == null || tx.getInputs() == null || tx.getInputs().size() != 1) {
+            return Result.error("交易格式错误");
+        }
+        TXInput input = tx.getInputs().get(0);
+        if (input.getTxId() == null) {
+            return Result.error("CoinBase交易输入的txid为空 正确应该是全零");
+        }
+        if (input.getVout() != 0) {
+            return Result.error("CoinBase交易的输出索引应该是零");
+        }
+        //获取交易所在区块高度
+        long coinbaseReward = calculateBlockReward(blockHeight);
+        long totalOutput = tx.getOutputs().stream()
+                .mapToLong(TXOutput::getValue)
+                .sum();
+        if (totalOutput > coinbaseReward) {
+            return Result.error("交易金额错误,正确的区块奖励应该是: "+coinbaseReward+" 聪");
+        }
+        return Result.ok("coinBase验证成功");
+    }
+
+
+
+
+    /**
+     * 处理区块
+     */
+    private void processValidBlock(Block block) {
+        // 保存区块到数据库
+        popStorage.addBlock(block);
+        // 获取主链最新信息
+        long currentHeight = getMainLatestHeight();
+        byte[] currentMainHash = getMainLatestBlockHash();
+
+        // 检查是否出现分叉（父区块是否为主链最新区块）
+        boolean isFork = !Arrays.equals(block.getPreviousHash(), currentMainHash);
+        // 1. 处理主链延伸（非分叉情况）
+        if (!isFork) {
+            // 验证高度连续性
+            if (block.getHeight() != currentHeight + 1) {
+                log.error("区块高度不连续，拒绝添加。当前主链高度: {}, 新区块高度: {}",
+                        currentHeight, block.getHeight());
+                return;
+            }
+            // 正常扩展主链
+            updateMainChainHeight(block.getHeight());
+            updateMainLatestBlockHash(block.getHash());
+            updateMainHeightToBlockIndex(block.getHeight(), block.getHash());
+            log.info("主链扩展到高度: {}, 哈希: {}", block.getHeight(), CryptoUtil.bytesToHex(block.getHash()));
+            //打印工作总量
+            log.info("当前区块工作总量: {}", DifficultyUtils.bytesToLong(block.getChainWork()));
+            //应用区块
+            applyBlock(block);
+        }
+        // 2. 处理分叉情况
+        else {
+            log.info("检测到分叉，高度: {}, 主链: {}, 新链: {}",
+                    block.getHeight(), CryptoUtil.bytesToHex(currentMainHash), CryptoUtil.bytesToHex(block.getHash()));
+            int compare = DifficultyUtils.compare(block.getChainWork(), getMainLatestBlock().getChainWork()); //新链小就是-1 相等就是零 大就是1
+            if (compare==1) {
+                log.info("检测到更难的链，准备切换。新链难度: {}, 当前链难度: {}", DifficultyUtils.bytesToLong(block.getChainWork()), DifficultyUtils.bytesToLong(getMainLatestBlock().getChainWork()));
+                switchToNewChain(block);
+            } else {
+                log.info("分叉链难度较小，添加到备选链，高度: {}, 哈希: {}",
+                        block.getHeight(), CryptoUtil.bytesToHex(block.getHash()));
+                addAlternativeChains(block.getHeight(), block.getHash());
+            }
+        }
+    }
+
+    private void addAlternativeChains(long blockHeight, byte[] blockHash) {
+        Set<byte[]> altBlockHashByHeight = popStorage.getALTBlockHashByHeight(blockHeight);
+        altBlockHashByHeight.add(blockHash);
+        log.info("已经将该区块加入到 备选链添加区块，高度: {}, 哈希: {}", blockHeight, CryptoUtil.bytesToHex(blockHash));
     }
 
     /**
@@ -162,316 +376,36 @@ public class BlockChainService {
         // 计算交易ID
         byte[] txId = Transaction.calculateTxId(coinbaseTx);
         coinbaseTx.setTxId(txId);
+        coinbaseTx.calculateWeight();
         return coinbaseTx;
-    }
-
-    /**
-     * 验证交易
-     * 交易验证成功后 广播交易 如果本节点是矿工节点 则再添加到交易池 由矿工打包
-     * 将验证结果返回
-     */
-    public Result<String> verifyTransaction(Transaction transaction) {
-        //验证交易
-        // 1. 基础格式验证
-        if (transaction == null || transaction.getInputs() == null || transaction.getOutputs() == null) {
-            log.error("交易格式无效");
-            return Result.error("交易格式无效");
-        }
-        //是普通交易 还是 隔离见证交易
-
-        if (transaction.isSegWit()){
-            //普通交易验证
-            // 2. 验证交易ID
-            byte[] calculatedTxId = Transaction.calculateTxId(transaction);
-            if (!Arrays.equals(calculatedTxId, transaction.getTxId())) {
-                log.error("交易ID不匹配");
-                return Result.error("交易ID不匹配");
-            }
-            List<TXInput> inputs = transaction.getInputs();
-            for (TXInput input : transaction.getInputs()) {
-                UTXO utxo = getUTXO(input.getTxId(), input.getVout());
-                String utxoKey = getUTXOKey(input.getTxId(), input.getVout());
-                if (utxo == null) {
-                    log.error("引用的UTXO不存在: {}", utxoKey);
-                    return Result.error("引用的UTXO不存在");
-                }
-                // 检查是否已花费  只要是没删除的都是可以花费的
-
-
-                //UTXO 是否是coinBase UTXO 是否成熟
-
-                //通过UTXO 查询交易 通过交易查询所在区块  看看区块高度是否满足要求
-
-
-                // 验证数字签名
-            }
-            // 添加交易输出到临时UTXO集合
-            for (int j = 0; j < transaction.getOutputs().size(); j++) {
-                String utxoKey = CryptoUtil.bytesToHex(transaction.getTxId()) + ":" + j;
-                UTXO utxo = new UTXO();
-                utxo.setTxId(transaction.getTxId());
-                utxo.setVout(j);
-                utxo.setValue(transaction.getOutputs().get(j).getValue());
-                utxo.setScriptPubKey(utxo.getScriptPubKey());
-                //TODO 保存
-            }
-
-
-
-
-
-
-        }else {
-            //隔离见证交易验证
-
-
-
-
-        }
-        // 4. 验证交易金额
-        long inputSum = transaction.getInputs().stream()
-                .map(input -> {
-                    UTXO utxo = getUTXO(input.getTxId(), input.getVout());
-                    return utxo != null ? utxo.getValue() : 0;
-                })
-                .mapToLong(Long::longValue)
-                .sum();
-        long outputSum = transaction.getOutputs().stream()
-                .mapToLong(output -> output.getValue())
-                .sum();
-        if (inputSum < outputSum) {
-            log.error("交易输出金额大于输入金额");
-            return Result.error("交易输出金额大于输入金额");
-        }
-
-        //验证通过后
-
-        //广播交易
-        new Thread(() -> {
-            log.info("交易验证成功,广播交易");
-        });
-
-        //如果本本节点是矿工节点 将交易提交到交易池
-        miningService.addTransaction(transaction);
-        return Result.OK("交易验证成功");
     }
 
     /**
      * 验证区块中的所有交易
      */
-    private boolean validateTransactionsInBlock(Block block) {
-/*        // 1. 验证CoinBase交易
-        Transaction coinbaseTx = block.getTransactions().get(0);
-        if (!isValidCoinBaseTransaction(coinbaseTx, block.getHeight())) {
-            log.error("CoinBase交易无效");
-            return false;
+    private Result<String> validateTransactionsInBlock(Block block) {
+        // 1. 验证CoinBase交易  区块中第一笔交易一定是CoinBase交易
+        List<Transaction> transactions = block.getTransactions();
+        Transaction coinbaseTx = transactions.get(0);
+        Result<String> validCoinBaseTransaction = isValidCoinBaseTransaction(coinbaseTx, block.getHeight());
+        if (!Objects.equals(validCoinBaseTransaction.getCode(), SC_OK_200)) {
+            return validCoinBaseTransaction;
         }
-        // 3. 按顺序验证所有交易（包括CoinBase）
-        for (int i = 0; i < block.getTransactions().size(); i++) {
+        //去除第一个CoinBase交易
+        transactions.remove(0);
+        // 3. 按顺序验证所有交易（不包括CoinBase）
+        for (int i = 0; i < transactions.size(); i++) {
             Transaction tx = block.getTransactions().get(i);
-            // 特殊处理CoinBase交易
-            if (i == 0) {
-                // 添加CoinBase交易的输出到临时UTXO集合
-                for (int j = 0; j < tx.getOutputs().size(); j++) {
-                    UTXO utxo = new UTXO();
-                    utxo.setTxId(tx.getTxId());
-                    utxo.setVout(j);
-                    utxo.setValue(tx.getOutputs().get(j).getValue());
-                }
-                continue;
-            }
-        }*/
-
-        return true;
-    }
-
-    /**
-     * 验证CoinBase交易
-     */
-    private boolean isValidCoinBaseTransaction(Transaction tx, long blockHeight) {
-        if (tx == null || tx.getInputs() == null || tx.getInputs().size() != 1) {
-            return false;
-        }
-        TXInput input = tx.getInputs().get(0);
-        if (input.getTxId() == null || !Arrays.equals(input.getTxId(), GENESIS_BLOCK_HASH)) {
-            return false;
-        }
-        if (input.getVout() != 0) {
-            return false;
-        }
-        // 验证CoinBase奖励金额
-        //获取交易所在区块高度
-        long coinbaseReward = calculateCoinbaseReward(blockHeight);
-        long totalOutput = tx.getOutputs().stream()
-                .mapToLong(output -> output.getValue())
-                .sum();
-        if (totalOutput > coinbaseReward) {
-            return false;
-        }
-        return true;
-    }
-
-    /**
-     * 计算CoinBase奖励
-     * @param blockHeight
-     * @return
-     */
-    private long calculateCoinbaseReward(long blockHeight) {
-        // 初始奖励（单位：聪）
-        long initialReward = 50 * 100000000; // 50 BTC
-
-        // 每210000个区块减半
-        long halvings = blockHeight / 210000;
-
-        // 超过64次减半后奖励为0
-        if (halvings >= 64) {
-            return 0;
-        }
-
-        // 计算当前奖励
-        return initialReward >> halvings;
-    }
-
-    /**
-     * 验证区块
-     */
-    public boolean verifyBlock(Block block) {
-        //     * UTXO 并非仅在交易验证成功后产生，而是在交易被成功打包进区块并经过网络确认后，才成为有效的 UTXO。
-        //     * 一、UTXO 集合更新的核心步骤
-        //     * 当一个新的区块被确认后，更新 UTXO 集合的正确流程是：
-        //     *
-        //     * 遍历区块中的所有交易（包括 CoinBase 交易和普通交易）
-        //     * 处理每个交易的输入：
-        //     * 对于每个输入，找到其引用的 UTXO（通过txid:vout定位）
-        //     * 将这些 UTXO 标记为 “已花费” 并从 UTXO 集合中移除
-        //     * 处理每个交易的输出：
-        //     * 对于每个输出，检查其是否有效（如金额为正、脚本格式合法）
-        //     * 将有效的输出添加到 UTXO 集合中，格式通常为：
-        //     * {txid:vout → [金额, 锁定脚本, 区块高度]}
-        //     * 二、关键细节与注意事项
-        //     * CoinBase 交易的特殊性
-        //     * CoinBase 交易是区块中的第一笔交易，其输出创建的 UTXO 有成熟度要求（通常需要 100 个确认后才能使用）
-        //     * CoinBase 交易没有输入，因此无需移除任何 UTXO
-        //     * 交易验证顺序
-        //     * 必须按区块中交易的顺序处理，因为后续交易可能依赖前面交易创建的 UTXO
-        //     * 数据结构优化
-        //     * 实际系统中，UTXO 集合通常使用键值数据库（如 LevelDB）存储，以高效支持快速查找和更新
-        //     * 为提高查询效率，可能会维护辅助索引（如地址到 UTXO 的映射）
-        //     * 回滚机制
-        //     * 若发生链重组（如分叉被更长链替代），需要反向操作：
-        //     * 移除该区块添加的 UTXO
-        //     * 恢复该区块移除的 UTXO
-        //验证区块
-        // 1. 验证区块合法性
-        if (!validateBlock(block)) {
-            log.warn("区块验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
-            return false;
-        }
-        // 2. 检查是否是已知区块
-        if (getBlockByHash(block.getHash()) != null) {
-            log.info("区块已存在，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
-            return true;
-        }
-        // 3. 检查区块的父区块是否存在
-        if (getBlockByHash(block.getPreviousHash()) == null) {
-            log.warn("父区块不存在，哈希：{}", CryptoUtil.bytesToHex(block.getPreviousHash()));
-            return false;
-        }
-        // 4. 获取父区块高度 新区块与父区块高度是否连续
-        Block parentBlock = getBlockByHash(block.getPreviousHash());
-        if (parentBlock.getHeight() + 1 != block.getHeight()) {
-            log.warn("区块高度不连续，父区块高度：{}，当前区块高度：{}", parentBlock.getHeight(), block.getHeight());
-            return false;
-        }
-        // 6. 验证区块中的交易
-
-        if (!validateTransactionsInBlock(block)) {
-            log.warn("区块中的交易验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
-            return false;
-        }
-
-        // 7. 处理区块（保存、更新UTXO等）  只要区块通过验证就 保存区块 保存区块产生的UTXO
-        processValidBlock(block);
-
-        // 8. 检查并处理分叉  通过后更新索引
-        //handleChainFork(block);
-
-
-        //广播区块
-        new Thread(() -> {
-            log.info("区块验证成功,广播区块");
-        });
-
-        //保存区块
-
-
-        //更新本地区块信息
-
-        //更新UTXO  移除掉输入的UTXO 新增输出的UTXO
-
-        //如果正在挖矿
-        // 比特币的共识机制通过最长链原则实现全网一致性，
-        // 而 “最长链” 的定义同时包含区块高度和 ** 累积工作量证明（PoW）** 两个维度。
-
-        return true;
-    }
-    /**
-     * 处理区块
-     */
-    private void processValidBlock(Block block) {
-        // 保存区块到数据库
-        popStorage.addBlock(block);
-        // 更新UTXO集合
-        //updateUTXOSet(block);
-
-        // 获取主链最新信息
-        long currentHeight = getMainLatestHeight();
-        byte[] currentMainHash = getMainLatestBlockHash();
-
-        // 检查是否出现分叉（父区块是否为主链最新区块）
-        boolean isFork = !Arrays.equals(block.getPreviousHash(), currentMainHash);
-        // 1. 处理主链延伸（非分叉情况）
-        if (!isFork) {
-            // 验证高度连续性
-            if (block.getHeight() != currentHeight + 1) {
-                log.error("区块高度不连续，拒绝添加。当前主链高度: {}, 新区块高度: {}",
-                        currentHeight, block.getHeight());
-                return;
-            }
-            // 正常扩展主链
-            updateMainChainHeight(block.getHeight());
-            updateMainLatestBlockHash(block.getHash());
-            updateMainHeightToBlockIndex(block.getHeight(), block.getHash());
-            log.info("主链扩展到高度: {}, 哈希: {}", block.getHeight(), CryptoUtil.bytesToHex(block.getHash()));
-            //打印工作总量
-            log.info("当前区块工作总量: {}", DifficultyUtils.bytesToLong(block.getChainWork()));
-
-            // 更新UTXO集合
-            updateUTXOSet(block);
-        }
-        // 2. 处理分叉情况
-        else {
-            log.info("检测到分叉，高度: {}, 主链: {}, 新链: {}",
-                    block.getHeight(), CryptoUtil.bytesToHex(currentMainHash), CryptoUtil.bytesToHex(block.getHash()));
-            int compare = DifficultyUtils.compare(block.getChainWork(), getMainLatestBlock().getChainWork()); //新链小就是-1 相等就是零 大就是1
-            if (compare==1) {
-                log.info("检测到更难的链，准备切换。新链难度: {}, 当前链难度: {}", DifficultyUtils.bytesToLong(block.getChainWork()), DifficultyUtils.bytesToLong(getMainLatestBlock().getChainWork()));
-                switchToNewChain(block);
-            } else {
-                log.info("分叉链难度较小，添加到备选链，高度: {}, 哈希: {}",
-                        block.getHeight(), CryptoUtil.bytesToHex(block.getHash()));
-                addAlternativeChains(block.getHeight(), block.getHash());
+            Result<String> verifyTransaction = verifyTransaction(tx);
+            if (!Objects.equals(verifyTransaction.getCode(), SC_OK_200)) {
+                return verifyTransaction;
             }
         }
+        return Result.ok("所有交易验证成功");
     }
 
-    private void addAlternativeChains(long blockHeight, byte[] blockHash) {
-        Set<byte[]> altBlockHashByHeight = popStorage.getALTBlockHashByHeight(blockHeight);
-        altBlockHashByHeight.add(blockHash);
-        log.info("已经将该区块加入到 备选链添加区块，高度: {}, 哈希: {}", blockHeight, CryptoUtil.bytesToHex(blockHash));
-    }
 
-    private Block getMainLatestBlock() {
+    public Block getMainLatestBlock() {
         return getBlockByHash(getMainLatestBlockHash());
     }
 
@@ -523,9 +457,7 @@ public class BlockChainService {
         Block commonAncestor = findCommonAncestor(newTipBlock);
         long ancestorHeight = commonAncestor.getHeight();
         log.info("共同祖先区块: {} (高度: {})", CryptoUtil.bytesToHex(commonAncestor.getHash()), ancestorHeight);
-
         //从备选链中获取某高度的所有区块，筛选出属于新链的区块
-
         // 2. 回滚当前主链到共同祖先
         List<Block> blocksToUndo = new ArrayList<>();
         for (long i = getMainLatestHeight(); i > ancestorHeight; i--) {
@@ -539,7 +471,9 @@ public class BlockChainService {
         }
         // 3. 撤销这些区块对UTXO的修改（反向操作）
         for (int i = blocksToUndo.size() - 1; i >= 0; i--) {
-            undoBlockUTXOs(blocksToUndo.get(i));
+            Block block = blocksToUndo.get(i);
+            //撤销
+            rollbackBlock(block);
         }
         // 4. 应用新链的区块
         List<Block> blocksToApply = new ArrayList<>();
@@ -550,9 +484,9 @@ public class BlockChainService {
         }
         // 5. 应用这些区块对UTXO的修改
         for (Block block : blocksToApply) {
-            updateUTXOSet(block);
-
-            // 关键修复：将新链每个区块的高度与哈希写入主链索引
+            //应用这些区块中的UTXO
+            applyBlock(block);
+            //将新链每个区块的高度与哈希写入主链索引
             popStorage.addMainHeightToBlockIndex(block.getHeight(), block.getHash());
         }
         // 6. 更新主链和当前高度
@@ -560,35 +494,107 @@ public class BlockChainService {
         updateMainLatestBlockHash(newTipBlock.getHash());
 
         // 7. 清理备选链
-
-        log.info("成功切换到新链，新高度: {}, 新哈希: {}",
-                getMainLatestHeight(), CryptoUtil.bytesToHex(newTipBlock.getHash()));
+        log.info("成功切换到新链，新高度: {}, 新哈希: {}", getMainLatestHeight(), CryptoUtil.bytesToHex(newTipBlock.getHash()));
     }
 
-    /**
-     * 撤销区块对UTXO的修改
-     */
-    private void undoBlockUTXOs(Block block) {
+
+    //应用区块中的交易 添加交易产生的UTXO 销毁交易引用的UTXO
+    public void applyBlock(Block block) {
+        // 1. 处理所有交易（包括CoinBase）
+        for (int i = 0; i < block.getTransactions().size(); i++) {
+            Transaction tx = block.getTransactions().get(i);
+            //添加交易到区块的索引
+            if (i == 0){
+                //coinBase 没有输入 不用处理
+            }
+            // 2. 处理交易输入 删除引用的UTXO
+            if (i > 0) {
+                for (TXInput input : tx.getInputs()) {
+                    deleteUTXO(input.getTxId(), input.getVout());
+                }
+            }
+            // 3. 处理交易输出，添加新的UTXO
+            for (int j = 0; j < tx.getOutputs().size(); j++) {
+                String utxoKey = getUTXOKey(tx.getTxId(), j);
+                //新增UTXO
+
+
+            }
+        }
+    }
+
+
+    //回滚区块中交易 销毁交易产生的UTXO 重新添加交易引用的UTXO
+    public void rollbackBlock(Block block) {
+        for (int i = 0; i < block.getTransactions().size(); i++) {
+            Transaction tx = block.getTransactions().get(i);
+            if (i == 0){
+                //这是第一笔交易 是coinBase交易
+                //CoinBase不用处理输入
+                //撤销输出的UTXO
+                for (int j = 0; j < tx.getOutputs().size(); j++) {
+                    deleteUTXO(tx.getTxId(), j);
+
+                }
+            }
+            if (i > 0) {
+                //恢复输入的UTXO
+                for (TXInput input : tx.getInputs()) {
+                    // 获取输入引用的原始交易ID和输出索引
+                    byte[] referencedTxId = input.getTxId();
+                    int referencedVout = input.getVout();
+                    //新增UTXO
+                    //根据交易ID查询所在的区块
+                    Block referencedBlock  = getBlockByTxId(input.getTxId());
+                    if (referencedBlock != null) {
+                        //查询引用的交易
+                        Transaction referencedTx = findTransactionInBlock(referencedBlock, referencedTxId);
+                        if (referencedTx != null && referencedVout < referencedTx.getOutputs().size()) {
+                            TXOutput referencedOutput = referencedTx.getOutputs().get(referencedVout);
+                            // 重建UTXO并添加到集合
+                            UTXO utxo = new UTXO();
+                            utxo.setTxId(referencedTxId);
+                            utxo.setVout(referencedVout);
+                            utxo.setValue(referencedOutput.getValue());
+                            utxo.setScriptPubKey(referencedOutput.getScriptPubKey());
+
+                            // 添加到UTXO存储
+                            log.info("回滚UTXO: txId={}, vout={}",
+                                    CryptoUtil.bytesToHex(referencedTxId), referencedVout);
+
+                        }
+                    }
+                }
+                //撤销输出的UTXO
+                for (int j = 0; j < tx.getOutputs().size(); j++) {
+                    deleteUTXO(tx.getTxId(), j);
+                }
+            }
+        }
+
+
         // 1. 移除区块添加的UTXO
         for (Transaction tx : block.getTransactions()) {
             for (int j = 0; j < tx.getOutputs().size(); j++) {
                 deleteUTXO(tx.getTxId(), j);
 
             }
+
         }
         // 2. 恢复区块花费的UTXO
         for (int i = 1; i < block.getTransactions().size(); i++) {
             Transaction tx = block.getTransactions().get(i);
-            for (TXInput input : tx.getInputs()) {
-                // 从历史记录或数据库中恢复UTXO  //更新为为花费
-                UTXO utxo = getUTXO(input.getTxId(), input.getVout());
-                if (utxo != null) {
-                    utxo.setStatus(UTXOStatus.NOSPENT.getValue());
-                }
-                //TODO 更新
 
-            }
         }
+    }
+
+    private Transaction findTransactionInBlock(Block referencedBlock, byte[] referencedTxId) {
+
+        return null;
+    }
+
+    private Block getBlockByTxId(byte[] txId) {
+        return null;
     }
 
 
@@ -702,37 +708,6 @@ public class BlockChainService {
 
 
     /**
-     * 更新UTXO集合
-     * @param block
-     */
-    private void updateUTXOSet(Block block) {
-        // 1. 处理所有交易（包括CoinBase）
-        for (int i = 0; i < block.getTransactions().size(); i++) {
-            Transaction tx = block.getTransactions().get(i);
-
-            // 2. 处理交易输入，标记引用的UTXO为已花费
-            if (i > 0) { // CoinBase交易没有输入
-                for (TXInput input : tx.getInputs()) {
-                    UTXO utxo = getUTXO(input.getTxId(), input.getVout());
-                    if (utxo != null) {
-                        utxo.setStatus(UTXOStatus.SPENT.getValue());
-                        // 可以选择从集合中移除已花费的UTXO，或者保留但标记为已花费
-                        // utxoSet.remove(utxoKey);
-
-                        //每个月清理一次已经花费的UTXO
-                    }
-                }
-            }
-            // 3. 处理交易输出，添加新的UTXO
-            for (int j = 0; j < tx.getOutputs().size(); j++) {
-                String utxoKey = CryptoUtil.bytesToHex(tx.getTxId()) + ":" + j;
-                boolean isCoinbase = (i == 0);
-            }
-        }
-
-    }
-
-    /**
      * 获取当前区块信息
      * @return
      */
@@ -746,8 +721,107 @@ public class BlockChainService {
      * @return
      */
     public Result<BlockDTO> getBlock(String blockHashHex) {
-        Block blockByHash = popStorage.getBlockByHash(hexStringToByteArray(blockHashHex));
-        return Result.ok(BeanCopyUtils.copyObject(blockByHash, BlockDTO.class));
+        Block block = popStorage.getBlockByHash(CryptoUtil.hexToBytes(blockHashHex));
+        if (block == null){
+            return Result.error("区块不存在");
+        }
+        BlockDTO blockDTO = BeanCopyUtils.copyObject(block, BlockDTO.class);
+        List<Transaction> transactions = block.getTransactions();
+        if (transactions != null){
+            ArrayList<TransactionDTO> transactionDTOS = new ArrayList<>();
+            for (Transaction transaction : transactions) {
+                TransactionDTO transactionDTO = BeanCopyUtils.copyObject(transaction, TransactionDTO.class);
+                //交易输入
+                List<TXInput> inputs = transaction.getInputs();
+                if (inputs != null){
+                    ArrayList<TXInputDTO> transactionInputDTOS = new ArrayList<>();
+                    for (TXInput input : inputs) {
+                        TXInputDTO transactionInputDTO = new TXInputDTO();
+                        transactionInputDTO.setTxId(input.getTxId());
+                        transactionInputDTO.setVout(input.getVout());
+                        transactionInputDTO.setScriptSig(input.getScriptSig());
+                        transactionInputDTO.setSequence(input.getSequence());
+                        transactionInputDTOS.add(transactionInputDTO);
+                    }
+                    transactionDTO.setInputs(transactionInputDTOS);
+                }
+                //交易输出
+                List<TXOutput> outputs = transaction.getOutputs();
+                if (outputs != null){
+                    ArrayList<TXOutputDTO> transactionOutputDTOS = new ArrayList<>();
+                    for (TXOutput output : outputs) {
+                        TXOutputDTO transactionOutputDTO = BeanCopyUtils.copyObject(output, TXOutputDTO.class);
+                        transactionOutputDTOS.add(transactionOutputDTO);
+                    }
+                    transactionDTO.setOutputs(transactionOutputDTOS);
+                }
+                //见证数据
+                List<Witness> witnesses = transaction.getWitnesses();
+                if (witnesses != null){
+                    ArrayList<WitnessDTO> witnessDTOS = new ArrayList<>();
+                    for (Witness witness : witnesses) {
+                        WitnessDTO witnessDTO = BeanCopyUtils.copyObject(witness, WitnessDTO.class);
+                        witnessDTOS.add(witnessDTO);
+                    }
+                    transactionDTO.setWitnesses(witnessDTOS);
+                }
+                transactionDTOS.add(transactionDTO);
+            }
+            blockDTO.setTransactions(transactionDTOS);
+        }
+        return Result.ok(blockDTO);
+    }
+
+    public Result<BlockDTO> getBlock(long height) {
+        Block block = popStorage.getMainBlockByHeight(height);
+        if (block == null){
+            return Result.error("区块不存在");
+        }
+        BlockDTO blockDTO = BeanCopyUtils.copyObject(block, BlockDTO.class);
+        List<Transaction> transactions = block.getTransactions();
+        if (transactions != null){
+            ArrayList<TransactionDTO> transactionDTOS = new ArrayList<>();
+            for (Transaction transaction : transactions) {
+                TransactionDTO transactionDTO = BeanCopyUtils.copyObject(transaction, TransactionDTO.class);
+                //交易输入
+                List<TXInput> inputs = transaction.getInputs();
+                if (inputs != null){
+                    ArrayList<TXInputDTO> transactionInputDTOS = new ArrayList<>();
+                    for (TXInput input : inputs) {
+                        TXInputDTO transactionInputDTO = new TXInputDTO();
+                        transactionInputDTO.setTxId(input.getTxId());
+                        transactionInputDTO.setVout(input.getVout());
+                        transactionInputDTO.setScriptSig(input.getScriptSig());
+                        transactionInputDTO.setSequence(input.getSequence());
+                        transactionInputDTOS.add(transactionInputDTO);
+                    }
+                    transactionDTO.setInputs(transactionInputDTOS);
+                }
+                //交易输出
+                List<TXOutput> outputs = transaction.getOutputs();
+                if (outputs != null){
+                    ArrayList<TXOutputDTO> transactionOutputDTOS = new ArrayList<>();
+                    for (TXOutput output : outputs) {
+                        TXOutputDTO transactionOutputDTO = BeanCopyUtils.copyObject(output, TXOutputDTO.class);
+                        transactionOutputDTOS.add(transactionOutputDTO);
+                    }
+                    transactionDTO.setOutputs(transactionOutputDTOS);
+                }
+                //见证数据
+                List<Witness> witnesses = transaction.getWitnesses();
+                if (witnesses != null){
+                    ArrayList<WitnessDTO> witnessDTOS = new ArrayList<>();
+                    for (Witness witness : witnesses) {
+                        WitnessDTO witnessDTO = BeanCopyUtils.copyObject(witness, WitnessDTO.class);
+                        witnessDTOS.add(witnessDTO);
+                    }
+                    transactionDTO.setWitnesses(witnessDTOS);
+                }
+                transactionDTOS.add(transactionDTO);
+            }
+            blockDTO.setTransactions(transactionDTOS);
+        }
+        return Result.ok(blockDTO);
     }
 
     /**
@@ -778,5 +852,13 @@ public class BlockChainService {
 
     public Block getMainBlockByHeight(long height) {
         return popStorage.getMainBlockByHeight(height);
+    }
+
+
+    public Result<TransactionDTO> getTransaction(String txId) {
+        //交易到区块的索引
+        //查询区块
+        //获取区块中的交易
+        return Result.ok();
     }
 }

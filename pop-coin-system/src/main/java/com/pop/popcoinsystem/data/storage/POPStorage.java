@@ -76,8 +76,7 @@ public class POPStorage {
             throw new RuntimeException("获取主链当前高度失败", e);
         }
     }
-    //更新主链高度到区块的索引
-    //保存主链中高度到区块hash索引
+    //更新主链高度到区块的索引 保存主链中高度到区块hash索引
     public void addMainHeightToBlockIndex(long blockHeight, byte[] blockHash) {
         try {
             db.put(ColumnFamily.MAIN_BLOCK_CHAIN_INDEX.getHandle(), ByteUtils.toBytes(blockHeight), blockHash);

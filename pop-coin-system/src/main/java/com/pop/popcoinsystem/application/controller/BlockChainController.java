@@ -3,16 +3,19 @@ package com.pop.popcoinsystem.application.controller;
 import com.pop.popcoinsystem.data.block.BlockVO;
 import com.pop.popcoinsystem.data.blockChain.BlockChain;
 import com.pop.popcoinsystem.data.block.BlockDTO;
+import com.pop.popcoinsystem.data.transaction.dto.TransactionDTO;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.service.BlockChainService;
 import jakarta.annotation.Resource;
+import jakarta.websocket.server.PathParam;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 
 /**
  * 为了可维护性 整个系统仅支持P2WPKH
  */
-
+@Slf4j
 @RestController
 @RequestMapping("/pop/blockchain")
 public class BlockChainController {
@@ -31,10 +34,37 @@ public class BlockChainController {
     /**
      * 根据区块hash HEX 获取区块信息
      */
-    @GetMapping("/getBlock")
-    public Result<BlockDTO> getBlock(String blockHashHex) {
+    @GetMapping("/block/{blockHashHex}")
+    public Result<BlockDTO> getBlock(@PathVariable("blockHashHex") String blockHashHex) {
+        if (blockHashHex == null){
+            return Result.error("参数错误");
+        }
         return blockChainService.getBlock(blockHashHex);
     }
+
+    @GetMapping("/block/height/{height}")
+    public Result<BlockDTO> getBlock(@PathVariable("height") long height) {
+        if (height < 0){
+            return Result.error("参数错误");
+        }
+        return blockChainService.getBlock(height);
+    }
+
+
+    /**
+     * 查询交易
+     */
+    @PostMapping("/transaction/{txId}")
+    public Result<TransactionDTO> getTransaction(@PathVariable("txId") String txId) {
+        if (txId == null){
+            return Result.error("参数错误");
+        }
+
+        return blockChainService.getTransaction(txId);
+    }
+
+
+
 
     /**
      * 查询最新的区块 最多100个
@@ -113,13 +143,6 @@ public class BlockChainController {
     }
 
 
-    /**
-     * 查询交易
-     */
-    @PostMapping("/getTransaction")
-    public String getTransaction() {
-        return "";
-    }
 
 
     /**

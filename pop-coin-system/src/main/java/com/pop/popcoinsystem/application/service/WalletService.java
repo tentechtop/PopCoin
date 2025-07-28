@@ -1,7 +1,14 @@
 package com.pop.popcoinsystem.application.service;
 
 
+import com.pop.popcoinsystem.application.service.vo.BuildWalletUTXODTO;
+import com.pop.popcoinsystem.application.service.vo.TransferVO;
+import com.pop.popcoinsystem.data.transaction.TXInput;
+import com.pop.popcoinsystem.data.transaction.TXOutput;
+import com.pop.popcoinsystem.data.transaction.Transaction;
+import com.pop.popcoinsystem.data.transaction.UTXO;
 import com.pop.popcoinsystem.data.vo.result.Result;
+import com.pop.popcoinsystem.service.BlockChainService;
 import com.pop.popcoinsystem.service.UTXOService;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.MnemonicUtils;
@@ -22,6 +29,9 @@ import java.util.List;
 public class WalletService {
     @Resource
     private UTXOService utxoService;
+
+    @Resource
+    private BlockChainService blockChainService;
 
     private static WalletStorage walletStorage;
     public static Wallet walleta;
@@ -271,6 +281,60 @@ public class WalletService {
         return null;
     }
 
+
+    /**
+     * 创建交易  目前仅仅支持 P2PKH P2WPKH
+     * @param transferVO
+     * @return
+     */
+    public Result<String> createTransaction(TransferVO transferVO) {
+        int isSegWit = transferVO.getIsSegWit();
+        Transaction transaction = null;
+        if (isSegWit == 0){
+            //普通交易
+             transaction =  createRegularTransaction(transferVO);
+        }else {
+            //隔离见证交易
+            transaction = createSegWitTransaction(transferVO);
+        }
+        return blockChainService.verifyAndAddTradingPool(transaction);
+    }
+
+    private Transaction createSegWitTransaction(TransferVO transferVO) {
+        Transaction transaction = new Transaction();
+
+        return null;
+    }
+
+    private Transaction createRegularTransaction(TransferVO transferVO) {
+        //查询钱包可用的UTXO
+        List<UTXO>  walletUTXO = walletStorage.queryWalletUTXO(transferVO.getWalletName());
+
+        Transaction transaction = new Transaction();
+
+        ArrayList<TXInput> txInputs = new ArrayList<>();
+
+        ArrayList<TXOutput> txOutputs = new ArrayList<>();
+
+        return null;
+    }
+
+
+
+    /**
+     * 构建钱包的UTXO集合
+     */
+    public Result<String> buildWalletUTXO(BuildWalletUTXODTO buildWalletUTXODTO) {
+        new Thread(() -> {
+            //首先要获取全节点中所有的UTXO集合
+
+
+
+
+
+        });
+        return Result.ok("正在构建钱包的UTXO集合");
+    }
 
 
 

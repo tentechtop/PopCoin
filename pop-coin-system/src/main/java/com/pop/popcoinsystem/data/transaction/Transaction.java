@@ -18,8 +18,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import static com.pop.popcoinsystem.data.transaction.constant.SUBSIDY;
+
 import static com.pop.popcoinsystem.data.transaction.constant.VERSION_1;
+import static com.pop.popcoinsystem.service.MiningService.*;
 
 /**
  * 交易信息
@@ -139,14 +140,18 @@ public class Transaction {
 
 
     //创建一笔CoinBase交易
-    public static  Transaction createCoinBaseTransaction(String to) {
-        // CoinBase交易只有一个输入，没有引用任何输出
+    public static  Transaction createCoinBaseTransaction(String to, long height) {
+        //根据地址类型创建CoinBase交易
+
+
+        //地址到公钥哈希
+        byte[] bytes = CryptoUtil.ECDSASigner.addressToP2PKH(to);
         //coinBase的输入的交易ID
         byte[] zeroTxId = new byte[32]; // 32字节 = 256位
         Arrays.fill(zeroTxId, (byte) 0);
-        TXInput input = new TXInput(zeroTxId, -1, null);
+        TXInput input = new TXInput(zeroTxId, 0, null);
         // 创建输出，将奖励发送到指定地址
-        TXOutput output = new TXOutput(SUBSIDY, new ScriptPubKey(to.getBytes()));
+        TXOutput output = new TXOutput(calculateBlockReward(height), new ScriptPubKey(bytes));
         Transaction coinbaseTx = new Transaction();
         coinbaseTx.setVersion(VERSION_1);
         coinbaseTx.getInputs().add(input);
@@ -154,16 +159,45 @@ public class Transaction {
         coinbaseTx.setTime(System.currentTimeMillis());
         // 计算并设置交易ID
         coinbaseTx.setTxId(Transaction.calculateTxId(coinbaseTx));
+        coinbaseTx.setSize(coinbaseTx.calculateBaseSize());
         coinbaseTx.calculateWeight();
         return coinbaseTx;
     }
 
 
-    // 序列化交易用于签名
-    public byte[] serializeForSigning(int inputIndex, ScriptPubKey scriptPubKey) {
 
-        return null;
+
+
+
+
+
+
+
+    /**
+     * 计算区块奖励（每2100万个区块奖励减半，与比特币机制一致）
+     * @param blockHeight 当前区块高度
+     * @return 区块奖励（包含基础奖励，单位为1e8）
+     */
+    public static long calculateBlockReward(long blockHeight) {
+        // 1. 计算减半次数：当前高度 / 减半周期（2100万）
+        long halvings = blockHeight / HALVING_PERIOD;
+        // 2. 初始奖励为50，每减半一次除以2（最小为0）
+        long reward = INITIAL_REWARD;
+        for (long i = 0; i < halvings; i++) {
+            reward /= 2;
+            if (reward == 0) break; // 奖励为0时提前终止
+        }
+        // 3. 确保奖励非负（理论上不会出现负数，此处为防御性编程）
+        reward = Math.max(reward, 0);
+        // 4. 乘以单位（1e8），转换为最终奖励值
+        return reward * BLOCK_REWARD_UNIT;
     }
+
+
+
+
+
+
 
 
 
@@ -232,6 +266,8 @@ public class Transaction {
         // 计算总大小（VBytes）
         this.size = (long) Math.ceil((double) this.weight / 4);
     }
+
+
 
     /**
      * 计算非见证数据大小
@@ -393,7 +429,7 @@ public class Transaction {
             /*System.out.println("每字节手续费: " + regularTx.getFeePerByte() + " 聪/字节");*/
 
             System.out.println("\n===== 测试 CoinBase 交易 =====");
-            Transaction coinbaseTx = createCoinBaseTransaction("miner-address");
+            Transaction coinbaseTx = createCoinBaseTransaction("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",1);
             System.out.println("CoinBase 交易ID: " + CryptoUtil.bytesToHex(coinbaseTx.getTxId()));
             System.out.println("是否 CoinBase: " + coinbaseTx.isCoinBase());
             System.out.println("总输入: " + coinbaseTx.getTotalInput() + " 聪"); // 新增（应为0）

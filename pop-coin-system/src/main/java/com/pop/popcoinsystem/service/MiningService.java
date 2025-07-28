@@ -36,11 +36,8 @@ public class MiningService {
 
     private final BlockChainService blockChainService;
 
-
-
-
     // 挖矿性能控制（0-100，默认85%）
-    private volatile int miningPerformance = 20;
+    private volatile int miningPerformance = 50;
     // CPU保护机制相关变量
     private volatile double lastCpuLoad = 0;
     private static final long CPU_MONITOR_INTERVAL = 5000; // 5秒检测一次
@@ -58,10 +55,9 @@ public class MiningService {
     private static final int PERFORMANCE_ADJUST_STEP = 5; // 每次调整5%
     private static final int MAX_PERFORMANCE = 100;
     private static final int MIN_PERFORMANCE = 30; // 最低保留30%性能，避免过度限制
-
     private static final int BASE_SLEEP = 1; // 基础休眠时间(ms)
     private static final int MAX_SLEEP = 50; // 最大休眠时间(ms)
-    private int retryCount = 0;
+
 
 
     //矿工信息
@@ -69,13 +65,28 @@ public class MiningService {
     // 当前难度目标（前导零的数量）
     private static long currentDifficulty = 1;
     // 最大区块奖励（延迟10分钟时的奖励）
-    private static final double MAX_REWARD = 50.0;
-    // 每个区块预期出块时间（10分钟，单位：秒）
-    private static final long EXPECTED_BLOCK_TIME = 600;
+    public static final long INITIAL_REWARD = 50;
+    //单位 1e8
+    public static final long BLOCK_REWARD_UNIT = 100000000;
+
+
     //是否启动挖矿服务 用于停止挖矿的标志
     public static boolean isMining = false;
     // 难度调整周期的区块数量
-    private static final int DIFFICULTY_ADJUSTMENT_INTERVAL = 20;
+    private static final int DIFFICULTY_ADJUSTMENT_INTERVAL = 144;//2016大概两周调整一次  144一天调整一次
+    //区块生成时间 600秒  10分钟
+    private static final long BLOCK_GENERATION_TIME = 600;
+    //货币总供应量
+    private static final long MONEY_SUPPLY = 2100000000;
+    //减半周期
+    public static final int HALVING_PERIOD = 21000000;
+    //时间窗口大小
+    public static final int TIME_WINDOW_SIZE = 11;
+    //交易列表大小 1M
+    public static final int MAX_TRANSACTION_SIZE = 1024 * 1024;
+
+
+
 
     /**
      * 交易池  最大300M
@@ -125,7 +136,7 @@ public class MiningService {
         new Thread(() -> {
             Thread.currentThread().setPriority(Thread.NORM_PRIORITY);//NORM_PRIORITY  MIN_PRIORITY
             while (isMining) {
-                List<Transaction> transactions = getTransactionsUpTo1MB();
+                List<Transaction> transactions = getTransactionsByPriority();
                 if (transactions.isEmpty()) {
                     log.info("没有可用的交易");
                 }
@@ -142,16 +153,18 @@ public class MiningService {
                 newBlock.setTime(System.currentTimeMillis());
                 ArrayList<Transaction> blockTransactions = new ArrayList<>();
                 //创建CoinBase交易 放在第一位
-                Transaction coinBaseTransaction = Transaction.createCoinBaseTransaction(miner.getAddress());
+                Transaction coinBaseTransaction = Transaction.createCoinBaseTransaction(miner.getAddress(), blockHeight+1);
                 blockTransactions.add(coinBaseTransaction);
+
+
                 blockTransactions.addAll(transactions);
-                List<Transaction> transactionsByPriority = getTransactionsByPriority();
-                blockTransactions.addAll(transactionsByPriority);
                 newBlock.setTransactions(blockTransactions);
                 newBlock.calculateAndSetMerkleRoot();
-                newBlock.setTime(System.currentTimeMillis() /1000 );
+                newBlock.setTime(System.currentTimeMillis() /1000);
                 newBlock.setDifficulty(currentDifficulty);
                 newBlock.setDifficultyTarget(DifficultyUtils.difficultyToCompact(currentDifficulty));
+                long medianTime = calculateMedianTime(TIME_WINDOW_SIZE);
+                newBlock.setMedianTime(medianTime);
 
                 //  //表示该区块之前的区块链总工作量，以十六进制表示。它反映了整个区块链的挖矿工作量。
                 //    private byte[] chainWork;
@@ -159,6 +172,9 @@ public class MiningService {
                 byte[] chainWork = latestBlock.getChainWork();
                 byte[] add = DifficultyUtils.add(chainWork, currentDifficulty);
                 newBlock.setChainWork(add);
+
+                newBlock.calculateAndSetSize();
+                newBlock.calculateAndSetWeight();
 
                 //挖矿奖励：通过 coinbase 交易嵌入区块体
                 //每个区块的第一笔交易是coinbase 交易（特殊交易，无输入），其输出部分直接包含矿工的挖矿奖励。例如：
@@ -198,6 +214,39 @@ public class MiningService {
 
 
 
+    /**
+     * 计算当前主链的中位数时间
+     * @param windowSize 时间窗口大小（建议为奇数，如11）
+     * @return 中位数时间（单位与区块时间戳一致，如秒）
+     */
+    public long calculateMedianTime(int windowSize) {
+        // 1. 校验窗口大小（必须为正整数，建议奇数）
+        if (windowSize <= 0) {
+            throw new IllegalArgumentException("窗口大小必须为正整数");
+        }
+
+        // 2. 获取主链最新区块高度
+        long latestHeight = blockChainService.getMainLatestHeight();
+        if (latestHeight < windowSize - 1) {
+            // 区块数量不足窗口大小，直接返回最新区块时间
+            return blockChainService.getMainLatestBlock().getTime();
+        }
+
+        // 3. 提取最近windowSize个主链区块的时间戳
+        List<Long> timestamps = new ArrayList<>(windowSize);
+        for (int i = 0; i < windowSize; i++) {
+            long height = latestHeight - i;
+            Block block = blockChainService.getMainBlockByHeight(height);
+            if (block != null) {
+                timestamps.add(block.getTime());
+            }
+        }
+
+        // 4. 排序并取中位数
+        Collections.sort(timestamps);
+        int medianIndex = windowSize / 2; // 对于11个元素，索引为5（0~10）
+        return timestamps.get(medianIndex);
+    }
 
 
 
@@ -224,8 +273,7 @@ public class MiningService {
             Thread.currentThread().setPriority(Thread.NORM_PRIORITY);//NORM_PRIORITY  MIN_PRIORITY
             while (isMining) {
                 monitorCpuLoad();
-
-                List<Transaction> transactions = getTransactionsUpTo1MB();
+                List<Transaction> transactions = getTransactionsByPriority();
                 if (transactions.isEmpty()) {
                     log.info("No transactions available for mining.");
                 }
@@ -243,11 +291,11 @@ public class MiningService {
                 newBlock.setTime(System.currentTimeMillis());
                 ArrayList<Transaction> blockTransactions = new ArrayList<>();
                 //创建CoinBase交易 放在第一位
-                Transaction coinBaseTransaction = Transaction.createCoinBaseTransaction(miner.getAddress());
+                Transaction coinBaseTransaction = Transaction.createCoinBaseTransaction(miner.getAddress(),blockHeight+1);
                 blockTransactions.add(coinBaseTransaction);
                 blockTransactions.addAll(transactions);
-                List<Transaction> transactionsByPriority = getTransactionsByPriority();
-                blockTransactions.addAll(transactionsByPriority);
+
+
                 newBlock.setTransactions(blockTransactions);
                 newBlock.calculateAndSetMerkleRoot();
                 newBlock.setTime(System.currentTimeMillis() /1000 );
@@ -273,8 +321,6 @@ public class MiningService {
                 MiningResult result = mineBlock(newBlock);
                 MiningResult result2 = mineBlock(newBlock);
                 MiningResult result3 = mineBlock(newBlock);
-
-
 
                 if (result != null && result.found) {
                     newBlock.setNonce(result.nonce);
@@ -506,26 +552,11 @@ public class MiningService {
      * 获取总大小小于1MB的高优先级交易列表
      * @return 符合条件的交易列表
      */
-    public synchronized List<Transaction> getTransactionsUpTo1MB() {
-        final long MAX_RETURN_SIZE = 1024 * 1024; // 1MB
-        List<Transaction> selectedTxs = new ArrayList<>();
-        long totalSize = 0;
-        // 按优先级从高到低遍历交易
-        for (Transaction tx : getTransactionsByPriority()) {
-            // 如果添加当前交易后总大小超过1MB，则停止
-            if (totalSize + tx.getSize() > MAX_RETURN_SIZE) {
-                break;
-            }
-            selectedTxs.add(tx);
-            totalSize += tx.getSize();
-        }
-        return selectedTxs;
-    }
+
 
 
     // 按每字节手续费从高到低获取交易列表
     public synchronized List<Transaction> getTransactionsByPriority() {
-        final long MAX_RETURN_SIZE = 1024 * 1024; // 1MB
         List<Transaction> txList = new ArrayList<>(transactions.values());
         // 1. 先按手续费率从高到低排序
         txList.sort((tx1, tx2) -> Double.compare(tx2.getFeePerByte(), tx1.getFeePerByte()));
@@ -533,7 +564,7 @@ public class MiningService {
         List<Transaction> selectedTxs = new ArrayList<>();
         long totalSize = 0;
         for (Transaction tx : txList) {
-            if (totalSize + tx.getSize() > MAX_RETURN_SIZE) {
+            if (totalSize + tx.getSize() > MAX_TRANSACTION_SIZE) {
                 break; // 超过1MB则停止
             }
             selectedTxs.add(tx);
@@ -752,13 +783,14 @@ public class MiningService {
         // 防止除零错误
         if (actualTimeTaken <= 0) actualTimeTaken = 1;
 
-        long targetTime = DIFFICULTY_ADJUSTMENT_INTERVAL * 60;
+        long targetTime = DIFFICULTY_ADJUSTMENT_INTERVAL * BLOCK_GENERATION_TIME; //600秒 10分钟
 
         System.out.println("\n难度调整:");
-        System.out.println("最近" + DIFFICULTY_ADJUSTMENT_INTERVAL + "个区块总生成时间: " + actualTimeTaken + "秒");
-        System.out.println("目标总时间: " + targetTime + "秒");
+        System.out.println("目标总时间: " + targetTime + "秒");//预计时间
+        System.out.println("实际" + DIFFICULTY_ADJUSTMENT_INTERVAL + "个区块总生成时间: " + actualTimeTaken + "秒");
+        System.out.println("目标平均生成时间: "+BLOCK_GENERATION_TIME+"秒");
         System.out.println("实际平均生成时间: " + (double) actualTimeTaken / DIFFICULTY_ADJUSTMENT_INTERVAL + "秒");
-        System.out.println("目标平均生成时间: 60秒");
+
 
         // 修正方向：目标时间/实际时间
         double factor = (double) targetTime / actualTimeTaken;

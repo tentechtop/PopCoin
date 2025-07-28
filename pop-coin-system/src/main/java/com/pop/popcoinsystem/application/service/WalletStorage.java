@@ -32,14 +32,77 @@ public class WalletStorage {
     private static final String DB_PATH = "rocksDb/popCoin.db/wallet/blockChain" + POP_NET_VERSION + ".db";
     private static final String LOG_PATH = DB_PATH + "rocksdb_logs/"; // 单独目录存放 RocksDB 日志
 
-    private static final byte[] KEY_LAST_BLOCK_CHAIN = "key_last_block_chain".getBytes();
-    private static final byte[] KEY_LAST_BLOCK_HASH = "key_last_block_hash".getBytes();
-    private static final byte[] KEY_NODE_SETTING = "key_node_setting".getBytes();
-    private static final byte[] KEY_MINER = "key_miner".getBytes();
 
+    // ------------------------------ 数据操作 ------------------------------
+    /**
+     * 添加钱包
+     */
+    public void addWallet(Wallet wallet) {
+        try {
+            this.rwLock.writeLock().lock();
+            this.db.put(ColumnFamily.WALLET.handle, wallet.getName().getBytes(), SerializeUtils.serialize(wallet));
+        } catch (RocksDBException e) {
+            log.error("添加钱包失败", e);
+            throw new RuntimeException("添加钱包失败", e);
+        } finally {
+            this.rwLock.writeLock().unlock();
+        }
+    }
+
+
+    /**
+     * 获取钱包
+     */
+    public Wallet getWallet(String name) {
+        try {
+            this.rwLock.readLock().lock();
+            byte[] bytes = this.db.get(ColumnFamily.WALLET.handle, name.getBytes());
+            if (bytes == null) {
+                return null;
+            }
+            return (Wallet) SerializeUtils.deSerialize(bytes);
+        } catch (RocksDBException e) {
+            log.error("获取钱包失败", e);
+            throw new RuntimeException("获取钱包失败", e);
+        } finally {
+            this.rwLock.readLock().unlock();
+        }
+    }
+
+    public List<UTXO> queryWalletUTXO(String walletName) {
+
+        return null;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    //.................................................................................................................
     // 使用枚举管理列族
     private enum ColumnFamily {
         WALLET("CF_WALLET", "wallet",new ColumnFamilyOptions()),
+
+        BTC_Miner_UTXO("CF_BTC_Miner_UTXO", "btcMinerUTXO",new ColumnFamilyOptions()),
+
+
 
         ;
         private final String logicalName;
@@ -171,43 +234,6 @@ public class WalletStorage {
             log.error("数据库关闭失败", e);
         }
     }
-    // ------------------------------ 数据操作 ------------------------------
-    /**
-     * 添加钱包
-     */
-    public void addWallet(Wallet wallet) {
-        try {
-            this.rwLock.writeLock().lock();
-            this.db.put(ColumnFamily.WALLET.handle, wallet.getName().getBytes(), SerializeUtils.serialize(wallet));
-        } catch (RocksDBException e) {
-            log.error("添加钱包失败", e);
-            throw new RuntimeException("添加钱包失败", e);
-        } finally {
-            this.rwLock.writeLock().unlock();
-        }
-    }
-
-
-    /**
-     * 获取钱包
-     */
-    public Wallet getWallet(String name) {
-        try {
-            this.rwLock.readLock().lock();
-            byte[] bytes = this.db.get(ColumnFamily.WALLET.handle, name.getBytes());
-            if (bytes == null) {
-                return null;
-            }
-            return (Wallet) SerializeUtils.deSerialize(bytes);
-        } catch (RocksDBException e) {
-            log.error("获取钱包失败", e);
-            throw new RuntimeException("获取钱包失败", e);
-        } finally {
-            this.rwLock.readLock().unlock();
-        }
-    }
-
-
 
 
 

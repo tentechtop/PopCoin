@@ -1,17 +1,17 @@
-package com.pop.popcoinsystem.data.transaction;
+package com.pop.popcoinsystem.application.service;
 
 import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.math.BigDecimal;
-
+/**
+ * 钱包中的UTXO
+ */
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class UTXO {
-
+public class WalletUTXO {
     /**
      * 交易Id的hash值
      */
@@ -32,4 +32,8 @@ public class UTXO {
      */
     private ScriptPubKey scriptPubKey;  // 锁定脚本，定义资金使用条件
 
+    /**
+     * UTXO状态   0 未花费   1 已花费   2 待花费无法被选中  3 已经在交易池中待打包确认
+     */
+    private int status;
 }

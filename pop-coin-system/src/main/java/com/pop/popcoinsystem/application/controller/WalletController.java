@@ -3,6 +3,8 @@ package com.pop.popcoinsystem.application.controller;
 import com.pop.popcoinsystem.application.service.Wallet;
 import com.pop.popcoinsystem.application.service.WalletService;
 import com.pop.popcoinsystem.application.service.WalletVO;
+import com.pop.popcoinsystem.application.service.vo.BuildWalletUTXODTO;
+import com.pop.popcoinsystem.application.service.vo.TransferVO;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -97,6 +99,25 @@ public class WalletController {
     public String createP2WPKHByPK() {
         return "create P2WPKH by PK success";
     }
+
+
+    /**
+     * 发起一笔交易
+     */
+    @PostMapping("/createTransaction")
+    public Result<String> createTransaction(@RequestBody TransferVO transferVO) {
+        return walletService.createTransaction(transferVO);
+    }
+
+
+    /**
+     * 构建钱包的UTXO
+     */
+    @PostMapping("/buildWalletUTXO")
+    public Result<String> buildWalletUTXO(@RequestBody BuildWalletUTXODTO buildWalletUTXODTO) {
+        return walletService.buildWalletUTXO(buildWalletUTXODTO);
+    }
+
 
 
 }

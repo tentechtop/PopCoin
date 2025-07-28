@@ -68,6 +68,9 @@ public class Block implements Serializable {
     private List<Transaction> transactions;
 
 
+
+
+
     public byte[] computeBlockHash(Block block) {
         try {
             // 1. 验证区块头关键字段的有效性
@@ -125,7 +128,6 @@ public class Block implements Serializable {
     public void calculateAndSetSize() {
         // 区块头大小固定为80字节
         long headerSize = 80;
-
         // 交易数量的大小（使用VarInt编码）
         long txCountSize = getVarIntSize(txCount);
 
@@ -137,7 +139,6 @@ public class Block implements Serializable {
                 transactionsSize += tx.getSize();
             }
         }
-
         this.size = headerSize + txCountSize + transactionsSize;
     }
 
@@ -147,15 +148,27 @@ public class Block implements Serializable {
      * 其中 base_size 是不含见证数据的大小，total_size 是包含见证数据的完整大小
      */
     public void calculateAndSetWeight() {
+        // 确保size已正确计算（若未初始化则先计算）
         if (size <= 0) {
             calculateAndSetSize();
         }
 
-        // 计算不含见证数据的基础大小
+        // 1. 验证见证数据大小的合理性（避免负数baseSize）
+        // 见证数据大小不能超过区块总大小（否则baseSize为负）
+        if (witnessSize < 0) {
+            // 修正负数见证大小（无效值，重置为0）
+            witnessSize = 0;
+        } else if (witnessSize > size) {
+            // 见证大小不能超过区块总大小（否则baseSize为负），强制修正为size
+            witnessSize = size;
+        }
+
+        // 2. 计算不含见证数据的基础大小（确保非负）
         long baseSize = size - witnessSize;
 
-        // 计算权重 (BIP141 定义的公式)
-        this.weight = baseSize * 3 + size;
+        // 3. 计算权重（BIP141公式），并确保结果非负（理论上此时已不可能为负）
+        long calculatedWeight = baseSize * 3 + size;
+        this.weight = Math.max(calculatedWeight, 0);
     }
 
     /**
@@ -318,6 +331,7 @@ public class Block implements Serializable {
             throw new RuntimeException("区块头序列化失败: " + e.getMessage(), e);
         }
     }
+
 
 
 
