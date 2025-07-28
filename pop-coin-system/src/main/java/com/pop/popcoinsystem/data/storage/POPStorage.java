@@ -188,6 +188,12 @@ public class POPStorage {
             byte[] blockData = SerializeUtils.serialize(block);
             // 直接写入区块列族（键：区块哈希，值：序列化区块）
             db.put(ColumnFamily.BLOCK.getHandle(), blockHash, blockData);
+
+            //添加交易到区块的索引
+            for (int i = 0; i < block.getTransactions().size(); i++) {
+                db.put(ColumnFamily.TRANSACTION_INDEX.getHandle(), block.getTransactions().get(i).getTxId(), blockHash);
+            }
+
         } catch (RocksDBException e) {
             log.error("保存区块失败: blockHash={}", block.getHash(), e);
             throw new RuntimeException("保存区块失败", e);
@@ -204,6 +210,10 @@ public class POPStorage {
                 byte[] blockHash = block.getHash();
                 byte[] blockData = SerializeUtils.serialize(block);
                 writeBatch.put(ColumnFamily.BLOCK.getHandle(), blockHash, blockData);
+                //交易id到区块hash的索引
+                for (int i = 0; i < block.getTransactions().size(); i++) {
+                    writeBatch.put(ColumnFamily.TRANSACTION_INDEX.getHandle(), block.getTransactions().get(i).getTxId(), blockHash);
+                }
             }
             db.write(writeOptions, writeBatch);
         }catch (RocksDBException e) {
@@ -220,7 +230,14 @@ public class POPStorage {
     //删除区块
     public void deleteBlock(byte[] hash) {
         try {
-            db.delete(ColumnFamily.BLOCK.getHandle(), hash);
+            //先获取这个区块
+            Block block = getBlockByHash(hash);
+            if (block != null){
+                for (int i = 0; i < block.getTransactions().size(); i++) {
+                    db.delete(ColumnFamily.TRANSACTION_INDEX.getHandle(), block.getTransactions().get(i).getTxId());
+                }
+                db.delete(ColumnFamily.BLOCK.getHandle(), hash);
+            }
         } catch (RocksDBException e) {
             log.error("删除区块失败: blockHash={}", hash, e);
             throw new RuntimeException("删除区块失败", e);
@@ -234,6 +251,13 @@ public class POPStorage {
             writeBatch = new WriteBatch();
             WriteOptions writeOptions = new WriteOptions();
             for (byte[] hash : hashes) {
+                //先获取这些区块
+                Block block = getBlockByHash(hash);
+                if (block != null){
+                    for (int i = 0; i < block.getTransactions().size(); i++) {
+                        writeBatch.delete(ColumnFamily.TRANSACTION_INDEX.getHandle(), block.getTransactions().get(i).getTxId());
+                    }
+                }
                 writeBatch.delete(ColumnFamily.BLOCK.getHandle(), hash);
             }
             db.write(writeOptions, writeBatch);
@@ -264,6 +288,24 @@ public class POPStorage {
         }
     }
 
+    //根据交易id获取区块hash
+    public byte[] getBlockHashByTxId(byte[] txId) {
+        try {
+            return db.get(ColumnFamily.TRANSACTION_INDEX.getHandle(), txId);
+        } catch (RocksDBException e) {
+            log.error("获取区块hash失败: txId={}", txId, e);
+            throw new RuntimeException("获取区块hash失败", e);
+        }
+    }
+
+    //根据交易id获取区块
+    public Block getBlockByTxId(byte[] txId) {
+        byte[] blockHash = getBlockHashByTxId(txId);
+        if (blockHash == null){
+            return null;
+        }
+        return getBlockByHash(blockHash);
+    }
 
 
 

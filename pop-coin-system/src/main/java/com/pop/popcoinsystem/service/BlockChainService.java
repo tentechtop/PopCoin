@@ -503,7 +503,6 @@ public class BlockChainService {
         // 1. 处理所有交易（包括CoinBase）
         for (int i = 0; i < block.getTransactions().size(); i++) {
             Transaction tx = block.getTransactions().get(i);
-            //添加交易到区块的索引
             if (i == 0){
                 //coinBase 没有输入 不用处理
             }

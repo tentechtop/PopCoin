@@ -12,6 +12,9 @@ public enum ColumnFamily {
     //hash - >区块体
     BLOCK_BODY("CF_BLOCK_BODY", "blockBody",new ColumnFamilyOptions()),
 
+    //交易到区块的索引 Map<String, byte[]>   一笔交易只可能存在于一个区块
+    TRANSACTION_INDEX("CF_TRANSACTION_INDEX", "transactionIndex", new ColumnFamilyOptions()),
+
     //主链索引 高度到区块哈希 Map<Long, byte[]>  height -> hash
     MAIN_BLOCK_CHAIN_INDEX("CF_MAIN_BLOCK_CHAIN_INDEX", "mainBlockChainIndex",new ColumnFamilyOptions()),
     // 备选链存储，用于处理分叉 Map<Long, Set<byte[]>>  高度到 多个区块hash
@@ -32,8 +35,7 @@ public enum ColumnFamily {
                     .setCacheIndexAndFilterBlocks(true)) ),
 
 
-    //交易到区块的索引 Map<String, byte[]>   一笔交易只可能存在于一个区块
-    TRANSACTION_INDEX("CF_TRANSACTION_INDEX", "transactionIndex", new ColumnFamilyOptions()),
+
 
 
 
