@@ -1,6 +1,5 @@
 package com.pop.popcoinsystem.service;
 
-import com.pop.popcoinsystem.consensus.pow.NewContinuousBlockchainMining;
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.miner.Miner;
 import com.pop.popcoinsystem.data.storage.POPStorage;
@@ -11,26 +10,18 @@ import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.DifficultyUtils;
 import com.pop.popcoinsystem.util.SerializeUtils;
 import jakarta.annotation.PostConstruct;
-import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.jocl.*;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
-import java.io.*;
 import java.lang.management.ManagementFactory;
 import java.lang.management.OperatingSystemMXBean;
-import java.math.BigInteger;
 import java.util.*;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-import static com.pop.popcoinsystem.util.DifficultyUtils.difficultyToTarget;
-import static com.pop.popcoinsystem.util.Numeric.hexStringToByteArray;
-import static com.pop.popcoinsystem.util.TypeUtils.reverseBytes;
-import static org.jocl.CL.*;
+
+
 
 
 /**
@@ -177,7 +168,7 @@ public class MiningService {
                 //普通交易中，输入金额总和 - 输出金额总和 = 手续费，这部分差额由打包该交易的矿工获得。
                 //例如：用户发起一笔交易，输入 10 个代币，输出 9.9 个代币，差额 0.1 个代币即为手续费。这部分无需单独记录，通过遍历区块内所有交易的输入输出即可计算。
                 System.out.println("\n开始挖矿新区块 #" + newBlock.getHeight() +
-                        " (难度: " + newBlock.getDifficulty() + ", 交易数: " + transactions.size());
+                        " (难度: " + newBlock.getDifficulty() + ", 交易数: " + transactions.size() +")");
                 MiningResult result = mineBlock(newBlock);
                 if (result != null && result.found) {
                     newBlock.setNonce(result.nonce);

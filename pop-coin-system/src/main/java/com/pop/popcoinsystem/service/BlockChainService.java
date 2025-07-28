@@ -70,8 +70,10 @@ public class BlockChainService {
         miner.setAddress("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa");
         miner.setName("BTC-Miner");
         miningService.setMiningInfo(miner);
-        miningService.startMining();
 
+        //延迟5秒后开始挖矿
+        Thread.sleep(5000);
+        miningService.startMining();
     }
 
     /**
@@ -162,7 +164,6 @@ public class BlockChainService {
         coinbaseTx.setTxId(txId);
         return coinbaseTx;
     }
-
 
     /**
      * 验证交易

@@ -1,18 +1,30 @@
 package com.pop.popcoinsystem.util;
 
+import com.pop.popcoinsystem.network.enums.NETVersion;
 import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigInteger;
 import java.util.Arrays;
+import java.util.Map;
 
 import static com.pop.popcoinsystem.util.CryptoUtil.bytesToHex;
 
 @Slf4j
 public class DifficultyUtils {
 
+    public static  String initDifficulty;
+
+    static {
+        // 从类路径根目录加载application.yml
+        Map<String, Object> config = YamlReaderUtils.loadYaml("application.yml");
+        if (config != null) {
+            initDifficulty = (String) YamlReaderUtils.getNestedValue(config, "popcoin.initDifficulty");
+        }
+    }
+
     // 难度1对应的目标值（256位）：0x1d00ffff对应的展开值
     private static final BigInteger DIFFICULTY_1_TARGET = new BigInteger(
-            "0000ffffffff0000000000000000000000000000000000000000000000000000", 16);
+            initDifficulty, 16);
 
     // 每个区块预期出块时间（10分钟，单位：秒）
     private static final long EXPECTED_BLOCK_TIME = 600;
