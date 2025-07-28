@@ -10,7 +10,6 @@ spring:
     copyright: Copyright ? 2019 PopCoin. All rights reserved.
 
 
-
 server:
   port: 9999
 
@@ -21,3 +20,9 @@ popcoin:
   netversion: 1  #节点网络版本 1主网  2测试网络1  3测试网络2
   nodetype: 0   #全节点 1轻节点 2仅出站节点
   genesisblockhash: "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"   #创世区块hash
+
+
+
+
+
+

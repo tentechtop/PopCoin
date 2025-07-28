@@ -90,6 +90,9 @@ public class POPStorage {
     public byte[] getMainBlockHashByHeight(long height) {
         try {
             byte[] blockHash = db.get(ColumnFamily.MAIN_BLOCK_CHAIN_INDEX.getHandle(), ByteUtils.toBytes(height));
+            if (blockHash == null) {
+                return null;
+            }
             return blockHash;
         } catch (RocksDBException e) {
             log.error("通过高度获取区块hash失败: height={}", height, e);
@@ -119,7 +122,7 @@ public class POPStorage {
 
     //备选链操作.............................................................................................................
     //新增备选链条 高度对应的 区块hash 备选链存储，用于处理分叉
-    public void putBackupBlockHeight(long height, byte[] hash) {
+    public void putALTBlockHeight(long height, byte[] hash) {
         try {
             byte[] heightBytes = ByteUtils.toBytes(height);  //List<byte[]>
             //先获取
@@ -138,7 +141,7 @@ public class POPStorage {
         }
     }
     //删除备选链 中的一个区块缩影
-    public void deleteBackupBlockHeight(long height, byte[] hash) {
+    public void deleteALTBlockHeight(long height, byte[] hash) {
         try {
             byte[] heightBytes = ByteUtils.toBytes(height);
             byte[] oldHash = db.get(ColumnFamily.ALT_BLOCK_CHAIN_INDEX.getHandle(), heightBytes);
@@ -148,6 +151,23 @@ public class POPStorage {
         } catch (RocksDBException e) {
             log.error("删除备选链高度失败: height={}", height, e);
             throw new RuntimeException("删除备选链高度失败", e);
+        }
+    }
+    //根据高度获取备选 该高度的所有备选
+    public Set<byte[]> getALTBlockHashByHeight(long height) {
+        try {
+            byte[] heightBytes = ByteUtils.toBytes(height);
+            byte[] blockHash = db.get(ColumnFamily.ALT_BLOCK_CHAIN_INDEX.getHandle(), heightBytes);
+            HashSet<byte[]> bytes = new HashSet<>();
+            if (blockHash == null){
+                return bytes;
+            }else {
+                bytes = (HashSet<byte[]>) SerializeUtils.deSerialize(blockHash);
+            }
+            return bytes;
+        } catch (RocksDBException e) {
+            log.error("通过高度获取区块hash失败: height={}", height, e);
+            throw new RuntimeException("通过高度获取区块hash失败", e);
         }
     }
 
@@ -230,6 +250,9 @@ public class POPStorage {
     }
     //根据hash获取区块
     public Block getBlockByHash(byte[] hash) {
+        if (hash == null){
+            return null;
+        }
         try {
             byte[] blockData = db.get(ColumnFamily.BLOCK.getHandle(), hash);
             if (blockData == null) {

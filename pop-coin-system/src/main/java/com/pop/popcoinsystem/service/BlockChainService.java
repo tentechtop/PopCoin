@@ -13,11 +13,13 @@ import com.pop.popcoinsystem.data.storage.POPStorage;
 import com.pop.popcoinsystem.data.transaction.*;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
+import com.pop.popcoinsystem.util.ByteUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.DifficultyUtils;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.checkerframework.checker.units.qual.C;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
@@ -40,6 +42,8 @@ public class BlockChainService {
     private POPStorage popStorage;
 
     private MiningService miningService;
+
+    private MiningService miningService2;
 
     @PostConstruct
     private void initBlockChain() throws Exception {
@@ -67,6 +71,7 @@ public class BlockChainService {
         miner.setName("BTC-Miner");
         miningService.setMiningInfo(miner);
         miningService.startMining();
+
     }
 
     /**
@@ -92,8 +97,8 @@ public class BlockChainService {
         // 3. 设置难度相关参数（创世区块难度通常较低）
         genesisBlock.setDifficulty(1);
         // 比特币创世区块难度目标：0x1d00ffff（这里使用相同值）
-        genesisBlock.setDifficultyTarget(hexStringToByteArray("1d00ffff"));
-        genesisBlock.setChainWork(null);
+        genesisBlock.setDifficultyTarget(DifficultyUtils.difficultyToCompact(1L));
+        genesisBlock.setChainWork(ByteUtils.toBytes(1L));
 
         // 4. 创建创世区块的CoinBase交易（唯一交易）
         Transaction coinbaseTx = createGenesisCoinbaseTransaction();
@@ -116,8 +121,6 @@ public class BlockChainService {
         // 创世区块的nonce是固定值，通过暴力计算得到
         genesisBlock.setNonce(1); // 示例nonce值（类似比特币创世块）
         genesisBlock.setHash(GENESIS_BLOCK_HASH);
-        // 8. 设置工作量证明和确认数
-        genesisBlock.setChainWork(null);
 
         log.info("创世区块创建成功，哈希: {}", GENESIS_BLOCK_HASH_HEX);
         return genesisBlock;
@@ -390,7 +393,7 @@ public class BlockChainService {
         processValidBlock(block);
 
         // 8. 检查并处理分叉  通过后更新索引
-        handleChainFork(block);
+        //handleChainFork(block);
 
 
         //广播区块
@@ -419,164 +422,56 @@ public class BlockChainService {
         popStorage.addBlock(block);
         // 更新UTXO集合
         //updateUTXOSet(block);
-        // 更新链状态
-        updateChainState(block);
-    }
 
-    /**
-     * 作用：检测并处理区块链分叉，确保系统始终选择累积难度最大的链作为主链。
-     * 执行时机：在 processValidBlock 之后调用，用于检查新区块是否导致分叉，并决定是否需要切换主链。
-     * @param newBlock
-     */
-    private void handleChainFork(Block newBlock) {
-        //分叉的产生：当两个或多个节点在几乎同一时间，基于主链的同一个 “末端区块” 挖出了新的区块时，网络会暂时出现两条并行的链（例如：主链原本是 A→B→C，此时节点 1 挖出 C→D，节点 2 挖出 C→E，形成 A→B→C→D 和 A→B→C→E 两条链）。
-        //此时，节点 2 挖出的区块 E 就不是 “主链（此时可能是 C→D 链）” 的延续，而是另一条分支链的延续。
-        long blockHeight = newBlock.getHeight();
-        // 如果新区块不是主链的延续，检查是否应该切换到新链   检查是否出现分叉（父区块不在主链末端） 也就是说这个区块的父hash不是主链最新hash
-        if (!Arrays.equals(newBlock.getPreviousHash(), getMainBlockHashByHeight(blockHeight - 1)  )) {
-            // 计算新链的总难度
-            long newChainDifficulty = calculateChainDifficulty(newBlock);
-            // 计算当前主链的总难度
-            long currentChainDifficulty = calculateCurrentChainDifficulty();
-            // 如果新链难度更大，则切换到新链
-            if (newChainDifficulty > currentChainDifficulty) {
-                log.info("检测到更难的链，准备切换。新链难度: {}, 当前链难度: {}", newChainDifficulty, currentChainDifficulty);
-                switchToNewChain(newBlock);
-            }else {
-                log.info("分叉区块暂存至备选链，高度: {}", blockHeight);
+        // 获取主链最新信息
+        long currentHeight = getMainLatestHeight();
+        byte[] currentMainHash = getMainLatestBlockHash();
+
+        // 检查是否出现分叉（父区块是否为主链最新区块）
+        boolean isFork = !Arrays.equals(block.getPreviousHash(), currentMainHash);
+        // 1. 处理主链延伸（非分叉情况）
+        if (!isFork) {
+            // 验证高度连续性
+            if (block.getHeight() != currentHeight + 1) {
+                log.error("区块高度不连续，拒绝添加。当前主链高度: {}, 新区块高度: {}",
+                        currentHeight, block.getHeight());
+                return;
             }
+            // 正常扩展主链
+            updateMainChainHeight(block.getHeight());
+            updateMainLatestBlockHash(block.getHash());
+            updateMainHeightToBlockIndex(block.getHeight(), block.getHash());
+            log.info("主链扩展到高度: {}, 哈希: {}", block.getHeight(), CryptoUtil.bytesToHex(block.getHash()));
+            //打印工作总量
+            log.info("当前区块工作总量: {}", DifficultyUtils.bytesToLong(block.getChainWork()));
+
+            // 更新UTXO集合
+            updateUTXOSet(block);
         }
-    }
-
-
-    /**
-     * 计算当前主链的总难度
-     * @return
-     */
-    private long calculateCurrentChainDifficulty() {
-        long difficulty = 0;
-        for (long i = 0; i <= getMainLatestHeight(); i++) {
-            byte[] blockHash = getMainBlockHashByHeight(i);
-            if (blockHash != null) {
-                Block block = getBlockByHash(blockHash);
-                if (block != null) {
-                    difficulty += calculateDifficulty(block.getDifficultyTarget());
-                }
-            }
-        }
-        return difficulty;
-    }
-
-    /**
-     * 计算链的总难度
-     * @param tipBlock
-     * @return
-     */
-    private long calculateChainDifficulty(Block tipBlock) {
-        long difficulty = 0;
-        Block current = tipBlock;
-        while (current != null) {
-            // 简化处理，实际中应该根据区块难度目标计算
-            difficulty += calculateDifficulty(current.getDifficultyTarget());
-            // 检查是否是创世区块
-            if (Arrays.equals(current.getPreviousHash(), getGenesisBlockHash())) {
-                break;
-            }
-            current = getBlockByHash(current.getPreviousHash());
-        }
-
-
-        return 0;
-    }
-
-    /**
-     * 根据难度目标计算难度值
-     */
-    private long calculateDifficulty(byte[] difficultyTarget) {
-        // 创世区块的目标值 (0x1d00ffff)
-        // 这个值对应于比特币创世区块的难度目标
-        // 实际实现中应该从配置中获取
-        BigInteger genesisTarget = new BigInteger("00000000FFFF000000000000000000000000000000000000000000000000", 16);
-
-        // 将难度目标字节数组转换为BigInteger
-        // 注意：需要处理比特币的"紧凑格式"（Compact Size）
-        // 难度目标以"紧凑格式"存储，前导字节表示指数，后面3字节表示系数
-        // 格式：0xWWXXYYZZ → 0xXXYYZZ * 2^(8*(WW-3))
-        if (difficultyTarget == null || difficultyTarget.length != 4) {
-            return 1; // 默认为最低难度
-        }
-
-        // 解析紧凑格式的难度目标
-        int exponent = difficultyTarget[0] & 0xFF;
-        byte[] coefficientBytes = new byte[4];
-        coefficientBytes[0] = 0; // 确保是正数
-        coefficientBytes[1] = difficultyTarget[1];
-        coefficientBytes[2] = difficultyTarget[2];
-        coefficientBytes[3] = difficultyTarget[3];
-
-        BigInteger coefficient = new BigInteger(coefficientBytes);
-        BigInteger target = coefficient.shiftLeft(8 * (exponent - 3));
-        // 计算难度值：创世目标 / 当前目标
-        // 由于Java的BigInteger不能直接转换为long而不丢失精度
-        // 我们使用double来近似表示，但在实际应用中可能需要更精确的表示
-        double difficulty = genesisTarget.doubleValue() / target.doubleValue();
-        // 转换为long（取整）
-        return (long) difficulty;
-    }
-
-
-    private void updateChainState(Block block) {
-        // 1. 如果新区块高度大于当前主链高度，或者难度更大，则成为新的主链
-        long blockHeight = block.getHeight();
-        byte[] blockHash = block.getHash();
-        long currentHeight = getMainLatestHeight(); // 获取主链最新高度
-
-        //打印这个区块 和 区块难度
-        log.info("区块难度:"+block.getDifficulty());
-
-        log.info("当前高度:"+currentHeight);
-        //这个条件是区块链中实现 “最长链原则” 的核心逻辑，用于判断一个新验证的区块是否应该成为主链的一部分。我来详细解释：
-        // 如果新区块的父区块不是当前主链的最后一个区块，说明出现了分叉
-        //在区块链中，主链必须始终是网络中难度最大的链（即 “最长链”，这里的 “长” 指累积的工作量证明难度，而非单纯的区块数量）。这个条件通过两个维度判断新区块是否能成为主链：
-        //高度优先：如果新区块的高度比当前主链更高，直接接受它；
-        //难度补偿：如果高度相同，但新区块的难度比当前主链末端更大，也接受它。
-        //含义：新区块的高度超过当前主链的高度。
-        //场景：例如当前主链高度是 100，新区块高度是 101，说明它是主链的自然延伸（父区块是高度 100 的区块），直接扩展主链即可。
-
-        //更新主链状态：
-        //如果新区块是主链的直接延伸（高度连续且父哈希匹配），则更新主链高度和最新区块哈希。
-        //若新区块导致分叉，则暂不处理分叉，仅将新区块作为 “备选链” 的一部分保存。
-        //这个条件的意思是 区块高度比当前主链高度高 或者 区块高度相同且难度比当前主链末端更高
-
-        //这个区块是否更高更难
-        if (blockHeight > currentHeight || (blockHeight == currentHeight && isDifficultyGreater(block.getHash(), getMainBlockHashByHeight(currentHeight)))) {
-            if (!Arrays.equals(block.getPreviousHash(), getMainBlockHashByHeight(currentHeight) )) {
-                log.info("检测到分叉，高度: {}, 主链: {}, 新链: {}",
-                        blockHeight,
-                        CryptoUtil.bytesToHex(getMainBlockHashByHeight(currentHeight)),
-                        CryptoUtil.bytesToHex(block.getHash()));
-                // 切换到更长/更难的链
+        // 2. 处理分叉情况
+        else {
+            log.info("检测到分叉，高度: {}, 主链: {}, 新链: {}",
+                    block.getHeight(), CryptoUtil.bytesToHex(currentMainHash), CryptoUtil.bytesToHex(block.getHash()));
+            int compare = DifficultyUtils.compare(block.getChainWork(), getMainLatestBlock().getChainWork()); //新链小就是-1 相等就是零 大就是1
+            if (compare==1) {
+                log.info("检测到更难的链，准备切换。新链难度: {}, 当前链难度: {}", DifficultyUtils.bytesToLong(block.getChainWork()), DifficultyUtils.bytesToLong(getMainLatestBlock().getChainWork()));
                 switchToNewChain(block);
             } else {
-                // 正常扩展主链
-                //更新主链高度
-                updateMainChainHeight(blockHeight);
-                //更新主链最新的区块Hash
-                updateMainLatestBlockHash(blockHash);
-                //更新主链高度到区块的索引
-                updateMainHeightToBlockIndex(blockHeight, blockHash);
-                log.info("主链扩展到高度: {}, 哈希: {}", blockHeight, CryptoUtil.bytesToHex(block.getHash()));
-
-
+                log.info("分叉链难度较小，添加到备选链，高度: {}, 哈希: {}",
+                        block.getHeight(), CryptoUtil.bytesToHex(block.getHash()));
+                addAlternativeChains(block.getHeight(), block.getHash());
             }
-        } else {
-            // 否则，将区块添加到备选链  高度冲突  private final Map<Long, Set<byte[]>> alternativeChains = new ConcurrentHashMap<>();
-
-            //备选添加
-
-            log.info("备选链添加区块，高度: {}, 哈希: {}", blockHeight, CryptoUtil.bytesToHex(block.getHash()));
         }
+    }
 
+    private void addAlternativeChains(long blockHeight, byte[] blockHash) {
+        Set<byte[]> altBlockHashByHeight = popStorage.getALTBlockHashByHeight(blockHeight);
+        altBlockHashByHeight.add(blockHash);
+        log.info("已经将该区块加入到 备选链添加区块，高度: {}, 哈希: {}", blockHeight, CryptoUtil.bytesToHex(blockHash));
+    }
+
+    private Block getMainLatestBlock() {
+        return getBlockByHash(getMainLatestBlockHash());
     }
 
     private void updateMainHeightToBlockIndex(long blockHeight, byte[] blockHash) {
@@ -596,6 +491,7 @@ public class BlockChainService {
      * 比较两个哈希的难度，返回true如果第一个哈希难度更大
      */
     private boolean isDifficultyGreater(byte[] hash1, byte[] hash2) {
+        log.info("比较两个哈希的难度");
         if (hash1 == null || hash2 == null) {
             return false;
         }
@@ -654,8 +550,13 @@ public class BlockChainService {
         // 5. 应用这些区块对UTXO的修改
         for (Block block : blocksToApply) {
             updateUTXOSet(block);
+
+            // 关键修复：将新链每个区块的高度与哈希写入主链索引
+            popStorage.addMainHeightToBlockIndex(block.getHeight(), block.getHash());
         }
         // 6. 更新主链和当前高度
+        updateMainChainHeight(newTipBlock.getHeight());
+        updateMainLatestBlockHash(newTipBlock.getHash());
 
         // 7. 清理备选链
 
@@ -696,37 +597,39 @@ public class BlockChainService {
      * @return
      */
     private Block findCommonAncestor(Block block) {
-        Set<byte[]> newChainHashes = new HashSet<>();
-        Block current = block;
+        log.info("找共同的祖先");
+        Block currentA = block;
+        Block currentB = getBlockByHash(getMainLatestBlockHash());
 
-        // 收集新链上的所有区块哈希
-        while (current != null) {
-            byte[] hash = current.getHash();
-            newChainHashes.add(hash);
-            // 检查是否是创世区块
-            if (Arrays.equals(current.getPreviousHash(), getGenesisBlockHash()  )) {
-                break;
+        log.info("区块A的父哈希: {}", CryptoUtil.bytesToHex(currentA.getPreviousHash()));
+        log.info("区块B的父哈希: {}", CryptoUtil.bytesToHex(currentA.getPreviousHash()));
+        log.info("高度9的区块哈希: {}", CryptoUtil.bytesToHex(getMainBlockHashByHeight(block.getHeight()-1)));
+
+        // 循环条件：当两个区块不相等时继续追溯
+        while (!Arrays.equals(currentA.getHash(), currentB.getHash())) {
+            // 如果A的高度大于B，A向上移动一级
+            if (currentA.getHeight() > currentB.getHeight()) {
+                currentA = getBlockByHash(currentA.getPreviousHash());
+                if (currentA == null) return getGenesisBlock(); // 安全保护
             }
-            current = getBlockByHash(hash);
+            // 如果B的高度大于A，B向上移动一级
+            else if (currentB.getHeight() > currentA.getHeight()) {
+                currentB = getBlockByHash(currentB.getPreviousHash());
+                if (currentB == null) return getGenesisBlock(); // 安全保护
+            }
+            // 高度相同，则同时向上移动一级
+            else {
+                currentA = getBlockByHash(currentA.getPreviousHash());
+                currentB = getBlockByHash(currentB.getPreviousHash());
+
+                // 若两者同时到达创世区块仍未找到共同祖先，返回创世区块
+                if (currentA == null || currentB == null) {
+                    return getGenesisBlock();
+                }
+            }
         }
-
-        // 从当前主链顶端开始向下查找共同祖先
-        current = getBlockByHash(getMainBlockHashByHeight(getMainLatestHeight()));
-        while (current != null) {
-            String hashStr = CryptoUtil.bytesToHex(current.getHash());
-            if (newChainHashes.contains(hashStr)) {
-                return current;
-            }
-
-            // 检查是否是创世区块
-            if (Arrays.equals(current.getPreviousHash(), getGenesisBlockHash())) {
-                break;
-            }
-            current = getBlockByHash(current.getPreviousHash());
-        }
-
-        // 如果没找到，返回创世区块
-        return getGenesisBlock();
+        log.info("找到共同的祖先: {}", CryptoUtil.bytesToHex(currentA.getHash()));
+        return currentA;
     }
 
 

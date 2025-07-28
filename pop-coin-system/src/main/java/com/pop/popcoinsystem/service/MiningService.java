@@ -6,14 +6,18 @@ import com.pop.popcoinsystem.data.miner.Miner;
 import com.pop.popcoinsystem.data.storage.POPStorage;
 import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.data.vo.result.Result;
+import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.DifficultyUtils;
+import com.pop.popcoinsystem.util.SerializeUtils;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.jocl.*;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
+import java.io.*;
 import java.lang.management.ManagementFactory;
 import java.lang.management.OperatingSystemMXBean;
 import java.math.BigInteger;
@@ -26,6 +30,8 @@ import java.util.concurrent.Future;
 import static com.pop.popcoinsystem.util.DifficultyUtils.difficultyToTarget;
 import static com.pop.popcoinsystem.util.Numeric.hexStringToByteArray;
 import static com.pop.popcoinsystem.util.TypeUtils.reverseBytes;
+import static org.jocl.CL.*;
+
 
 /**
  * 打包交易服务
@@ -40,8 +46,10 @@ public class MiningService {
     private final BlockChainService blockChainService;
 
 
+
+
     // 挖矿性能控制（0-100，默认85%）
-    private volatile int miningPerformance = 80;
+    private volatile int miningPerformance = 20;
     // CPU保护机制相关变量
     private volatile double lastCpuLoad = 0;
     private static final long CPU_MONITOR_INTERVAL = 5000; // 5秒检测一次
@@ -123,23 +131,19 @@ public class MiningService {
             return Result.error("ERROR: Please set the miner information first ! ");
         }
         isMining = true;
-        log.info("开始挖矿:Starting mining...");
-        // 初始化线程池
-        executor = Executors.newFixedThreadPool(threadCount);
         new Thread(() -> {
             Thread.currentThread().setPriority(Thread.NORM_PRIORITY);//NORM_PRIORITY  MIN_PRIORITY
             while (isMining) {
-                monitorCpuLoad();
-
                 List<Transaction> transactions = getTransactionsUpTo1MB();
                 if (transactions.isEmpty()) {
-                    log.info("No transactions available for mining.");
+                    log.info("没有可用的交易");
                 }
                 //获取主链最新的区块hash 和 区块高度
                 byte[] latestBlockHash = blockChainService.getMainLatestBlockHash();
-                log.info("最新区块Hash"+CryptoUtil.bytesToHex(latestBlockHash));
+                log.info("最新区块Hash:"+CryptoUtil.bytesToHex(latestBlockHash));
                 long blockHeight = blockChainService.getMainLatestHeight();
                 log.info("最新区块高度: {}", blockHeight);
+                Block latestBlock = blockChainService.getMainBlockByHeight(blockHeight);
 
                 Block newBlock = new Block();
                 newBlock.setPreviousHash(latestBlockHash);
@@ -156,8 +160,15 @@ public class MiningService {
                 newBlock.calculateAndSetMerkleRoot();
                 newBlock.setTime(System.currentTimeMillis() /1000 );
                 newBlock.setDifficulty(currentDifficulty);
-
                 newBlock.setDifficultyTarget(DifficultyUtils.difficultyToCompact(currentDifficulty));
+
+                //  //表示该区块之前的区块链总工作量，以十六进制表示。它反映了整个区块链的挖矿工作量。
+                //    private byte[] chainWork;
+                //计算工作总量
+                byte[] chainWork = latestBlock.getChainWork();
+                byte[] add = DifficultyUtils.add(chainWork, currentDifficulty);
+                newBlock.setChainWork(add);
+
                 //挖矿奖励：通过 coinbase 交易嵌入区块体
                 //每个区块的第一笔交易是coinbase 交易（特殊交易，无输入），其输出部分直接包含矿工的挖矿奖励。例如：
                 //比特币区块的 coinbase 交易输出会包含 “基础奖励 + 区块内所有交易的手续费总和”，这笔输出会被记录在区块体的交易列表中。
@@ -199,9 +210,136 @@ public class MiningService {
 
 
 
+
+
     /**
-     * CPU保护机制
+     * 启动挖矿 测试对区块的管理
      */
+    public Result<String> startMiningTest() throws Exception {
+        if (isMining) {
+            return Result.error("ERROR: The node is already mining ! ");
+        }
+        //获取矿工信息
+        miner = POPStorage.getInstance().getMiner();
+        if (miner == null) {
+            //挖矿前请设置本节点的矿工信息
+            return Result.error("ERROR: Please set the miner information first ! ");
+        }
+        isMining = true;
+        log.info("开始挖矿:Starting mining...");
+        // 初始化线程池
+        executor = Executors.newFixedThreadPool(threadCount);
+        new Thread(() -> {
+            Thread.currentThread().setPriority(Thread.NORM_PRIORITY);//NORM_PRIORITY  MIN_PRIORITY
+            while (isMining) {
+                monitorCpuLoad();
+
+                List<Transaction> transactions = getTransactionsUpTo1MB();
+                if (transactions.isEmpty()) {
+                    log.info("No transactions available for mining.");
+                }
+                //获取主链最新的区块hash 和 区块高度
+                byte[] latestBlockHash = blockChainService.getMainLatestBlockHash();
+                log.info("最新区块Hash:"+CryptoUtil.bytesToHex(latestBlockHash));
+                long blockHeight = blockChainService.getMainLatestHeight();
+                log.info("最新区块高度: {}", blockHeight);
+                Block latestBlock = blockChainService.getMainBlockByHeight(blockHeight);
+
+
+                Block newBlock = new Block();
+                newBlock.setPreviousHash(latestBlockHash);
+                newBlock.setHeight(blockHeight+1);
+                newBlock.setTime(System.currentTimeMillis());
+                ArrayList<Transaction> blockTransactions = new ArrayList<>();
+                //创建CoinBase交易 放在第一位
+                Transaction coinBaseTransaction = Transaction.createCoinBaseTransaction(miner.getAddress());
+                blockTransactions.add(coinBaseTransaction);
+                blockTransactions.addAll(transactions);
+                List<Transaction> transactionsByPriority = getTransactionsByPriority();
+                blockTransactions.addAll(transactionsByPriority);
+                newBlock.setTransactions(blockTransactions);
+                newBlock.calculateAndSetMerkleRoot();
+                newBlock.setTime(System.currentTimeMillis() /1000 );
+                newBlock.setDifficulty(currentDifficulty);
+                newBlock.setDifficultyTarget(DifficultyUtils.difficultyToCompact(currentDifficulty));
+
+                //  //表示该区块之前的区块链总工作量，以十六进制表示。它反映了整个区块链的挖矿工作量。
+                //    private byte[] chainWork;
+                //计算工作总量
+                byte[] chainWork = latestBlock.getChainWork();
+                byte[] add = DifficultyUtils.add(chainWork, currentDifficulty);
+                newBlock.setChainWork(add);
+
+                //挖矿奖励：通过 coinbase 交易嵌入区块体
+                //每个区块的第一笔交易是coinbase 交易（特殊交易，无输入），其输出部分直接包含矿工的挖矿奖励。例如：
+                //比特币区块的 coinbase 交易输出会包含 “基础奖励 + 区块内所有交易的手续费总和”，这笔输出会被记录在区块体的交易列表中。
+                //区块只需存储这笔交易，就能通过交易验证逻辑自动计算出矿工获得的总奖励（无需额外字段）。
+                //手续费：隐含在普通交易的 “输入 - 输出差额” 中
+                //普通交易中，输入金额总和 - 输出金额总和 = 手续费，这部分差额由打包该交易的矿工获得。
+                //例如：用户发起一笔交易，输入 10 个代币，输出 9.9 个代币，差额 0.1 个代币即为手续费。这部分无需单独记录，通过遍历区块内所有交易的输入输出即可计算。
+                System.out.println("\n开始挖矿新区块 #" + newBlock.getHeight() +
+                        " (难度: " + newBlock.getDifficulty() + ", 交易数: " + transactions.size());
+                MiningResult result = mineBlock(newBlock);
+                MiningResult result2 = mineBlock(newBlock);
+                MiningResult result3 = mineBlock(newBlock);
+
+
+
+                if (result != null && result.found) {
+                    newBlock.setNonce(result.nonce);
+                    newBlock.setHash(result.hash);
+
+                    Block block = BeanCopyUtils.copyObject(newBlock, Block.class);
+                    block.setNonce(result2.nonce);
+                    block.setHash(result2.hash);
+
+
+                    byte[] mainBlockHashByHeight = blockChainService.getMainBlockHashByHeight(newBlock.getHeight() - 10);
+                    if (mainBlockHashByHeight != null){
+                        //制造非延续冲突
+                        log.info("非延续冲突:{}",CryptoUtil.bytesToHex(mainBlockHashByHeight));
+                        Block blockByHash = blockChainService.getBlockByHash(mainBlockHashByHeight);
+                        byte[] chainWork1 = blockByHash.getChainWork();
+                        byte[] add1 = DifficultyUtils.add(chainWork1, currentDifficulty);
+                        Block block3 = BeanCopyUtils.copyObject(newBlock, Block.class);
+                        block3.setHeight(newBlock.getHeight()-9);
+                        block3.setPreviousHash(mainBlockHashByHeight);
+                        block3.setNonce(result3.nonce);
+                        block3.setHash(result3.hash);
+                        block3.setChainWork(add1);
+                        blockChainService.verifyBlock(block3);
+                    }
+
+                    adjustDifficulty();
+                    // 挖矿成功：移除已打包的交易
+                    for (Transaction tx : transactions) {
+                        removeTransaction(CryptoUtil.bytesToHex(tx.getTxId()));
+                    }
+                    //将区块提交到区块链
+                    blockChainService.verifyBlock(newBlock);
+
+                    blockChainService.verifyBlock(block);
+                } else {
+                    // 未找到有效哈希，将交易放回交易池（避免丢失）
+                    log.info("区块 #" + newBlock.getHeight() + " 挖矿失败，重新尝试...");
+                    // 挖矿失败：延迟重试（例如3秒），减少CPU占用
+                    try {
+                        Thread.sleep(1000); // 1秒后重试
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break; // 中断时退出循环
+                    }
+                }
+            }
+        }).start();
+        return Result.ok();
+    }
+
+
+
+
+
+
     /**
      * CPU保护机制 - 动态监控CPU负载并调整挖矿性能
      */
@@ -467,117 +605,6 @@ public class MiningService {
     /**
      * 打包交易，进行挖矿
      */
-    public MiningResult mineBlockBack(Block block) {
-        MiningResult result = new MiningResult();
-        Future<?>[] futures = new Future[threadCount];
-        int nonceRange = Integer.MAX_VALUE / threadCount;
-
-        // 重置结果状态
-        result.found = false;
-        // 提前计算基础休眠参数（避免每次循环都计算）
-        double baseSleepProbability = 0;
-        double targetLoad = 0;
-        boolean needsPerformanceControl = miningPerformance < 100;
-
-        // 提交所有线程任务
-        for (int i = 0; i < threadCount; i++) {
-            final int startNonce = i * nonceRange;
-            final int endNonce = (i == threadCount - 1) ? Integer.MAX_VALUE : (i + 1) * nonceRange;
-            futures[i] = executor.submit(() -> {
-                byte[] difficultyTarget = block.getDifficultyTarget();
-                try {
-                    for (int nonce = startNonce; nonce < endNonce && !result.found; nonce++) {
-
-                        // 简化后的性能控制逻辑
-                        if (needsPerformanceControl) {
-                            // 紧急保护：如果CPU负载超过90%，强制休眠
-                            if (lastCpuLoad > 90) {
-                                int emergencySleepMs = Math.max(5, (int) ((lastCpuLoad - 90) * 0.5));
-                                Thread.sleep(emergencySleepMs);
-                                continue; // 使用continue而不是return，避免过早退出线程
-                            }
-                            // 每50次计算才进行一次性能控制检查，减少开销
-                            if (nonce % 50 == 0) {
-                                // 简化的休眠概率计算（合并了原有的多个步骤）
-                                double loadFactor = Math.min(1.0, Math.max(0.5, 1.0 - (lastCpuLoad - targetLoad) / 100));
-                                double finalSleepProbability = Math.min(0.6, baseSleepProbability * loadFactor);
-                                // 简化的休眠时间计算
-                                int sleepMs = 2 + Math.min(3, Math.max(0, (int) ((lastCpuLoad - 40) / 20)));
-                                // 执行概率性休眠（减少随机数生成频率）
-                                if (Math.random() < finalSleepProbability) {
-                                    Thread.sleep(sleepMs);
-                                }
-                            }
-                        }
-
-                        block.setNonce(nonce);
-                        byte[] hash = block.computeBlockHash(block);
-                        if (DifficultyUtils.isValidHash(hash, difficultyTarget) ) {
-                            synchronized (result) {
-                                if (!result.found) {
-                                    result.hash = hash;
-                                    result.nonce = nonce;
-                                    result.found = true;
-                                    System.out.println("线程 " + Thread.currentThread().getName() + " 找到有效哈希!");
-                                }
-                            }
-                            return;
-                        }
-                    }
-                }catch (InterruptedException e) {
-                    // 正常中断（如找到结果或停止挖矿），不打印错误
-                    Thread.currentThread().interrupt(); // 保留中断状态
-                } catch (Exception e) {
-                    log.error("线程 " + Thread.currentThread().getName() + " 计算哈希时异常", e);
-                    // 发生异常时设置中断状态
-                    Thread.currentThread().interrupt();
-                }
-
-            });
-        }
-
-        // 等待所有任务完成或找到结果
-        try {
-            // 优化：不等待所有任务，而是定期检查是否找到结果
-            boolean allCompleted = false;
-            while (!allCompleted && !result.found) {
-                allCompleted = true;
-                for (Future<?> future : futures) {
-                    if (future != null && !future.isDone()) {
-                        allCompleted = false;
-                        Thread.sleep(100); // 短暂休眠避免CPU占用过高
-                        break;
-                    }
-                }
-            }
-
-            // 无论是否找到结果，取消所有未完成的任务
-            for (Future<?> future : futures) {
-                if (future != null && !future.isDone()) {
-                    future.cancel(true);
-                }
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            // 中断时取消所有任务
-            for (Future<?> future : futures) {
-                if (future != null) {
-                    future.cancel(true);
-                }
-            }
-        }
-
-        // 根据结果返回
-        if (result.found) {
-            return result;
-        } else {
-            System.out.println("\nNonce范围已用尽，未找到有效哈希，重新开始挖矿...");
-            return null;
-        }
-    }
-
-
-
     public MiningResult mineBlock(Block block) {
         MiningResult result = new MiningResult();
         Future<?>[] futures = new Future[threadCount];
@@ -716,13 +743,17 @@ public class MiningService {
 
 
     private void adjustDifficulty() {
+
         long blockHeight = blockChainService.getMainLatestHeight();
         if ((blockHeight + 1) % DIFFICULTY_ADJUSTMENT_INTERVAL != 0) return;
         if (blockHeight < DIFFICULTY_ADJUSTMENT_INTERVAL - 1) return;
 
         Block firstBlock = blockChainService.getMainBlockByHeight(blockHeight - (DIFFICULTY_ADJUSTMENT_INTERVAL - 1));
         Block latestBlock = blockChainService.getMainBlockByHeight(blockHeight);
-
+        if (latestBlock == null) {
+            log.error("难度调整失败：未找到高度{}的主链区块", blockHeight);
+            return; // 或使用默认难度
+        }
         log.info("本轮难度调整起始区块时间: " + firstBlock.getTime());
         log.info("本轮难度调整最新区块时间: " + latestBlock.getTime());
 
