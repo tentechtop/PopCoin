@@ -49,7 +49,7 @@ public class testScript {
 
             //为这个交易输出创建一个锁定脚本
             ScriptPubKey scriptPubKey = ScriptPubKey.createP2PKH(publicKey.getEncoded());
-            System.out.println("P2PKH锁定脚本 (hex): " + scriptPubKey.getHex());
+            System.out.println("P2PKH锁定脚本 (hex): " + CryptoUtil.bytesToHex(scriptPubKey.getHash()));
             System.out.println("脚本类型: " + scriptPubKey.getType());
 
 

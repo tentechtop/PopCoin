@@ -4,6 +4,7 @@ import com.pop.popcoinsystem.application.service.Wallet;
 import com.pop.popcoinsystem.application.service.WalletStorage;
 import com.pop.popcoinsystem.data.storage.POPStorage;
 import com.pop.popcoinsystem.data.transaction.UTXO;
+import com.pop.popcoinsystem.data.vo.result.RocksDbPageResult;
 import com.pop.popcoinsystem.util.CryptoUtil;
 
 import java.security.KeyPair;
@@ -139,7 +140,7 @@ public class UTXOTestGenerator {
         String publicKeyHex = walleta.getPublicKeyHex();
         String address  = CryptoUtil.ECDSASigner.createP2PKHAddressByPK(CryptoUtil.hexToBytes(publicKeyHex));
 
-        POPStorage.PageResult<UTXO> utxoPageResult = instance1.queryUTXOPage(5000, null);
+        RocksDbPageResult<UTXO> utxoPageResult = instance1.queryUTXOPage(5000, null);
         log.info("查询结果：" + utxoPageResult.getData().size());
         List<UTXO> data = utxoPageResult.getData();
         for (UTXO utxo : data) {
@@ -149,7 +150,7 @@ public class UTXOTestGenerator {
         UTXO lastUTXO = data.get(data.size() - 1);
         log.info("最后查询结果：" + CryptoUtil.bytesToHex(lastUTXO.getTxId()) + ":" + lastUTXO.getVout());
         String key = CryptoUtil.bytesToHex(lastUTXO.getTxId()) + ":" + lastUTXO.getVout();
-        POPStorage.PageResult<UTXO> utxoPageResult1 = instance1.queryUTXOPage(5000, key);
+        RocksDbPageResult<UTXO> utxoPageResult1 = instance1.queryUTXOPage(5000, key);
         log.info("查询结果：" + utxoPageResult1.getData().size());
         for (UTXO utxo : utxoPageResult1.getData()) {
             log.info("查询结果：" + CryptoUtil.bytesToHex(utxo.getTxId()) + ":" + utxo.getVout());

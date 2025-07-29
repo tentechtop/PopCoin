@@ -7,6 +7,7 @@ import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.data.transaction.UTXO;
 import com.pop.popcoinsystem.data.transaction.dto.TransactionDTO;
 import com.pop.popcoinsystem.data.vo.result.Result;
+import com.pop.popcoinsystem.data.vo.result.RocksDbPageResult;
 import com.pop.popcoinsystem.network.common.NodeSettings;
 import com.pop.popcoinsystem.util.ByteUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
@@ -416,6 +417,19 @@ public class POPStorage {
             throw new RuntimeException(e);
         }
     }
+    public UTXO getUTXO(String utxoKey) {
+        try {
+            byte[] valueBytes = db.get(ColumnFamily.UTXO.getHandle(), utxoKey.getBytes());
+            if (valueBytes == null) {
+                return null; // 不存在返回null，避免抛出异常
+            }
+            return (UTXO)SerializeUtils.deSerialize(valueBytes);
+        } catch (RocksDBException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+
     //分页获取UTXO 每次5000个
     /**
      * 分页查询 UTXO 集合
@@ -424,7 +438,7 @@ public class POPStorage {
      * @return 分页结果（包含当前页 UTXO 列表和当前页最后一个键）
      * lastKey 为第一次 会包含在查询结果里面
      */
-    public PageResult<UTXO> queryUTXOPage(int pageSize, String lastKey) {
+    public RocksDbPageResult<UTXO> queryUTXOPage(int pageSize, String lastKey) {
         // 校验 pageSize 范围
         if (pageSize <= 0 || pageSize > 5000) {
             throw new IllegalArgumentException("每页数量必须在 1-5000 之间");
@@ -459,7 +473,7 @@ public class POPStorage {
                 iterator.next();
                 count++;
             }
-            return new PageResult<>(utxoList, currentLastKey, count < pageSize); // 最后一页的标志：实际数量 < pageSize
+            return new RocksDbPageResult<>(utxoList, currentLastKey, count < pageSize); // 最后一页的标志：实际数量 < pageSize
         } catch (Exception e) {
             log.error("UTXO 分页查询失败", e);
             throw new RuntimeException("UTXO 分页查询失败", e);
@@ -489,20 +503,7 @@ public class POPStorage {
     }
 
 
-    // 分页结果封装类
-    @Getter
-    @Setter
-    public static class PageResult<T> {
-        private List<T> data; // 当前页数据
-        private String lastKey; // 当前页最后一个键（用于下一页查询）
-        private boolean isLastPage; // 是否为最后一页
 
-        public PageResult(List<T> data, String lastKey, boolean isLastPage) {
-            this.data = data;
-            this.lastKey = lastKey;
-            this.isLastPage = isLastPage;
-        }
-    }
 
 
 

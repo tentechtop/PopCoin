@@ -46,6 +46,8 @@ import java.util.Map;
 @Slf4j
 public class CryptoUtil {
 
+
+
     //节点版本
     public static int POP_NET_VERSION = 1; //默认主网
     public static byte PRE_P2PKH = 0x00;
@@ -57,6 +59,17 @@ public class CryptoUtil {
     private static final BigInteger CURVE_ORDER = SECP256K1_PARAMS.getN(); // 曲线阶数（私钥必须小于该值）
     private static final ECPoint G = SECP256K1_PARAMS.getG(); // 生成点
 
+
+    static {
+        // 从类路径根目录加载application.yml
+        Map<String, Object> config = YamlReaderUtils.loadYaml("application.yml");
+        if (config != null) {
+            POP_NET_VERSION = (int)YamlReaderUtils.getNestedValue(config, "popcoin.netversion");
+            PRE_P2PKH = NETVersion.getP2PKHPreAddress(POP_NET_VERSION);
+            PRE_P2SH = NETVersion.getP2SHPreAddress(POP_NET_VERSION);
+        }
+        log.info("网络版本:"+POP_NET_VERSION);
+    }
 
     // ------------------------------
     // 1. 实现HMAC-SHA512算法（BIP-32基础）
@@ -165,21 +178,70 @@ public class CryptoUtil {
 
 
 
-    static {
-        // 从类路径根目录加载application.yml
-        Map<String, Object> config = YamlReaderUtils.loadYaml("application.yml");
-        if (config != null) {
-            POP_NET_VERSION = (int)YamlReaderUtils.getNestedValue(config, "popcoin.netversion");
-            PRE_P2PKH = NETVersion.getP2PKHPreAddress(POP_NET_VERSION);
-            PRE_P2SH = NETVersion.getP2SHPreAddress(POP_NET_VERSION);
-        }
-        log.info("网络版本:"+POP_NET_VERSION);
+    //main
+    public static void main(String[] args) {
+        KeyPair keyPair = CryptoUtil.ECDSASigner.generateKeyPair();
+        PrivateKey privateKey = keyPair.getPrivate();
+        PublicKey publicKey = keyPair.getPublic();
+        byte[] encoded = publicKey.getEncoded();
+        PublicKey publicKey1 = ECDSASigner.bytesToPublicKey(encoded);
+        byte[] encoded1 = privateKey.getEncoded();
+        PrivateKey privateKey1 = ECDSASigner.bytesToPrivateKey(encoded1);
+
+
+        byte[] txToSign = new byte[32];
+        Arrays.fill(txToSign, (byte)0x01);
+        byte[] signature = CryptoUtil.ECDSASigner.applySignature(privateKey1, txToSign);
+
+        boolean b = ECDSASigner.verifySignature(publicKey1, txToSign, signature);
+        log.info("signature: {}",b);
+
+
+
     }
+
+
+
 
     /**
      * 椭圆曲线
      */
     public static class ECDSASigner {
+
+
+        /**
+         * 将字节数组转换为EC公钥对象
+         * @param publicKeyBytes X.509编码的公钥字节数组（与exportPublicKey导出格式对应）
+         * @return 转换后的EC公钥对象
+         */
+        public static PublicKey bytesToPublicKey(byte[] publicKeyBytes) {
+            try {
+                // 使用BC提供者确保与密钥生成逻辑兼容
+                KeyFactory keyFactory = KeyFactory.getInstance("EC", "BC");
+                X509EncodedKeySpec keySpec = new X509EncodedKeySpec(publicKeyBytes);
+                return keyFactory.generatePublic(keySpec);
+            } catch (Exception e) {
+                throw new RuntimeException("字节数组转换为公钥失败", e);
+            }
+        }
+
+        /**
+         * 将字节数组转换为EC私钥对象
+         * @param privateKeyBytes PKCS#8编码的私钥字节数组（与exportPrivateKey导出格式对应）
+         * @return 转换后的EC私钥对象
+         */
+        public static PrivateKey bytesToPrivateKey(byte[] privateKeyBytes) {
+            try {
+                // 使用BC提供者确保与密钥生成逻辑兼容
+                KeyFactory keyFactory = KeyFactory.getInstance("EC", "BC");
+                PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(privateKeyBytes);
+                return keyFactory.generatePrivate(keySpec);
+            } catch (Exception e) {
+                throw new RuntimeException("字节数组转换为私钥失败", e);
+            }
+        }
+
+
         // 静态初始化Bouncy Castle提供者
         static {
             Security.addProvider(new BouncyCastleProvider());

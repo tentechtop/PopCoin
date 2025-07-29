@@ -3,7 +3,10 @@ package com.pop.popcoinsystem.service;
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.miner.Miner;
 import com.pop.popcoinsystem.data.storage.POPStorage;
+import com.pop.popcoinsystem.data.transaction.TXInput;
+import com.pop.popcoinsystem.data.transaction.TXOutput;
 import com.pop.popcoinsystem.data.transaction.Transaction;
+import com.pop.popcoinsystem.data.transaction.UTXO;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
@@ -73,7 +76,7 @@ public class MiningService {
     //是否启动挖矿服务 用于停止挖矿的标志
     public static boolean isMining = false;
     // 难度调整周期的区块数量
-    private static final int DIFFICULTY_ADJUSTMENT_INTERVAL = 144;//2016大概两周调整一次  144一天调整一次
+    private static final int DIFFICULTY_ADJUSTMENT_INTERVAL = 12;//2016大概两周调整一次  144一天调整一次 2小时
     //区块生成时间 600秒  10分钟
     private static final long BLOCK_GENERATION_TIME = 600;
     //货币总供应量
@@ -152,8 +155,15 @@ public class MiningService {
                 newBlock.setHeight(blockHeight+1);
                 newBlock.setTime(System.currentTimeMillis());
                 ArrayList<Transaction> blockTransactions = new ArrayList<>();
+
+                //计算所有交易手续费 输入 = 输出+手续费
+                long totalFee = 0;
+                for (Transaction transaction : transactions) {
+                    totalFee += blockChainService.getFee(transaction);
+                }
                 //创建CoinBase交易 放在第一位
-                Transaction coinBaseTransaction = Transaction.createCoinBaseTransaction(miner.getAddress(), blockHeight+1);
+                Transaction coinBaseTransaction = Transaction.createCoinBaseTransaction(miner.getAddress(), blockHeight+1, totalFee);
+
                 blockTransactions.add(coinBaseTransaction);
                 blockTransactions.addAll(transactions);
                 newBlock.setTransactions(blockTransactions);
@@ -182,15 +192,16 @@ public class MiningService {
                 //普通交易中，输入金额总和 - 输出金额总和 = 手续费，这部分差额由打包该交易的矿工获得。
                 //例如：用户发起一笔交易，输入 10 个代币，输出 9.9 个代币，差额 0.1 个代币即为手续费。这部分无需单独记录，通过遍历区块内所有交易的输入输出即可计算。
                 System.out.println("\n开始挖矿新区块 #" + newBlock.getHeight() +
-                        " (难度: " + newBlock.getDifficulty() + ", 交易数: " + transactions.size() +")");
+                        " (难度: " + newBlock.getDifficulty() + ", 交易数: " + transactions.size() + ", 手续费: "+ totalFee+  ")");
                 MiningResult result = mineBlock(newBlock);
                 if (result != null && result.found) {
                     newBlock.setNonce(result.nonce);
                     newBlock.setHash(result.hash);
                     adjustDifficulty();
                     // 挖矿成功：移除已打包的交易
+                    // 挖矿成功：移除已打包的交易
                     for (Transaction tx : transactions) {
-                        removeTransaction(CryptoUtil.bytesToHex(tx.getTxId()));
+                        removeTransaction(tx.getTxId()); // 直接传入byte[]类型的txId
                     }
                     //将区块提交到区块链
                     blockChainService.verifyBlock(newBlock);
@@ -209,6 +220,7 @@ public class MiningService {
         }).start();
         return Result.ok();
     }
+
 
 
 
@@ -398,15 +410,14 @@ public class MiningService {
     // 移除低优先级交易
     private void removeLowestPriorityTransaction(Transaction tx) {
         // 1. 获取传入交易的手续费率作为基准（避免重复计算）
-        double targetFeePerByte = tx.getFeePerByte();
+        double targetFeePerByte = blockChainService.getFeePerByte(tx);
 
         byte[] lowestPriorityTxId = null;
         double lowestFeePerByte = Double.MAX_VALUE;
-
         // 2. 遍历交易池，筛选出手续费率低于基准的交易
         for (Map.Entry<byte[], Transaction> entry : transactions.entrySet()) {
             Transaction existingTx = entry.getValue();
-            double existingFeePerByte = existingTx.getFeePerByte();
+            double existingFeePerByte = blockChainService.getFeePerByte(existingTx);
             // 只关注手续费率低于基准的交易，且记录其中最低的
             if (existingFeePerByte < targetFeePerByte) {
                 if (existingFeePerByte < lowestFeePerByte) {
@@ -428,6 +439,8 @@ public class MiningService {
         }
     }
 
+
+
     /**
      * 获取总大小小于1MB的高优先级交易列表
      * @return 符合条件的交易列表
@@ -439,7 +452,7 @@ public class MiningService {
     public synchronized List<Transaction> getTransactionsByPriority() {
         List<Transaction> txList = new ArrayList<>(transactions.values());
         // 1. 先按手续费率从高到低排序
-        txList.sort((tx1, tx2) -> Double.compare(tx2.getFeePerByte(), tx1.getFeePerByte()));
+        txList.sort((tx1, tx2) -> Double.compare(blockChainService.getFeePerByte(tx2), blockChainService.getFeePerByte(tx1)));
         // 2. 再筛选总大小不超过1MB的交易
         List<Transaction> selectedTxs = new ArrayList<>();
         long totalSize = 0;
@@ -476,12 +489,14 @@ public class MiningService {
     }
 
     // 移除指定txId的交易
-    public synchronized boolean removeTransaction(String txId) {
+    public synchronized boolean removeTransaction(byte[] txId) {
         Transaction tx = transactions.remove(txId);
         if (tx != null) {
             currentSize -= tx.getSize();
+            log.info("交易 {} 已从交易池移除", CryptoUtil.bytesToHex(txId));
             return true;
         }
+        log.warn("交易 {} 不在交易池中，移除失败", CryptoUtil.bytesToHex(txId));
         return false;
     }
 

@@ -4,6 +4,7 @@ import com.pop.popcoinsystem.util.CryptoUtil;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -15,7 +16,7 @@ import java.util.List;
  */
 @Slf4j
 @Data
-public class ScriptPubKey extends Script {
+public class ScriptPubKey extends Script implements Serializable {
 
 
     // P2PKH (Pay-to-Public-Key-Hash) 类型的锁定脚本
@@ -29,7 +30,7 @@ public class ScriptPubKey extends Script {
         addOpCode(OP_EQUALVERIFY);
         addOpCode(OP_CHECKSIG);
         // 计算hex表示
-        setHex();
+        setHash();
     }
 
 
@@ -68,7 +69,7 @@ public class ScriptPubKey extends Script {
         script.addOpCode(OP_HASH160);
         script.addData(scriptHash);
         script.addOpCode(OP_EQUAL);
-        script.setHex();
+        script.setHash();
         return script;
     }
 
@@ -81,7 +82,7 @@ public class ScriptPubKey extends Script {
         script.addOpCode(0); // OP_0
         script.addData(pubKeyHash);
 
-        script.setHex();
+        script.setHash();
         return script;
     }
 
@@ -92,7 +93,7 @@ public class ScriptPubKey extends Script {
         // 0 <scriptHash>
         script.addOpCode(0); // OP_0
         script.addData(scriptHash);
-        script.setHex();
+        script.setHash();
         return script;
     }
 
@@ -113,7 +114,7 @@ public class ScriptPubKey extends Script {
         script.addOpCode(OP_1 + publicKeys.size() - 1);
         // 添加OP_CHECKMULTISIG
         script.addOpCode(OP_CHECKMULTISIG);
-        script.setHex();
+        script.setHash();
         return script;
     }
 
@@ -123,12 +124,12 @@ public class ScriptPubKey extends Script {
         script.setType(ScriptType.TYPE_OP_RETURN.getValue());
         script.addOpCode(OP_RETURN);
         script.addData(data);
-        script.setHex();
+        script.setHash();
         return script;
     }
 
     // 私有构造函数
-    private ScriptPubKey() {
+    public ScriptPubKey() {
         super();
     }
 

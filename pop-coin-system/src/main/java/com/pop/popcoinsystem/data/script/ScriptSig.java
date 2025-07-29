@@ -6,6 +6,7 @@ import com.pop.popcoinsystem.util.SerializeUtils;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.Serializable;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.Arrays;
@@ -17,7 +18,7 @@ import java.util.List;
  */
 @Slf4j
 @Data
-public class ScriptSig extends Script {
+public class ScriptSig extends Script implements Serializable {
 
     //创建
     public ScriptSig(byte[] embeddedMessage) {
@@ -25,6 +26,7 @@ public class ScriptSig extends Script {
         // 添加嵌入的文本（如果有）
         addOpCode(OP_RETURN);
         addData(embeddedMessage);
+        setHash();
     }
 
 
@@ -33,8 +35,21 @@ public class ScriptSig extends Script {
         // 添加签名
         addData(signature);
         // 添加公钥
-        addData(publicKey.getEncoded());
+        if (publicKey != null){
+            addData(publicKey.getEncoded());
+        }
+        setHash();
     }
+
+    public ScriptSig( byte[] signature,byte[] publicKey) {
+        super();
+        // 添加签名
+        addData(signature);
+        // 添加公钥哈希
+        addData(publicKey);
+        setHash();
+    }
+
 
 
     public ScriptSig(byte[] signature, PublicKey publicKey, byte[] embeddedMessage) {
@@ -44,8 +59,14 @@ public class ScriptSig extends Script {
         // 添加公钥
         addData(publicKey.getEncoded());
         // 添加嵌入的文本（如果有）
-
+        setHash();
     }
+
+
+
+
+
+
 
     // 从私钥生成解锁脚本
     public static ScriptSig fromPrivateKey(PrivateKey privateKey, PublicKey publicKey, Transaction transaction) {
@@ -54,7 +75,9 @@ public class ScriptSig extends Script {
         byte[] bytes = CryptoUtil.applySHA256(serialize);//这笔交易的 hash
         //对交易进行签名
         byte[] signature = CryptoUtil.ECDSASigner.applySignature(privateKey, bytes);
-        return new ScriptSig(signature, publicKey);
+        ScriptSig scriptSig = new ScriptSig(signature, publicKey);
+        scriptSig.setHash();
+        return scriptSig;
     }
 
     //创建P2PKH
@@ -64,7 +87,9 @@ public class ScriptSig extends Script {
         byte[] bytes = CryptoUtil.applySHA256(serialize);//这笔交易的 hash
         //对交易进行签名
         byte[] signature = CryptoUtil.ECDSASigner.applySignature(privateKey, bytes);
-        return new ScriptSig(signature, publicKey);
+        ScriptSig scriptSig = new ScriptSig(signature, publicKey);
+        scriptSig.setHash();
+        return scriptSig;
     }
 
     // 创建P2SH解锁脚本
@@ -87,6 +112,7 @@ public class ScriptSig extends Script {
                 script.addData(element.getData());
             }
         }*/
+        script.setHash();
         return script;
     }
 
@@ -109,10 +135,29 @@ public class ScriptSig extends Script {
                 script.addData(element.getData());
             }
         }*/
+        script.setHash();
         return script;
     }
 
     // 创建P2WPKH解锁脚本
+    public static ScriptSig createP2WPKH(byte[] signature, byte[] publicKey) {
+        ScriptSig script = new ScriptSig();
+        // 添加OP_0（BIP62要求）
+        script.addOpCode(OP_0);
+        // 添加签名
+        script.addData(signature);
+        // 添加公钥哈希
+        script.addData(publicKey);
+        script.setHash();
+        return script;
+    }
+
+    public static ScriptSig createP2WPKHTemp(byte[] ScriptPubKey) {
+        ScriptSig script = new ScriptSig();
+        script.addData(ScriptPubKey);
+        script.setHash();
+        return script;
+    }
 
 
     // 创建P2WSH解锁脚本

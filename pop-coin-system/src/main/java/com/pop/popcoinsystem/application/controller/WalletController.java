@@ -5,6 +5,7 @@ import com.pop.popcoinsystem.application.service.WalletService;
 import com.pop.popcoinsystem.application.service.WalletVO;
 import com.pop.popcoinsystem.application.service.vo.BuildWalletUTXODTO;
 import com.pop.popcoinsystem.application.service.vo.TransferVO;
+import com.pop.popcoinsystem.application.service.vo.WalletBalanceVO;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -53,8 +54,8 @@ public class WalletController {
      * 获取当前钱包余额
      */
     @PostMapping("/getBalance")
-    public String getBalance() {
-        return "get balance success";
+    public Result getBalance(@RequestBody WalletBalanceVO walletBalanceVO) {
+        return walletService.getBalance(walletBalanceVO);
     }
 
     /**
@@ -102,7 +103,7 @@ public class WalletController {
 
 
     /**
-     * 发起一笔交易
+     * 发起一笔交易  根据收款方地址确定是
      */
     @PostMapping("/createTransaction")
     public Result<String> createTransaction(@RequestBody TransferVO transferVO) {
@@ -112,11 +113,15 @@ public class WalletController {
 
     /**
      * 构建钱包的UTXO
+     * 挖矿使用的钱包是 BTCMiner
+     *
      */
     @PostMapping("/buildWalletUTXO")
     public Result<String> buildWalletUTXO(@RequestBody BuildWalletUTXODTO buildWalletUTXODTO) {
         return walletService.buildWalletUTXO(buildWalletUTXODTO);
     }
+
+
 
 
 

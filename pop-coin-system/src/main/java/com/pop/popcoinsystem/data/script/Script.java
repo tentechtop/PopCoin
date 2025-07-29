@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.Serializable;
 import java.security.KeyFactory;
 import java.security.PublicKey;
 import java.security.spec.EncodedKeySpec;
@@ -20,7 +21,7 @@ import static com.pop.popcoinsystem.util.CryptoUtil.bytesToHex;
 
 
 @Slf4j
-public class Script {
+public class Script implements Serializable {
 
     /**
      * ScriptSig().getData() 的核心是提取解锁脚本中用于验证交易合法性的原始数据，这些数据通常包括交易签名、公钥等关键信息，是证明 “
@@ -68,6 +69,11 @@ public class Script {
         } catch (IOException e) {
             throw new RuntimeException("合并数据元素失败", e);
         }
+    }
+
+    public byte[] getScriptBytes() {
+        // 直接复用 serialize() 方法的结果，该方法已实现脚本元素的序列化
+        return serialize();
     }
 
 
@@ -1296,20 +1302,20 @@ public class Script {
     // 类型
     private int type;
     // hex表示 脚本表示
-    private String hex;
+    private byte[] hash;
 
     // 提供受保护的设置方法
     protected void setType(int type) {
         this.type = type;
     }
-    protected void setHex() {
-        this.hex = bytesToHex(serialize());
+    protected void setHash() {
+        this.hash = serialize();
     }
     public int getType() {
         return type;
     }
 
-    public String getHex() {
-        return hex;
+    public byte[] getHash() {
+        return hash;
     }
 }

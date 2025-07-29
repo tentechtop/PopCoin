@@ -16,6 +16,7 @@ import java.io.File;
 import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -32,6 +33,9 @@ public class WalletStorage {
     private static final String DB_PATH = "rocksDb/popCoin.db/wallet/blockChain" + POP_NET_VERSION + ".db";
     private static final String LOG_PATH = DB_PATH + "rocksdb_logs/"; // 单独目录存放 RocksDB 日志
 
+    private static final String KEY_BTC_MINER_WALLET = "btcminer";//矿工钱包
+    private static final String KEY_BTC_WALLET_A = "walleta";//钱包A
+    private static final String KEY_BTC_WALLET_B = "walletb";
 
     // ------------------------------ 数据操作 ------------------------------
     /**
@@ -69,27 +73,35 @@ public class WalletStorage {
         }
     }
 
-    public List<UTXO> queryWalletUTXO(String walletName) {
 
-        return null;
+
+    public void saveWalletUTXOs(String walletName, CopyOnWriteArraySet<String> walletUTXOs) {
+        log.info("保存钱包 UTXO 集合: {}", walletName);
+        try {
+            this.rwLock.writeLock().lock();
+            this.db.put(ColumnFamily.BTC_Miner_UTXO.handle, walletName.getBytes(), SerializeUtils.serialize(walletUTXOs));
+        } catch (RocksDBException e) {
+            log.error("保存钱包 UTXO 失败", e);
+            throw new RuntimeException("保存钱包 UTXO 失败", e);
+        } finally {
+            this.rwLock.writeLock().unlock();
+        }
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    //获取钱包的UTXO集合
+    public CopyOnWriteArraySet<String> getWalletUTXOs(String walletName) {
+        try {
+            this.rwLock.readLock().lock();
+            byte[] bytes = this.db.get(ColumnFamily.BTC_Miner_UTXO.handle, walletName.getBytes());
+            if (bytes == null) {
+                return new CopyOnWriteArraySet<String>();
+            }
+            return (CopyOnWriteArraySet<String>) SerializeUtils.deSerialize(bytes);
+        } catch (RocksDBException e) {
+            log.error("获取钱包 UTXO 集合失败", e);
+            throw new RuntimeException("获取钱包 UTXO 集合失败", e);
+        }
+    }
 
 
 
@@ -99,8 +111,9 @@ public class WalletStorage {
     // 使用枚举管理列族
     private enum ColumnFamily {
         WALLET("CF_WALLET", "wallet",new ColumnFamilyOptions()),
+        BTC_Miner_UTXO("CF_BTC_Miner_UTXO", "btcMinerUTXO",new ColumnFamilyOptions()),//矿工钱包
 
-        BTC_Miner_UTXO("CF_BTC_Miner_UTXO", "btcMinerUTXO",new ColumnFamilyOptions()),
+        WALLET_A("CF_BTC_Miner_UTXO", "btcMinerUTXO",new ColumnFamilyOptions()),//矿工钱包
 
 
 

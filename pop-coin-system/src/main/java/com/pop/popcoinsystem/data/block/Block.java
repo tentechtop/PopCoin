@@ -240,6 +240,16 @@ public class Block implements Serializable {
             return new byte[32];
         }
 
+        // 过滤掉所有null值
+        hashes = hashes.stream()
+                .filter(hash -> hash != null)
+                .collect(Collectors.toList());
+
+        // 如果过滤后没有有效哈希，返回空哈希
+        if (hashes.isEmpty()) {
+            return new byte[32];
+        }
+
         // 如果只有一个哈希，那就是根哈希（特殊情况，如创世块）
         if (hashes.size() == 1) {
             return hashes.get(0);

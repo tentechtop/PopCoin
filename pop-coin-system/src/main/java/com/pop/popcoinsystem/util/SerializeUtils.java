@@ -5,6 +5,10 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.pool.KryoFactory;
 import com.esotericsoftware.kryo.pool.KryoPool;
+import com.pop.popcoinsystem.application.service.Wallet;
+import com.pop.popcoinsystem.data.script.Script;
+import com.pop.popcoinsystem.data.script.ScriptPubKey;
+import com.pop.popcoinsystem.data.script.ScriptSig;
 import com.pop.popcoinsystem.data.transaction.UTXO;
 import com.pop.popcoinsystem.network.protocol.message.*;
 
@@ -33,10 +37,16 @@ public class SerializeUtils {
         kryo.register(PrivateKey.class);
         kryo.register(PublicKey.class);
 
+        kryo.register(Script.class);
+        kryo.register(ScriptPubKey.class);
+        kryo.register(ScriptSig.class);
+
         kryo.register(UTXO.class);
 
         kryo.register(BigInteger.class);  // 假设包含 BigInteger 等基础类型外的类
         kryo.register(byte[].class);  // 若有字节数组也需注册
+
+        kryo.register(Wallet.class);
 
         // 配置Kryo（根据需要调整）
         kryo.setRegistrationRequired(false);

@@ -22,8 +22,8 @@ public class Wallet implements Serializable {
 
     private String passwordHash;
 
-    //总额 单位聪
-    private long total;
+    //余额 单位聪
+    private long  balance;
 
 
 

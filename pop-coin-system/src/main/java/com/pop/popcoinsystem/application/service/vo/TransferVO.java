@@ -13,10 +13,7 @@ public class TransferVO {
     private String toAddress;//转账地址
 
     @NonNull
-    private String amount;//转账金额
+    private long amount;//转账金额  单位聪
 
-    //是否隔离见证 0否 1是
-    @NonNull
-    private int isSegWit;
 
 }

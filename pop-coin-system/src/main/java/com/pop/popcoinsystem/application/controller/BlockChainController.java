@@ -30,7 +30,7 @@ public class BlockChainController {
     /**
      * 查询当前区块链信息
      */
-    @GetMapping("/getBlockChainInfo")
+    @GetMapping("/info")
     public Result<BlockChain> getBlockChainInfo() {
         return blockChainService.getBlockChainInfo();
     }
@@ -68,7 +68,7 @@ public class BlockChainController {
     /**
      * 查询UTXO
      */
-    @GetMapping("/utxo/{txId}/{vout}")
+    @GetMapping("/transaction/{txId}/{vout}")
     public Result<UTXODTO> getUTXO(@PathVariable("txId") String txId , @PathVariable("vout") int vout) {
         if (txId == null || vout < 0){
             return Result.error("参数错误");
