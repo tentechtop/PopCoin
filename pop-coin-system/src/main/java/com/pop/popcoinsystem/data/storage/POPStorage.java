@@ -1,8 +1,12 @@
 package com.pop.popcoinsystem.data.storage;
 
 import com.pop.popcoinsystem.data.block.Block;
+import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.miner.Miner;
+import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.data.transaction.UTXO;
+import com.pop.popcoinsystem.data.transaction.dto.TransactionDTO;
+import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.network.common.NodeSettings;
 import com.pop.popcoinsystem.util.ByteUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
@@ -467,7 +471,20 @@ public class POPStorage {
         }
     }
 
-
+    public Transaction getTransaction(byte[] txId) {
+        //根据交易Id查询区块
+        byte[] blockHash = getBlockHashByTxId(txId);
+        //查询区块
+        Block blockByHash = getBlockByHash(blockHash);
+        //获取区块中的交易
+        List<Transaction> transactions = blockByHash.getTransactions();
+        for (Transaction transaction: transactions) {
+            if (Arrays.equals(transaction.getTxId(), txId)) {
+                return transaction;
+            }
+        }
+        return null;
+    }
 
 
     // 分页结果封装类

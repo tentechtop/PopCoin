@@ -54,7 +54,7 @@ public class BlockChainController {
     /**
      * 查询交易
      */
-    @PostMapping("/transaction/{txId}")
+    @GetMapping("/transaction/{txId}")
     public Result<TransactionDTO> getTransaction(@PathVariable("txId") String txId) {
         if (txId == null){
             return Result.error("参数错误");

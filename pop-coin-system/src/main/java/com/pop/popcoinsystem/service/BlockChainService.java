@@ -206,8 +206,14 @@ public class BlockChainService {
         }
 
         // 验证输入的UTXO是否未花费
-
-
+        for (TXInput input : transaction.getInputs()) {
+            UTXO utxo = getUTXO(input.getTxId(), input.getVout());
+            if (utxo == null) {
+                log.error("输入的UTXO不存在或已花费");
+                return Result.error("输入的UTXO不存在或已花费");
+            }
+        }
+        //验证输入的合法性
         if (transaction.isSegWit()){
             //普通交易验证
 
@@ -294,6 +300,8 @@ public class BlockChainService {
      * 处理区块
      */
     private void processValidBlock(Block block) {
+        log.info("处理区块中的交易：{}", block.getTransactions().size());
+
         // 保存区块到数据库
         popStorage.addBlock(block);
         // 获取主链最新信息
@@ -391,10 +399,8 @@ public class BlockChainService {
         if (!Objects.equals(validCoinBaseTransaction.getCode(), SC_OK_200)) {
             return validCoinBaseTransaction;
         }
-        //去除第一个CoinBase交易
-        transactions.remove(0);
         // 3. 按顺序验证所有交易（不包括CoinBase）
-        for (int i = 0; i < transactions.size(); i++) {
+        for (int i = 1; i < transactions.size(); i++) {
             Transaction tx = block.getTransactions().get(i);
             Result<String> verifyTransaction = verifyTransaction(tx);
             if (!Objects.equals(verifyTransaction.getCode(), SC_OK_200)) {
@@ -546,7 +552,7 @@ public class BlockChainService {
                     //根据交易ID查询所在的区块
                     Block referencedBlock  = getBlockByTxId(input.getTxId());
                     if (referencedBlock != null) {
-                        //查询引用的交易
+                        //查询引用的交易  找到这笔输入的引用 重新添加
                         Transaction referencedTx = findTransactionInBlock(referencedBlock, referencedTxId);
                         if (referencedTx != null && referencedVout < referencedTx.getOutputs().size()) {
                             TXOutput referencedOutput = referencedTx.getOutputs().get(referencedVout);
@@ -855,9 +861,42 @@ public class BlockChainService {
 
 
     public Result<TransactionDTO> getTransaction(String txId) {
-        //交易到区块的索引
-        //查询区块
-        //获取区块中的交易
-        return Result.ok();
+        Transaction transaction = popStorage.getTransaction(CryptoUtil.hexToBytes(txId));
+        TransactionDTO transactionDTO = BeanCopyUtils.copyObject(transaction, TransactionDTO.class);
+        //交易输入
+        List<TXInput> inputs = transaction.getInputs();
+        if (inputs != null){
+            ArrayList<TXInputDTO> transactionInputDTOS = new ArrayList<>();
+            for (TXInput input : inputs) {
+                TXInputDTO transactionInputDTO = new TXInputDTO();
+                transactionInputDTO.setTxId(input.getTxId());
+                transactionInputDTO.setVout(input.getVout());
+                transactionInputDTO.setScriptSig(input.getScriptSig());
+                transactionInputDTO.setSequence(input.getSequence());
+                transactionInputDTOS.add(transactionInputDTO);
+            }
+            transactionDTO.setInputs(transactionInputDTOS);
+        }
+        //交易输出
+        List<TXOutput> outputs = transaction.getOutputs();
+        if (outputs != null){
+            ArrayList<TXOutputDTO> transactionOutputDTOS = new ArrayList<>();
+            for (TXOutput output : outputs) {
+                TXOutputDTO transactionOutputDTO = BeanCopyUtils.copyObject(output, TXOutputDTO.class);
+                transactionOutputDTOS.add(transactionOutputDTO);
+            }
+            transactionDTO.setOutputs(transactionOutputDTOS);
+        }
+        //见证数据
+        List<Witness> witnesses = transaction.getWitnesses();
+        if (witnesses != null){
+            ArrayList<WitnessDTO> witnessDTOS = new ArrayList<>();
+            for (Witness witness : witnesses) {
+                WitnessDTO witnessDTO = BeanCopyUtils.copyObject(witness, WitnessDTO.class);
+                witnessDTOS.add(witnessDTO);
+            }
+            transactionDTO.setWitnesses(witnessDTOS);
+        }
+        return Result.ok(transactionDTO);
     }
 }
