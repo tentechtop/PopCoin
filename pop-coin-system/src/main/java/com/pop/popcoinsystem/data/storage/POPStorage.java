@@ -476,11 +476,13 @@ public class POPStorage {
         byte[] blockHash = getBlockHashByTxId(txId);
         //查询区块
         Block blockByHash = getBlockByHash(blockHash);
-        //获取区块中的交易
-        List<Transaction> transactions = blockByHash.getTransactions();
-        for (Transaction transaction: transactions) {
-            if (Arrays.equals(transaction.getTxId(), txId)) {
-                return transaction;
+        if (blockByHash != null){
+            //获取区块中的交易
+            List<Transaction> transactions = blockByHash.getTransactions();
+            for (Transaction transaction: transactions) {
+                if (Arrays.equals(transaction.getTxId(), txId)) {
+                    return transaction;
+                }
             }
         }
         return null;

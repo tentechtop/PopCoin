@@ -13,6 +13,10 @@ import java.util.List;
 public class BlockDTO {
     //表示该区块在区块链中的高度，即它是第几个区块。这里的高度为 1，表示它是区块链中的第一个区块（创世块是高度 0）。
     private long height;//区块高度 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18.........................
+
+    //确认数量
+    private long confirmations = 0;
+
     //唯一的标识
     private String hash;
     public void setHash(byte[] hash){
@@ -29,7 +33,6 @@ public class BlockDTO {
     public void setMerkleRoot(byte[] merkleRoot){
         this.merkleRoot = CryptoUtil.bytesToHex(merkleRoot);
     }
-
     //表示该区块的时间戳，以秒为单位的 Unix 时间戳。
     private long time;
     //表示该区块之前 11 个区块的中位时间。它用于一些时间敏感的计算。

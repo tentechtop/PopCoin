@@ -3,9 +3,13 @@ package com.pop.popcoinsystem.application.controller;
 import com.pop.popcoinsystem.data.block.BlockVO;
 import com.pop.popcoinsystem.data.blockChain.BlockChain;
 import com.pop.popcoinsystem.data.block.BlockDTO;
+import com.pop.popcoinsystem.data.transaction.UTXO;
 import com.pop.popcoinsystem.data.transaction.dto.TransactionDTO;
+import com.pop.popcoinsystem.data.transaction.dto.UTXODTO;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.service.BlockChainService;
+import com.pop.popcoinsystem.util.BeanCopyUtils;
+import com.pop.popcoinsystem.util.CryptoUtil;
 import jakarta.annotation.Resource;
 import jakarta.websocket.server.PathParam;
 import lombok.extern.slf4j.Slf4j;
@@ -17,7 +21,7 @@ import org.springframework.web.bind.annotation.*;
  */
 @Slf4j
 @RestController
-@RequestMapping("/pop/blockchain")
+@RequestMapping("/blockchain")
 public class BlockChainController {
     @Resource
     private BlockChainService blockChainService;
@@ -59,11 +63,20 @@ public class BlockChainController {
         if (txId == null){
             return Result.error("参数错误");
         }
-
         return blockChainService.getTransaction(txId);
     }
-
-
+    /**
+     * 查询UTXO
+     */
+    @GetMapping("/utxo/{txId}/{vout}")
+    public Result<UTXODTO> getUTXO(@PathVariable("txId") String txId , @PathVariable("vout") int vout) {
+        if (txId == null || vout < 0){
+            return Result.error("参数错误");
+        }
+        UTXO utxo = blockChainService.getUTXO(CryptoUtil.hexToBytes(txId), vout);
+        UTXODTO utxodto = BeanCopyUtils.copyObject(utxo, UTXODTO.class);
+        return Result.ok(utxodto);
+    }
 
 
     /**
