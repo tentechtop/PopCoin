@@ -111,9 +111,9 @@ public class WalletStorage {
     // 使用枚举管理列族
     private enum ColumnFamily {
         WALLET("CF_WALLET", "wallet",new ColumnFamilyOptions()),
-        BTC_Miner_UTXO("CF_BTC_Miner_UTXO", "btcMinerUTXO",new ColumnFamilyOptions()),//矿工钱包
+        BTC_Miner_UTXO("CF_BTC_Miner_UTXO", "btcMinerUTXO",new ColumnFamilyOptions()),//钱包对应的UTXO
 
-        WALLET_A("CF_BTC_Miner_UTXO", "btcMinerUTXO",new ColumnFamilyOptions()),//矿工钱包
+
 
 
 

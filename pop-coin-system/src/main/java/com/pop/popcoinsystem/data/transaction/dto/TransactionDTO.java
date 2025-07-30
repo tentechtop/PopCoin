@@ -23,6 +23,11 @@ public class TransactionDTO {
         this.txId = CryptoUtil.bytesToHex(txId);
     }
 
+    private String wtxId;
+    public void setWtxId(byte[] wtxId){
+        this.wtxId = CryptoUtil.bytesToHex(wtxId);
+    }
+
     /**
      * 交易版本
      */

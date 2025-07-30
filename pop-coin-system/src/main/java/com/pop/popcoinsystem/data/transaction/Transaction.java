@@ -1,6 +1,6 @@
 package com.pop.popcoinsystem.data.transaction;
 
-import com.pop.popcoinsystem.data.enums.SIGHASHTYPE;
+import com.pop.popcoinsystem.data.enums.SigHashType;
 import com.pop.popcoinsystem.data.script.Script;
 import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.data.script.ScriptSig;
@@ -13,10 +13,7 @@ import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
 
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
@@ -42,9 +39,18 @@ import static com.pop.popcoinsystem.service.MiningService.*;
 @NoArgsConstructor
 public class Transaction implements Cloneable{
     /**
-     * 交易的Hash
+     * 交易ID（txid）：
+     * - 非隔离见证交易：整个交易数据（不含见证数据，因无见证数据）的双重SHA256哈希
+     * - 隔离见证交易：仅非见证数据（版本、输入输出结构、锁定时间等）的双重SHA256哈希
      */
-    private byte[] txId;
+    private byte[] txId;  //基于非见证数据计算（版本、输入输出、锁定时间等，不含见证数据）
+
+    /**
+     * 见证交易ID（wtxid）：
+     * - 非隔离见证交易：与txid相同
+     * - 隔离见证交易：包含所有数据（非见证数据+见证数据）的双重SHA256哈希
+     */
+    private byte[] wtxId; //基于完整数据（含见证数据）计算，非隔离见证交易与txId一致
 
     /**
      * 交易版本
@@ -194,23 +200,68 @@ public class Transaction implements Cloneable{
 
 
 
+
     /**
-     * 计算交易ID
-     * 后面改成隔离见证
+     * 计算交易txid（核心方法，统一逻辑）
+     * 无论是否为隔离见证交易，均基于非见证数据计算
      */
     public static byte[] calculateTxId(Transaction transaction) {
-        //计算时不能包含ID
-        transaction.setTxId(null);//空
-        if (transaction.isSegWit()) {
-            // 隔离见证交易ID计算：仅使用非见证部分
-            byte[] nonWitnessData = SerializeUtils.serialize(removeWitnessData(transaction));
-            return doubleHash256(nonWitnessData);
-        } else {
-            // 普通交易ID计算
-            byte[] transactionData = SerializeUtils.serialize(transaction);
-            return doubleHash256(transactionData);
-        }
+        // 复制交易并移除见证数据（确保计算基础为非见证数据）
+        Transaction nonWitnessTx = copyWithoutWitness(transaction);
+        // 序列化非见证数据
+        byte[] nonWitnessData = SerializeUtils.serialize(nonWitnessTx);
+        // 双重SHA256计算txid
+        return doubleHash256(nonWitnessData);
     }
+
+    /**
+     * 计算交易wtxid（核心方法，统一逻辑）
+     * 隔离见证交易包含见证数据，非隔离见证交易与txid一致
+     */
+    public static byte[] calculateWtxId(Transaction transaction) {
+        if (!transaction.isSegWit()) {
+            // 非隔离见证交易：wtxid = txid
+            return calculateTxId(transaction);
+        }
+        Transaction copy = transaction.copy();
+        copy.setWtxId(null);
+        // 隔离见证交易：序列化完整交易（含见证数据）
+        byte[] fullData = SerializeUtils.serialize(copy);
+        // 双重SHA256计算wtxid
+        return doubleHash256(fullData);
+    }
+
+
+
+    public static Transaction copyWithoutWitness(Transaction tx) {
+        Transaction copy = new Transaction();
+        copy.setVersion(tx.getVersion());
+        copy.setLockTime(tx.getLockTime());
+        copy.setTime(tx.getTime());
+        // 复制输入（保留txId、vout、sequence，清空scriptSig）
+        List<TXInput> inputs = new ArrayList<>();
+        for (TXInput input : tx.getInputs()) {
+            TXInput inputCopy = new TXInput();
+            inputCopy.setTxId(input.getTxId() != null ? Arrays.copyOf(input.getTxId(), input.getTxId().length) : null);
+            inputCopy.setVout(input.getVout());
+            inputCopy.setSequence(input.getSequence());
+            inputCopy.setScriptSig(null); // 排除scriptSig（见证数据相关）
+            inputs.add(inputCopy);
+        }
+        copy.setInputs(inputs);
+        // 复制输出（完整保留，输出不含见证数据）
+        copy.setOutputs(new ArrayList<>(tx.getOutputs()));
+        // 强制清空见证数据
+        copy.setWitnesses(new ArrayList<>());
+        return copy;
+    }
+
+
+
+
+
+
+
 
     // 移除见证数据的辅助方法
     private static Transaction removeWitnessData(Transaction tx) {
@@ -371,90 +422,6 @@ public class Transaction implements Cloneable{
 
 
 
-
-    public static void main(String[] args) {
-        try {
-            System.out.println("===== 测试普通交易 =====");
-            Transaction regularTx = createRegularTransaction();
-            System.out.println("交易ID: " + CryptoUtil.bytesToHex(regularTx.getTxId()));
-            System.out.println("是否隔离见证: " + regularTx.isSegWit());
-            System.out.println("是否 CoinBase: " + regularTx.isCoinBase());
-            System.out.println("总输入: " + regularTx.getTotalInput() + " 聪"); // 新增
-            System.out.println("总输出: " + regularTx.getTotalOutput() + " 聪"); // 新增
-            System.out.println("基础大小: " + regularTx.calculateBaseSize() + " 字节");
-            System.out.println("见证大小: " + regularTx.calculateWitnessSize() + " 字节");
-            regularTx.calculateWeight();
-            System.out.println("权重: " + regularTx.getWeight());
-            System.out.println("虚拟大小: " + regularTx.getSize() + " vBytes");
-            /*System.out.println("交易手续费: " + regularTx.calculateFee() + " 聪"); // 手续费=总输入-总输出*/
-            /*System.out.println("每字节手续费: " + regularTx.getFeePerByte() + " 聪/字节");*/
-
-            System.out.println("\n===== 测试 CoinBase 交易 =====");
-            Transaction coinbaseTx = createCoinBaseTransaction("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",1,0);
-            System.out.println("CoinBase 交易ID: " + CryptoUtil.bytesToHex(coinbaseTx.getTxId()));
-            System.out.println("是否 CoinBase: " + coinbaseTx.isCoinBase());
-            System.out.println("总输入: " + coinbaseTx.getTotalInput() + " 聪"); // 新增（应为0）
-            System.out.println("总输出: " + coinbaseTx.getTotalOutput() + " 聪"); // 新增（应为补贴金额）
-            System.out.println("是否隔离见证: " + coinbaseTx.isSegWit());
-            coinbaseTx.calculateWeight();
-            System.out.println("CoinBase 权重: " + coinbaseTx.getWeight());
-            System.out.println("CoinBase 虚拟大小: " + coinbaseTx.getSize() + " vBytes");
-
-            System.out.println("\n===== 测试隔离见证交易 =====");
-            Transaction segwitTx = createSegWitTransaction();
-            System.out.println("隔离见证交易ID: " + CryptoUtil.bytesToHex(segwitTx.getTxId()));
-            System.out.println("是否 CoinBase: " + segwitTx.isCoinBase());
-            System.out.println("是否隔离见证: " + segwitTx.isSegWit());
-            System.out.println("总输入: " + segwitTx.getTotalInput() + " 聪"); // 新增
-            System.out.println("总输出: " + segwitTx.getTotalOutput() + " 聪"); // 新增
-            segwitTx.calculateWeight();
-            System.out.println("隔离见证权重: " + segwitTx.getWeight());
-            System.out.println("隔离见证虚拟大小: " + segwitTx.getSize() + " vBytes");
-
-
-            try {
-                System.out.println("===== 测试普通交易 =====");
-
-                // 新增普通交易大小输出
-                System.out.println("普通交易实际大小: " + regularTx.getRegularTransactionSize() + " 字节");
-                System.out.println("普通交易虚拟大小(vSize): " + regularTx.getSize() + " vBytes");
-
-                System.out.println("\n===== 测试隔离见证交易 =====");
-                // 新增隔离见证交易大小输出
-                System.out.println("隔离见证交易非见证数据大小: " + segwitTx.calculateBaseSize() + " 字节");
-                System.out.println("隔离见证交易见证数据大小: " + segwitTx.calculateWitnessSize() + " 字节");
-                System.out.println("隔离见证交易实际总大小: " + segwitTx.getSegWitTransactionTotalSize() + " 字节");
-                System.out.println("隔离见证交易虚拟大小(vSize): " + segwitTx.getSize() + " vBytes");
-
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    private long getTotalOutput() {
-        return getOutputs().stream()
-                .mapToLong(TXOutput::getValue)
-                .sum();
-    }
-
-    private long getTotalInput() {
-        return getInputs().stream()
-                .map(input -> {
-                    UTXO utxo = null;
-                    return utxo != null ? utxo.getValue() : 0;
-                })
-                .mapToLong(Long::longValue)
-                .sum();
-    }
-
-
-
-
-
     // 创建一个普通交易用于测试
     private static Transaction createRegularTransaction() {
         KeyPair keyPair = CryptoUtil.ECDSASigner.generateKeyPair();
@@ -511,7 +478,6 @@ public class Transaction implements Cloneable{
 
     public Transaction copy() {
         Transaction copy = new Transaction();
-
         // 复制基本类型字段
         copy.setVersion(this.version);
         copy.setSize(this.size);
@@ -523,7 +489,6 @@ public class Transaction implements Cloneable{
         if (this.txId != null) {
             copy.setTxId(Arrays.copyOf(this.txId, this.txId.length));
         }
-
         // 深拷贝输入列表（包含每个 TXInput 的拷贝）
         List<TXInput> copiedInputs = new ArrayList<>();
         for (TXInput input : this.inputs) {
@@ -536,8 +501,17 @@ public class Transaction implements Cloneable{
             inputCopy.setSequence(input.getSequence());
             // 深拷贝 ScriptSig（如果存在）
             if (input.getScriptSig() != null) {
-                ScriptSig scriptSigCopy = BeanCopyUtils.copyObject(input.getScriptSig(), ScriptSig.class);
-                log.info("拷贝后scriptSig: " + CryptoUtil.bytesToHex(scriptSigCopy.getHash()));
+                ScriptSig scriptSigCopy = new ScriptSig();
+                ScriptSig scriptSig = input.getScriptSig();
+                List<Script.ScriptElement> elements = scriptSig.getElements();
+                for (Script.ScriptElement element : elements) {
+                    if (element.isOpCode()) {
+                        scriptSigCopy.addOpCode(element.getOpCode());
+                    } else {
+                        scriptSigCopy.addData(element.getData());
+                    }
+                }
+                log.info("拷贝后scriptSigCopy:"+scriptSigCopy.toScripString());
                 inputCopy.setScriptSig(scriptSigCopy);
             }
             copiedInputs.add(inputCopy);
@@ -552,8 +526,16 @@ public class Transaction implements Cloneable{
             // 深拷贝 ScriptPubKey（如果存在）
             if (output.getScriptPubKey() != null) {
                 ScriptPubKey scriptPubKey = output.getScriptPubKey();
-                ScriptPubKey pubKeyCopy = BeanCopyUtils.copyObject(scriptPubKey, ScriptPubKey.class);
-                log.info("拷贝后pubKey: " + CryptoUtil.bytesToHex(pubKeyCopy.getHash()));
+                ScriptPubKey pubKeyCopy = new ScriptPubKey();
+                List<Script.ScriptElement> elements = scriptPubKey.getElements();
+                for (Script.ScriptElement element : elements){
+                    if (element.isOpCode()){
+                        pubKeyCopy.addOpCode(element.getOpCode());
+                    }else {
+                        pubKeyCopy.addData(element.getData());
+                    }
+                }
+                log.info("拷贝后scriptPubKey: " + pubKeyCopy.toScripString());
                 outputCopy.setScriptPubKey(pubKeyCopy);
             }
             copiedOutputs.add(outputCopy);
@@ -601,16 +583,18 @@ public class Transaction implements Cloneable{
     }
 
     /**
-     * 计算隔离见证交易的签名哈希（需在Transaction类中实现）
+     * 计算隔离见证交易的签名哈希
      * @param inputIndex 输入索引
      * @param amount 该输入对应的UTXO金额
      * @param sigHashType 签名哈希类型
      * @return 签名哈希值
      */
-    public byte[] calculateWitnessSignatureHash(int inputIndex, long amount, SIGHASHTYPE sigHashType) {
+    public byte[] calculateWitnessSignatureHash(int inputIndex, long amount, SigHashType sigHashType) {
         // 1. 序列化交易的基本部分（不含见证数据）
         java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
         java.io.DataOutputStream dos = new java.io.DataOutputStream(baos);
+        // 现实现（更安全）：使用复制的非见证交易实例
+        //Transaction sigHashTx = copyWithoutWitness(this);
 
         try {
             // 1.1 写入版本号
@@ -619,35 +603,59 @@ public class Transaction implements Cloneable{
             // 1.2 写入锁定时间
             dos.writeLong(this.getLockTime());
 
+            // 处理 ANYONECANPAY 标志
+            boolean anyoneCanPay = (sigHashType.getValue() & 0x80) != 0;
+
             // 1.3 写入输入数量
-            dos.writeLong(this.getInputs().size());
+            if (anyoneCanPay) {
+                dos.writeLong(1); // 只包含当前输入
+            } else {
+                dos.writeLong(this.getInputs().size());
+            }
 
             // 1.4 写入所有输入（scriptSig已被清空为scriptCode）
-            for (TXInput input : this.getInputs()) {
+            for (int i = 0; i < this.getInputs().size(); i++) {
+                TXInput input = this.getInputs().get(i);
+
+                // 处理 ANYONECANPAY：只包含当前输入
+                if (anyoneCanPay && i != inputIndex) {
+                    continue;
+                }
+
                 dos.write(input.getTxId());
                 dos.writeInt(input.getVout());
-                byte[] scriptBytes = input.getScriptSig() != null ? input.getScriptSig().getScriptBytes() : new byte[0];
-                dos.writeLong(scriptBytes.length);
-                dos.write(scriptBytes);
+
+                // 对于当前输入，使用完整的 scriptCode
+                if (i == inputIndex) {
+                    byte[] scriptBytes = input.getScriptSig() != null ? input.getScriptSig().getScriptBytes() : new byte[0];
+                    dos.writeLong(scriptBytes.length);
+                    dos.write(scriptBytes);
+                } else {
+                    // 对于其他输入，使用空脚本
+                    dos.writeLong(0);
+                }
+
+                // 对于当前输入，使用原始 sequence；对于其他输入，根据标志处理
                 dos.writeLong(input.getSequence());
             }
 
             // 1.5 写入输出数量
-            dos.writeLong(this.getOutputs().size());
+            // 获取基本类型（移除 ANYONECANPAY 标志）
+            byte baseType = (byte) (sigHashType.getValue() & 0x7F);
 
-            // 1.6 写入所有输出
-            for (TXOutput output : this.getOutputs()) {
-                dos.writeLong(output.getValue());
-                byte[] scriptBytes = output.getScriptPubKey().getScriptBytes();
-                dos.writeLong(scriptBytes.length);
-                dos.write(scriptBytes);
-            }
-
-            // 2. 根据SIGHASHTYPE处理特殊情况
-            if (sigHashType == SIGHASHTYPE.NONE) {
+            if (baseType == SigHashType.NONE.getValue()) {
                 // 不签名任何输出（可由矿工修改）
                 dos.writeLong(0); // 输出数量为0
-            } else if (sigHashType == SIGHASHTYPE.SINGLE) {
+
+                // 对于 NONE 类型，所有输入的 sequence 设为 0
+                if (!anyoneCanPay) {
+                    for (int i = 0; i < this.getInputs().size(); i++) {
+                        if (i != inputIndex) {
+                            dos.writeLong(0); // sequence 为 0
+                        }
+                    }
+                }
+            } else if (baseType == SigHashType.SINGLE.getValue()) {
                 // 仅签名指定索引的输出（需与输入索引匹配）
                 if (inputIndex >= this.getOutputs().size()) {
                     // 无效索引，返回特殊哈希值
@@ -665,6 +673,24 @@ public class Transaction implements Cloneable{
                 byte[] scriptBytes = output.getScriptPubKey().getScriptBytes();
                 dos.writeLong(scriptBytes.length);
                 dos.write(scriptBytes);
+
+                // 对于 SINGLE 类型，除当前输入外的其他输入 sequence 设为 0
+                if (!anyoneCanPay) {
+                    for (int i = 0; i < this.getInputs().size(); i++) {
+                        if (i != inputIndex) {
+                            dos.writeLong(0); // sequence 为 0
+                        }
+                    }
+                }
+            } else {
+                // ALL 类型：写入所有输出
+                dos.writeLong(this.getOutputs().size());
+                for (TXOutput output : this.getOutputs()) {
+                    dos.writeLong(output.getValue());
+                    byte[] scriptBytes = output.getScriptPubKey().getScriptBytes();
+                    dos.writeLong(scriptBytes.length);
+                    dos.write(scriptBytes);
+                }
             }
 
             // 3. 写入当前输入的金额（隔离见证特有）
@@ -688,4 +714,33 @@ public class Transaction implements Cloneable{
             throw new RuntimeException("计算见证签名哈希失败", e);
         }
     }
+
+
+    /**
+     * 交易数据更新时调用（如修改输入输出、添加见证数据），强制重新计算ID
+     */
+    public void updateData() {
+        this.txId = calculateTxId(this);
+        this.wtxId = calculateWtxId(this);
+        this.setSize(); // 同步更新大小
+        this.calculateWeight(); // 同步更新权重
+    }
+
+    // 修正ID获取与更新逻辑
+    public byte[] getTxId() {
+        if (txId == null) {
+            txId = calculateTxId(this);
+        }
+        return txId;
+    }
+
+    public byte[] getWtxId() {
+        if (wtxId == null) {
+            wtxId = calculateWtxId(this);
+        }
+        return wtxId;
+    }
+
+
+
 }

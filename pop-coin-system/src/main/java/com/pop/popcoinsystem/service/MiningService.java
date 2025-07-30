@@ -40,7 +40,7 @@ public class MiningService {
     private final BlockChainService blockChainService;
 
     // 挖矿性能控制（0-100，默认85%）
-    private volatile int miningPerformance = 50;
+    private volatile int miningPerformance = 30;
     // CPU保护机制相关变量
     private volatile double lastCpuLoad = 0;
     private static final long CPU_MONITOR_INTERVAL = 5000; // 5秒检测一次
@@ -76,7 +76,7 @@ public class MiningService {
     //是否启动挖矿服务 用于停止挖矿的标志
     public static boolean isMining = false;
     // 难度调整周期的区块数量
-    private static final int DIFFICULTY_ADJUSTMENT_INTERVAL = 12;//2016大概两周调整一次  144一天调整一次 2小时
+    private static final int DIFFICULTY_ADJUSTMENT_INTERVAL = 144;//2016大概两周调整一次  144一天调整一次 2小时
     //区块生成时间 600秒  10分钟
     private static final long BLOCK_GENERATION_TIME = 600;
     //货币总供应量

@@ -23,7 +23,7 @@ public class Wallet implements Serializable {
     private String passwordHash;
 
     //余额 单位聪
-    private long  balance;
+    private long  balance = 0L;
 
 
 

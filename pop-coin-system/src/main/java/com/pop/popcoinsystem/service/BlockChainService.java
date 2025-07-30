@@ -5,9 +5,11 @@ import com.pop.popcoinsystem.application.service.WalletStorage;
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.blockChain.BlockChain;
+import com.pop.popcoinsystem.data.enums.SigHashType;
 import com.pop.popcoinsystem.data.miner.Miner;
 import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.data.script.ScriptSig;
+import com.pop.popcoinsystem.data.script.ScriptType;
 import com.pop.popcoinsystem.data.storage.POPStorage;
 import com.pop.popcoinsystem.data.transaction.*;
 import com.pop.popcoinsystem.data.transaction.dto.TXInputDTO;
@@ -27,6 +29,7 @@ import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.*;
 
+import static com.pop.popcoinsystem.data.storage.POPStorage.getUTXOKey;
 import static com.pop.popcoinsystem.data.transaction.Transaction.calculateBlockReward;
 import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
 
@@ -35,6 +38,8 @@ import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
 public class BlockChainService {
     // 最低交易输出金额（防止粉尘交易，参考比特币粉尘限制）
     private static final long MIN_TRANSACTION_OUTPUT_AMOUNT = 10000;
+    //MAX_BLOCK_WEIGHT
+    private static final int MAX_BLOCK_WEIGHT = 4000000;
 
     private static final int COINBASE_MATURITY = 100;// CoinBase交易成熟度要求
 
@@ -42,12 +47,8 @@ public class BlockChainService {
 
     public static final String GENESIS_BLOCK_HASH_HEX = "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f";
     private static final byte[] GENESIS_BLOCK_HASH = CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX);
-
     private POPStorage popStorage;
-
     private MiningService miningService;
-
-    private MiningService miningService2;
 
     @PostConstruct
     private void initBlockChain() throws Exception {
@@ -82,10 +83,36 @@ public class BlockChainService {
             walleta.setPrivateKeyHex(CryptoUtil.bytesToHex(privateKey.getEncoded()));
             walletStorage.addWallet(walleta);
         }
-        String p2PKHAddressByPK = CryptoUtil.ECDSASigner.createP2PKHAddressByPK(CryptoUtil.hexToBytes(walleta.getPublicKeyHex()));
+        byte[] bytesMiner = CryptoUtil.hexToBytes(walleta.getPublicKeyHex());
+        String p2PKHAddressMiner = CryptoUtil.ECDSASigner.createP2PKHAddressByPK(bytesMiner);
+        String p2WPKHAddressMiner = CryptoUtil.ECDSASigner.createP2WPKHAddressByPK(bytesMiner);
+        log.info("矿工钱包地址P2PKH：{}",p2PKHAddressMiner);
+        log.info("矿工钱包地址P2WPKH：{}",p2WPKHAddressMiner);
+
+        /*新增测试钱包*/
+        Wallet wallettest = walletStorage.getWallet("wallettest");
+        log.info("wallettest: "+wallettest);
+        if (wallettest == null){
+            KeyPair keyPairA = CryptoUtil.ECDSASigner.generateKeyPair();
+            PrivateKey privateKey = keyPairA.getPrivate();
+            PublicKey publicKey = keyPairA.getPublic();
+            wallettest = new Wallet();
+            wallettest.setName("wallettest");
+            wallettest.setPublicKeyHex(CryptoUtil.bytesToHex(publicKey.getEncoded()));
+            wallettest.setPrivateKeyHex(CryptoUtil.bytesToHex(privateKey.getEncoded()));
+            walletStorage.addWallet(wallettest);
+        }
+        String publicKeyHexTest = wallettest.getPublicKeyHex();
+        byte[] bytesTest = CryptoUtil.hexToBytes(publicKeyHexTest);
+        String p2PKHAddressByPK = CryptoUtil.ECDSASigner.createP2PKHAddressByPK(bytesTest);
+        String p2WPKHAddressByPK = CryptoUtil.ECDSASigner.createP2WPKHAddressByPK(bytesTest);
+        log.info("p2PKH Test 测试钱包地址: {}", p2PKHAddressByPK);
+        log.info("p2WPKH Test 测试钱包地址: {}", p2WPKHAddressByPK);
+
+
 
         Miner miner = new Miner();
-        miner.setAddress(p2PKHAddressByPK);
+        miner.setAddress(p2PKHAddressMiner);
         miner.setName("btcminer");
         miningService.setMiningInfo(miner);
 
@@ -148,7 +175,6 @@ public class BlockChainService {
         return genesisBlock;
     }
 
-
     /**
      * 验证交易并提交到交易池
      * 交易验证成功后 广播交易 如果本节点是矿工节点 则再添加到交易池 由矿工打包
@@ -170,100 +196,31 @@ public class BlockChainService {
      * 验证交易
      */
     public boolean verifyTransaction(Transaction transaction) {
-        // 基础格式验证
-        if (transaction == null || transaction.getInputs() == null || transaction.getOutputs() == null) {
-            log.error("交易格式无效");
+        // 基础验证
+        if (!validateTransactionBasics(transaction)) {
             return false;
         }
-        // 检查是否为CoinBase交易（CoinBase交易不受最低金额限制）
-        boolean isCoinBase = isCoinBaseTransaction(transaction);
-        // 交易金额验证
-        long inputSum = transaction.getInputs().stream()
-                .map(input -> {
-                    UTXO utxo = getUTXO(input.getTxId(), input.getVout());
-                    return utxo != null ? utxo.getValue() : 0;
-                })
-                .mapToLong(Long::longValue)
-                .sum();
-        long outputSum = transaction.getOutputs().stream()
-                .mapToLong(TXOutput::getValue)
-                .sum();
-        log.info("交易输入金额:{}", inputSum);
-        log.info("交易输出金额:{}", outputSum);
-
-        if (inputSum < outputSum) {
-            log.error("交易输出金额大于输入金额");
+        // 金额验证
+        if (!validateTransactionAmounts(transaction)) {
             return false;
         }
-
-        // 新增：检查最低交易输出金额（非CoinBase交易）
-        if (!isCoinBase) {
-            for (TXOutput output : transaction.getOutputs()) {
-                if (output.getValue() < MIN_TRANSACTION_OUTPUT_AMOUNT) {
-                    log.error("交易输出金额低于最低限制（{}聪），当前值: {}聪",
-                            MIN_TRANSACTION_OUTPUT_AMOUNT, output.getValue());
-                    return false;
-                }
-            }
-        }
-
         // 交易ID验证
-        byte[] originalTxId = transaction.getTxId();
-        byte[] calculatedTxId = Transaction.calculateTxId(transaction);
-        log.info("原始交易ID:{}", CryptoUtil.bytesToHex(originalTxId));
-        log.info("验证时交易ID:{}", CryptoUtil.bytesToHex(calculatedTxId));
-        if (!Arrays.equals(calculatedTxId, originalTxId)){
-            log.error("交易ID不匹配");
+        if (!validateTransactionId(transaction)) {
             return false;
         }
-        transaction.setTxId(calculatedTxId);
-        // 验证输入的UTXO是否未花费
-        for (TXInput input : transaction.getInputs()) {
-            UTXO utxo = getUTXO(input.getTxId(), input.getVout());
-            if (utxo == null) {
-                log.error("输入的UTXO不存在或已花费");
-                return false;
-            }
-            //验证成熟度要求
-            if (!utxoIsMature(utxo)) {
-                log.error("输入的UTXO未成熟");
-                return false;
-            }
-            //验证输入的合法性
-            if (transaction.isSegWit()){
-                //隔离见证交易验证
-
-            }else {
-                //普通交易验证
-                ScriptPubKey scriptPubKey = utxo.getScriptPubKey();
-                //对输入的UTXO进行摘要
-                byte[] bytes = CryptoUtil.applySHA256(SerializeUtils.serialize(utxo));
-                boolean verify = scriptPubKey.verify(input.getScriptSig(), bytes, input.getVout(), false);
-                if (!verify) {
-                    log.error("输入的签名无效");
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    private boolean utxoIsMature(UTXO utxo) {
-        //检查UTXO 对应的交易所在的区块 高度是否被一百个区块叠加
-        byte[] txId = utxo.getTxId();
-        Block blockByTxId = getBlockByTxId(txId);
-        if (blockByTxId == null){
-            log.info("未找到交易对应的区块");
+        // UTXO验证与缓存
+        Map<String, UTXO> utxoMap = new HashMap<>();
+        if (!validateAndCacheUTXOs(transaction, utxoMap)) {
             return false;
         }
-        // 获取UTXO产出区块的高度
-        long utxoBlockHeight = blockByTxId.getHeight();
-        // 获取当前主链的最新高度
-        long currentHeight = getMainLatestHeight();
-        // 计算高度差，判断是否达到成熟度要求（通常为100个区块）
-        return (currentHeight - utxoBlockHeight) >= COINBASE_MATURITY;
+        // 根据交易类型执行不同验证逻辑
+        if (transaction.isSegWit()) {
+            //隔离见证验证
+            return validateSegWitTransaction(transaction, utxoMap);
+        } else {
+            return validateRegularTransaction(transaction, utxoMap);
+        }
     }
-
 
     /**
      * 验证区块
@@ -304,6 +261,315 @@ public class BlockChainService {
         });
         return true;
     }
+
+    /**
+     * 验证交易基础格式
+     */
+    private boolean validateTransactionBasics(Transaction transaction) {
+        if (transaction == null || transaction.getInputs() == null || transaction.getOutputs() == null) {
+            log.error("交易格式无效");
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * 验证交易金额
+     */
+    private boolean validateTransactionAmounts(Transaction transaction) {
+        boolean isCoinBase = isCoinBaseTransaction(transaction);
+
+        long inputSum = calculateInputSum(transaction);
+        long outputSum = calculateOutputSum(transaction);
+
+        log.info("交易输入金额:{}", inputSum);
+        log.info("交易输出金额:{}", outputSum);
+
+        if (inputSum < outputSum) {
+            log.error("交易输出金额大于输入金额");
+            return false;
+        }
+
+        // 非CoinBase交易检查最低输出金额
+        if (!isCoinBase) {
+            for (TXOutput output : transaction.getOutputs()) {
+                if (output.getValue() < MIN_TRANSACTION_OUTPUT_AMOUNT) {
+                    log.error("交易输出金额低于最低限制（{}聪），当前值: {}聪",
+                            MIN_TRANSACTION_OUTPUT_AMOUNT, output.getValue());
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 计算交易输入总金额
+     */
+    private long calculateInputSum(Transaction transaction) {
+        return transaction.getInputs().stream()
+                .map(input -> {
+                    UTXO utxo = getUTXO(input.getTxId(), input.getVout());
+                    return utxo != null ? utxo.getValue() : 0;
+                })
+                .mapToLong(Long::longValue)
+                .sum();
+    }
+
+    /**
+     * 计算交易输出总金额
+     */
+    private long calculateOutputSum(Transaction transaction) {
+        return transaction.getOutputs().stream()
+                .mapToLong(TXOutput::getValue)
+                .sum();
+    }
+
+    /**
+     * 验证交易ID
+     */
+    private boolean validateTransactionId(Transaction transaction) {
+        byte[] originalTxId = transaction.getTxId();
+        byte[] calculatedTxId = Transaction.calculateTxId(transaction);
+
+        log.info("原始交易ID:{}", CryptoUtil.bytesToHex(originalTxId));
+        log.info("验证时交易ID:{}", CryptoUtil.bytesToHex(calculatedTxId));
+
+        if (!Arrays.equals(calculatedTxId, originalTxId)) {
+            log.error("交易ID不匹配");
+            return false;
+        }
+
+        transaction.setTxId(calculatedTxId);
+        return true;
+    }
+
+    /**
+     * 验证并缓存UTXOs
+     */
+    private boolean validateAndCacheUTXOs(Transaction transaction, Map<String, UTXO> utxoMap) {
+        for (TXInput input : transaction.getInputs()) {
+            String utxoKey = getUTXOKey(input.getTxId(), input.getVout());
+            UTXO utxo = getUTXO(input.getTxId(), input.getVout());
+
+            utxoMap.put(utxoKey, utxo);
+
+            if (utxo == null) {
+                log.error("输入的UTXO不存在或已花费");
+                return false;
+            }
+
+            // 验证成熟度要求
+            if (!utxoIsMature(utxo)) {
+                log.error("输入的UTXO未成熟");
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 验证普通交易
+     */
+    private boolean validateRegularTransaction(Transaction transaction, Map<String, UTXO> utxoMap) {
+        for (TXInput input : transaction.getInputs()) {
+            String utxoKey = getUTXOKey(input.getTxId(), input.getVout());
+            UTXO utxo = utxoMap.get(utxoKey);
+
+            // 对输入的UTXO进行摘要
+            byte[] bytes = CryptoUtil.applySHA256(SerializeUtils.serialize(utxo));
+            boolean verify = utxo.getScriptPubKey().verify(
+                    input.getScriptSig(),
+                    bytes,
+                    input.getVout(),
+                    false
+            );
+
+            if (!verify) {
+                log.error("输入的签名无效");
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 验证隔离见证交易
+     */
+    private boolean validateSegWitTransaction(Transaction transaction, Map<String, UTXO> utxoMap) {
+        log.info("隔离见证交易验证");
+
+        // 1. 验证见证数据结构
+        List<Witness> witnesses = transaction.getWitnesses();
+        List<TXInput> inputs = transaction.getInputs();
+
+        if (witnesses == null || witnesses.size() != inputs.size()) {
+            log.error("SegWit交易见证数量与输入数量不匹配");
+            return false;
+        }
+
+        // 2. 逐个验证输入的见证数据
+        for (int i = 0; i < inputs.size(); i++) {
+            TXInput input = inputs.get(i);
+            Witness witness = witnesses.get(i);
+
+            // 获取当前输入引用的UTXO
+            UTXO utxo = utxoMap.get(getUTXOKey(input.getTxId(), input.getVout()));
+            if (utxo == null) {
+                log.error("SegWit输入引用的UTXO不存在");
+                return false;
+            }
+
+            ScriptPubKey scriptPubKey = utxo.getScriptPubKey();
+            byte[] txHash = createWitnessSignatureHash(
+                    transaction,
+                    i,
+                    utxo.getValue(),
+                    SigHashType.ALL
+            );
+
+            // 验证ScriptPubKey与见证数据
+            boolean verifyResult = verifyScriptPubKey(scriptPubKey, witness, txHash, input.getVout());
+            if (!verifyResult) {
+                log.error("SegWit输入 {} 的见证验证失败", i);
+                return false;
+            }
+        }
+
+        // 3. 验证交易重量
+        if (transaction.getWeight() > MAX_BLOCK_WEIGHT) {
+            log.error("SegWit交易重量超过限制");
+            return false;
+        }
+
+        // 4. 验证SegWit交易ID
+        byte[] wtxId = transaction.getWtxId();
+        byte[] calculatedWtxId = Transaction.calculateWtxId(transaction);
+
+        log.info("原始SegWit交易ID:{}", CryptoUtil.bytesToHex(wtxId));
+        log.info("计算SegWit交易ID:{}", CryptoUtil.bytesToHex(calculatedWtxId));
+
+        if (!Arrays.equals(wtxId, calculatedWtxId)) {
+            log.error("SegWit交易wtxid不匹配");
+            return false;
+        }
+        return true;
+    }
+
+
+
+
+
+
+
+
+    private boolean verifyScriptPubKey(ScriptPubKey scriptPubKey, Witness witness, byte[] txHash, int vout) {
+        int type = scriptPubKey.getType();//解锁脚本的类型
+        log.info("SegWit脚本类型:{}", type);
+        // 区分SegWit脚本类型（以OP_0开头的通常为P2WPKH或P2WSH）
+        if (type == ScriptType.TYPE_P2WPKH.getValue()) {
+            return verifyP2WPKH(witness, scriptPubKey, txHash,vout);
+        } else if (type == ScriptType.TYPE_P2WSH.getValue()) {
+            return verifyP2WSH(witness, scriptPubKey, txHash,vout);
+        }else if (type == ScriptType.TYPE_P2PKH.getValue()) {
+            return verifyP2PKH(witness, scriptPubKey, txHash,vout);
+        }else if(type == ScriptType.TYPE_P2SH.getValue()){
+            return verifyP2SH(witness, scriptPubKey, txHash,vout);
+        }else {
+            log.error("不支持的SegWit脚本类型");
+            return false;
+        }
+    }
+    private boolean verifyP2SH(Witness witness, ScriptPubKey scriptPubKey, byte[] txHash,int vout) {
+        log.info("验证P2SH");
+
+        return false;
+    }
+
+    private boolean verifyP2PKH(Witness witness, ScriptPubKey scriptPubKey, byte[] txHash,int vout) {
+        log.info("验证P2PKH");
+        //从中获取 签名和公钥 witness  第一个数据是签名 第二个是公钥
+        byte[] item = witness.getItem(0);
+        byte[] item1 = witness.getItem(1);
+        ScriptSig scriptSig = new ScriptSig(item, item1);
+        boolean verify = scriptPubKey.verify(scriptSig, txHash, 0, false);
+        if (!verify) {
+            log.error("P2PKH输入的签名无效");
+            return false;
+        }
+        return true;
+    }
+
+
+    private boolean verifyP2WSH(Witness witness, ScriptPubKey scriptPubKey, byte[] txHash,int vout) {
+        log.info("验证P2WSH");
+
+        return false;
+    }
+
+    private boolean verifyP2WPKH(Witness witness, ScriptPubKey scriptPubKey, byte[] txHash,int vout) {
+        log.info("验证P2WPKH");
+
+        return false;
+    }
+
+
+    /**
+     * 创建隔离见证交易的签名哈希
+     * @param tx 交易对象
+     * @param inputIndex 输入索引  inputIndex指定当前签名对应的输入索引，确保签名仅针对当前输入的 UTXO 权限验证；
+     * @param amount 金额
+     * @param sigHashType 签名哈希类型  sigHashType（如ALL、NONE、SINGLE）决定交易的哪些部分（输入、输出）会被纳入哈希计算（例如ALL表示包含所有输入和输出，防止任何部分被篡改）。
+     * @return 签名哈希
+     */
+    public byte[] createWitnessSignatureHash(Transaction tx, int inputIndex, long amount, SigHashType sigHashType) {
+        // 1. 复制交易对象，避免修改原交易
+        Transaction txCopy = Transaction.copyWithoutWitness(tx);
+        log.info("原交易，交易ID: {}", tx);
+        log.info("复制后，交易ID: {}", txCopy);
+        boolean equals = tx.equals(txCopy);
+        log.info("交易对象是否相等: {}", equals);
+        for (TXInput input : txCopy.getInputs()) {
+            input.setScriptSig(null);
+        }
+        //全部置空
+        log.info("对输入的签名部分全部置空");
+        // 3. 获取当前处理的输入
+        TXInput currentInput = txCopy.getInputs().get(inputIndex);
+        log.info("当前处理的输入: {}", currentInput);
+        UTXO currentUTXO = getUTXO(currentInput.getTxId(), currentInput.getVout()); // inputUTXOs 是当前输入引用的 UTXO 集合
+        ScriptPubKey originalScriptPubKey  = currentUTXO.getScriptPubKey();
+
+        ScriptSig tempByScriptPubKey = ScriptSig.createTempByScriptPubKey(originalScriptPubKey);
+        String scripString = tempByScriptPubKey.toScripString();
+        log.info("临时解锁脚本: {}", scripString);
+        //在区块链交易签名流程中，代码里的临时脚本（tempByScriptPubKey）不需要执行完整验证，
+        // 其核心作用是作为签名哈希（Signature Hash）计算的 “特征上下文”，确保签名能正确关联到被花费的 UTXO 的锁定规则。
+        currentInput.setScriptSig(tempByScriptPubKey); // 临时设置，仅用于签名
+        // 4. 创建签名哈希
+        log.info("打印植入特征的交易{}", txCopy);
+        return txCopy.calculateWitnessSignatureHash(inputIndex, amount, sigHashType);
+    }
+
+
+    private boolean utxoIsMature(UTXO utxo) {
+        //检查UTXO 对应的交易所在的区块 高度是否被一百个区块叠加
+        byte[] txId = utxo.getTxId();
+        Block blockByTxId = getBlockByTxId(txId);
+        if (blockByTxId == null){
+            log.info("未找到交易对应的区块");
+            return false;
+        }
+        // 获取UTXO产出区块的高度
+        long utxoBlockHeight = blockByTxId.getHeight();
+        // 获取当前主链的最新高度
+        long currentHeight = getMainLatestHeight();
+        // 计算高度差，判断是否达到成熟度要求（通常为100个区块）
+        return (currentHeight - utxoBlockHeight) >= COINBASE_MATURITY;
+    }
+
+
+
 
     /**
      * 验证CoinBase交易 奖励等于 区块奖励+手续费
@@ -409,6 +675,9 @@ public class BlockChainService {
      * 处理区块
      */
     private void processValidBlock(Block block) {
+        log.info("开始处理区块{}",block.getTransactions());
+
+
         // 保存区块到数据库
         popStorage.addBlock(block);
         // 获取主链最新信息
@@ -1062,5 +1331,48 @@ public class BlockChainService {
 
     // 分页结果数据结构（调整为int类型游标）
 
+
+
+    public static TransactionDTO convertTransactionDTO(Transaction transaction) {
+        if (transaction == null){
+            return null;
+        }
+        TransactionDTO transactionDTO = BeanCopyUtils.copyObject(transaction, TransactionDTO.class);
+        //交易输入
+        List<TXInput> inputs = transaction.getInputs();
+        if (inputs != null){
+            ArrayList<TXInputDTO> transactionInputDTOS = new ArrayList<>();
+            for (TXInput input : inputs) {
+                TXInputDTO transactionInputDTO = new TXInputDTO();
+                transactionInputDTO.setTxId(input.getTxId());
+                transactionInputDTO.setVout(input.getVout());
+                transactionInputDTO.setScriptSig(input.getScriptSig());
+                transactionInputDTO.setSequence(input.getSequence());
+                transactionInputDTOS.add(transactionInputDTO);
+            }
+            transactionDTO.setInputs(transactionInputDTOS);
+        }
+        //交易输出
+        List<TXOutput> outputs = transaction.getOutputs();
+        if (outputs != null){
+            ArrayList<TXOutputDTO> transactionOutputDTOS = new ArrayList<>();
+            for (TXOutput output : outputs) {
+                TXOutputDTO transactionOutputDTO = BeanCopyUtils.copyObject(output, TXOutputDTO.class);
+                transactionOutputDTOS.add(transactionOutputDTO);
+            }
+            transactionDTO.setOutputs(transactionOutputDTOS);
+        }
+        //见证数据
+        List<Witness> witnesses = transaction.getWitnesses();
+        if (witnesses != null){
+            ArrayList<WitnessDTO> witnessDTOS = new ArrayList<>();
+            for (Witness witness : witnesses) {
+                WitnessDTO witnessDTO = BeanCopyUtils.copyObject(witness, WitnessDTO.class);
+                witnessDTOS.add(witnessDTO);
+            }
+            transactionDTO.setWitnesses(witnessDTOS);
+        }
+        return transactionDTO;
+    }
 
 }

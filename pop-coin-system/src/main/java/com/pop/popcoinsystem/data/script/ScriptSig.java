@@ -64,6 +64,18 @@ public class ScriptSig extends Script implements Serializable {
 
 
 
+    public static ScriptSig createTempByScriptPubKey(ScriptPubKey scriptPubKey) {
+        ScriptSig scriptSig = new ScriptSig();
+        List<ScriptElement> elements = scriptPubKey.getElements();
+        for (ScriptElement element : elements) {
+            if (element.isOpCode()) {
+                scriptSig.addOpCode(element.getOpCode());
+            } else {
+                scriptSig.addData(element.getData());
+            }
+        }
+        return scriptSig;
+    }
 
 
 
@@ -152,12 +164,6 @@ public class ScriptSig extends Script implements Serializable {
         return script;
     }
 
-    public static ScriptSig createP2WPKHTemp(byte[] ScriptPubKey) {
-        ScriptSig script = new ScriptSig();
-        script.addData(ScriptPubKey);
-        script.setHash();
-        return script;
-    }
 
 
     // 创建P2WSH解锁脚本

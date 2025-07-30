@@ -30,8 +30,8 @@ public class TXInput {
     private ScriptSig scriptSig; // 解锁脚本，证明有权使用该输出
 
 
-    /** 隔离见证数据（每个输入的见证栈） */
-    private Witness witness; // 引用之前实现的Witness类
+    /** 隔离见证数据（每个输入的见证栈） 统一放在交易中 */
+    //private Witness witness; // 引用之前实现的Witness类
 
 
     /** 序列号（用于时间锁定，默认0xFFFFFFFF） */

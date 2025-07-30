@@ -6,6 +6,8 @@ import com.pop.popcoinsystem.application.service.WalletVO;
 import com.pop.popcoinsystem.application.service.vo.BuildWalletUTXODTO;
 import com.pop.popcoinsystem.application.service.vo.TransferVO;
 import com.pop.popcoinsystem.application.service.vo.WalletBalanceVO;
+import com.pop.popcoinsystem.data.transaction.Transaction;
+import com.pop.popcoinsystem.data.transaction.dto.TransactionDTO;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -106,7 +108,7 @@ public class WalletController {
      * 发起一笔交易  根据收款方地址确定是
      */
     @PostMapping("/createTransaction")
-    public Result<String> createTransaction(@RequestBody TransferVO transferVO) {
+    public Result<TransactionDTO> createTransaction(@RequestBody TransferVO transferVO) {
         return walletService.createTransaction(transferVO);
     }
 
