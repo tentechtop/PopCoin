@@ -3,10 +3,12 @@ package com.pop.popcoinsystem;
 import com.pop.popcoinsystem.data.storage.POPStorage;
 import com.pop.popcoinsystem.network.KademliaNodeServer;
 import com.pop.popcoinsystem.network.common.NodeSettings;
+import com.pop.popcoinsystem.network.enums.NETVersion;
 import com.pop.popcoinsystem.network.enums.NodeType;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.NetworkUtil;
+import com.pop.popcoinsystem.util.YamlReaderUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -19,6 +21,7 @@ import java.net.UnknownHostException;
 import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.util.Map;
 
 @Slf4j
 @SpringBootApplication
@@ -39,6 +42,13 @@ public class PopCoinSystemApplication {
 
         new Thread(() -> {
             try {
+                int tcpPort = 8334;
+                int udpPort = 8333;
+                Map<String, Object> config = YamlReaderUtils.loadYaml("application.yml");
+                if (config != null) {
+                    tcpPort = (int) YamlReaderUtils.getNestedValue(config, "popcoin.tcpPort");
+                    udpPort = (int) YamlReaderUtils.getNestedValue(config, "popcoin.udpPort");
+                }
                 String localIp = NetworkUtil.getLocalIp();// 获取本机IP
                 log.info("本机IP:{}", localIp);
                 //获取节点信息 先从数据库中获取 如果没有则创建一份
@@ -79,7 +89,7 @@ public class PopCoinSystemApplication {
                 }
                 instance.addOrUpdateNodeSetting(nodeSetting);
                 log.info("节点信息:{}", nodeSetting);
-                KademliaNodeServer kademliaNodeServer = new KademliaNodeServer(nodeSetting.getId(), localIp, 8333, 8334);
+                KademliaNodeServer kademliaNodeServer = new KademliaNodeServer(nodeSetting.getId(), localIp, udpPort, tcpPort);
                 kademliaNodeServer.start();
                 //加入到引导节点
             } catch (Exception e) {
@@ -90,6 +100,21 @@ public class PopCoinSystemApplication {
 
 
 
+
+    //logging:
+    //  level:
+    //    root: ERROR  # 全局日志级别设为ERROR
+    //  file:
+    //    name: ../logs/popcoin.log  # 主日志文件路径
+    //  logback:
+    //    rollingpolicy:
+    //      max-file-size: 10MB  # 单个日志文件的最大容量
+    //      max-history: 30  # 保留历史日志的天数
+    //  pattern:
+    //    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %highlight(%-5level) %cyan(%logger{50}:%L) - %msg%n"  # 控制台输出格式
+    //    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50}:%L - %msg%n"  # 文件输出格式
+    //  # 自定义appender配置
+    //  config: classpath:logback-spring.xml  # 引用自定义的logback配置文件
 
 
 }

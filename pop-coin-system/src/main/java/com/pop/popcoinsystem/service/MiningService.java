@@ -22,7 +22,8 @@ import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 
@@ -191,8 +192,10 @@ public class MiningService {
                 //手续费：隐含在普通交易的 “输入 - 输出差额” 中
                 //普通交易中，输入金额总和 - 输出金额总和 = 手续费，这部分差额由打包该交易的矿工获得。
                 //例如：用户发起一笔交易，输入 10 个代币，输出 9.9 个代币，差额 0.1 个代币即为手续费。这部分无需单独记录，通过遍历区块内所有交易的输入输出即可计算。
-                System.out.println("\n开始挖矿新区块 #" + newBlock.getHeight() +
+
+                log.info("\n开始挖矿新区块 #" + newBlock.getHeight() +
                         " (难度: " + newBlock.getDifficulty() + ", 交易数: " + transactions.size() + ", 手续费: "+ totalFee+  ")");
+
                 MiningResult result = mineBlock(newBlock);
                 if (result != null && result.found) {
                     newBlock.setNonce(result.nonce);
@@ -608,7 +611,7 @@ public class MiningService {
                                     result.hash = hash;
                                     result.nonce = nonce;
                                     result.found = true;
-                                    System.out.println("线程 " + Thread.currentThread().getName() + " 找到有效哈希!");
+                                    log.info("线程 " + Thread.currentThread().getName() + " 找到有效哈希!");
                                 }
                             }
                             return;
@@ -680,12 +683,11 @@ public class MiningService {
 
         long targetTime = DIFFICULTY_ADJUSTMENT_INTERVAL * BLOCK_GENERATION_TIME; //600秒 10分钟
 
-        System.out.println("\n难度调整:");
-        System.out.println("目标总时间: " + targetTime + "秒");//预计时间
-        System.out.println("实际" + DIFFICULTY_ADJUSTMENT_INTERVAL + "个区块总生成时间: " + actualTimeTaken + "秒");
-        System.out.println("目标平均生成时间: "+BLOCK_GENERATION_TIME+"秒");
-        System.out.println("实际平均生成时间: " + (double) actualTimeTaken / DIFFICULTY_ADJUSTMENT_INTERVAL + "秒");
-
+        log.info("\n难度调整:");
+        log.info("\n目标总时间: " + targetTime + "秒");//预计时间
+        log.info("\n实际" + DIFFICULTY_ADJUSTMENT_INTERVAL + "个区块总生成时间: " + actualTimeTaken + "秒");
+        log.info("\n目标平均生成时间: "+BLOCK_GENERATION_TIME+"秒");
+        log.info("\n实际平均生成时间: " + (double) actualTimeTaken / DIFFICULTY_ADJUSTMENT_INTERVAL + "秒");
 
         // 修正方向：目标时间/实际时间
         double factor = (double) targetTime / actualTimeTaken;
@@ -694,9 +696,9 @@ public class MiningService {
         long newDifficulty = (long) (currentDifficulty * factor);
         newDifficulty = Math.max(1L, newDifficulty);
 
-        System.out.println("难度调整因子: " + factor);
-        System.out.println("旧难度值: " + currentDifficulty);
-        System.out.println("新难度值: " + newDifficulty);
+        log.info("\n难度调整因子: " + factor);
+        log.info("\n旧难度值: " + currentDifficulty);
+        log.info("\n新难度值: " + newDifficulty);
 
         currentDifficulty = newDifficulty;
     }
