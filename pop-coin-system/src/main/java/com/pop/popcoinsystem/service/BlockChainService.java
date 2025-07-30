@@ -592,7 +592,7 @@ public class BlockChainService {
         // 其核心作用是作为签名哈希（Signature Hash）计算的 “特征上下文”，确保签名能正确关联到被花费的 UTXO 的锁定规则。
         currentInput.setScriptSig(tempByScriptPubKey); // 临时设置，仅用于签名
         // 4. 创建签名哈希
-        log.info("打印植入特征的交易{}", txCopy);
+        log.info("植入特征{}", txCopy);
         return txCopy.calculateWitnessSignatureHash(inputIndex, amount, sigHashType);
     }
 

@@ -4,7 +4,6 @@ import com.pop.popcoinsystem.util.CryptoUtil;
 
 import java.security.KeyPair;
 import java.security.PublicKey;
-import java.util.Date;
 
 /**
  * CA证书体系测试类

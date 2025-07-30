@@ -1,7 +1,5 @@
 package com.pop.popcoinsystem.ca;
 
-import com.pop.popcoinsystem.ca.CACertificate;
-import com.pop.popcoinsystem.ca.CertificateAuthority;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import lombok.extern.slf4j.Slf4j;
 

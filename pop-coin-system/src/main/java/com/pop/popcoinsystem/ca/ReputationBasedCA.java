@@ -2,8 +2,8 @@ package com.pop.popcoinsystem.ca;
 
 import com.pop.popcoinsystem.util.CryptoUtil;
 
-import java.security.*;
-import java.security.spec.ECGenParameterSpec;
+import java.security.KeyPair;
+import java.security.PublicKey;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
