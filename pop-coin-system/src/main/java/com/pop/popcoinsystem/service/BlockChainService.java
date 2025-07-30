@@ -43,7 +43,7 @@ public class BlockChainService {
 
     private static final int COINBASE_MATURITY = 100;// CoinBase交易成熟度要求
 
-    private static final int CONFIRMATIONS = 6;// CoinBase交易成熟度要求
+    private static final int CONFIRMATIONS = 6;// 转账交易成熟度要求
 
     public static final String GENESIS_BLOCK_HASH_HEX = "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f";
     private static final byte[] GENESIS_BLOCK_HASH = CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX);
@@ -419,17 +419,8 @@ public class BlockChainService {
                 log.error("SegWit输入引用的UTXO不存在");
                 return false;
             }
-
-            ScriptPubKey scriptPubKey = utxo.getScriptPubKey();
-            byte[] txHash = createWitnessSignatureHash(
-                    transaction,
-                    i,
-                    utxo.getValue(),
-                    SigHashType.ALL
-            );
-
-            // 验证ScriptPubKey与见证数据
-            boolean verifyResult = verifyScriptPubKey(scriptPubKey, witness, txHash, input.getVout());
+            // 验证ScriptPubKey与见证数据  验证输入是否合法
+            boolean verifyResult = verifyScriptPubKey(transaction,input,i,witness,utxo);
             if (!verifyResult) {
                 log.error("SegWit输入 {} 的见证验证失败", i);
                 return false;
@@ -458,40 +449,48 @@ public class BlockChainService {
 
 
 
-
-
-
-
-
-    private boolean verifyScriptPubKey(ScriptPubKey scriptPubKey, Witness witness, byte[] txHash, int vout) {
+    private boolean verifyScriptPubKey(Transaction tx, TXInput input,int inputIndex,Witness witness,UTXO utxo) {
+        ScriptPubKey scriptPubKey = utxo.getScriptPubKey();
         int type = scriptPubKey.getType();//解锁脚本的类型
         log.info("SegWit脚本类型:{}", type);
         // 区分SegWit脚本类型（以OP_0开头的通常为P2WPKH或P2WSH）
         if (type == ScriptType.TYPE_P2WPKH.getValue()) {
-            return verifyP2WPKH(witness, scriptPubKey, txHash,vout);
+            return verifyP2WPKH(tx, input, inputIndex, witness, utxo);
         } else if (type == ScriptType.TYPE_P2WSH.getValue()) {
-            return verifyP2WSH(witness, scriptPubKey, txHash,vout);
+            return verifyP2WSH(tx, input, inputIndex, witness, utxo);
         }else if (type == ScriptType.TYPE_P2PKH.getValue()) {
-            return verifyP2PKH(witness, scriptPubKey, txHash,vout);
+            return verifyP2PKH(tx, input, inputIndex, witness, utxo);
         }else if(type == ScriptType.TYPE_P2SH.getValue()){
-            return verifyP2SH(witness, scriptPubKey, txHash,vout);
+            return verifyP2SH(tx, input, inputIndex, witness, utxo);
         }else {
             log.error("不支持的SegWit脚本类型");
             return false;
         }
     }
-    private boolean verifyP2SH(Witness witness, ScriptPubKey scriptPubKey, byte[] txHash,int vout) {
+    private boolean verifyP2SH(Transaction tx, TXInput input,int inputIndex,Witness witness,UTXO utxo) {
         log.info("验证P2SH");
 
         return false;
     }
 
-    private boolean verifyP2PKH(Witness witness, ScriptPubKey scriptPubKey, byte[] txHash,int vout) {
+    private boolean verifyP2PKH(Transaction tx, TXInput input,int inputIndex,Witness witness,UTXO utxo) {
+        ScriptPubKey scriptPubKey = utxo.getScriptPubKey();
         log.info("验证P2PKH");
         //从中获取 签名和公钥 witness  第一个数据是签名 第二个是公钥
-        byte[] item = witness.getItem(0);
-        byte[] item1 = witness.getItem(1);
-        ScriptSig scriptSig = new ScriptSig(item, item1);
+        byte[] signature = witness.getItem(0); // 第一个元素为签名（包含SIGHASH类型）
+        byte[] publicKeyHash = witness.getItem(1); // 第二个元素为公钥Hash
+        SigHashType sigHashType = SegWitUtils.extractSigHashType(signature);//获取签名的SIGHASH类型
+        log.info("P2WPKH签名SIGHASH类型:{}", sigHashType);
+        byte[] realSignature = SegWitUtils.extractOriginalSignature(signature);
+        log.info("P2WPKH签名数据:{}", CryptoUtil.bytesToHex(realSignature));
+        //这里应该根据签名类型 构建对应的 交易签名数据
+        byte[] txHash = createWitnessSignatureHash(
+                tx,
+                inputIndex,
+                utxo.getValue(),
+                sigHashType
+        );
+        ScriptSig scriptSig = new ScriptSig(realSignature, publicKeyHash);
         boolean verify = scriptPubKey.verify(scriptSig, txHash, 0, false);
         if (!verify) {
             log.error("P2PKH输入的签名无效");
@@ -501,16 +500,62 @@ public class BlockChainService {
     }
 
 
-    private boolean verifyP2WSH(Witness witness, ScriptPubKey scriptPubKey, byte[] txHash,int vout) {
+    private boolean verifyP2WSH(Transaction tx, TXInput input,int inputIndex,Witness witness,UTXO utxo) {
         log.info("验证P2WSH");
 
         return false;
     }
 
-    private boolean verifyP2WPKH(Witness witness, ScriptPubKey scriptPubKey, byte[] txHash,int vout) {
-        log.info("验证P2WPKH");
+    private boolean verifyP2WPKH(Transaction tx, TXInput input,int inputIndex,Witness witness,UTXO utxo) {
+        // 1. 验证见证数据结构：P2WPKH见证应包含2个元素（签名 + 公钥）
+        if (witness.getSize() != 2) {
+            log.error("P2WPKH见证数据元素数量错误，预期2个，实际{}个", witness.getSize());
+            return false;
+        }
 
-        return false;
+        // 2. 提取见证数据中的签名和公钥
+        byte[] signature = witness.getItem(0); // 第一个元素为签名（包含SIGHASH类型）
+        byte[] publicKeyHash = witness.getItem(1); // 第二个元素为公钥Hash
+
+        SigHashType sigHashType = SegWitUtils.extractSigHashType(signature);//获取签名的SIGHASH类型
+        log.info("P2WPKH签名SIGHASH类型:{}", sigHashType);
+        byte[] realSignature = SegWitUtils.extractOriginalSignature(signature);
+        log.info("P2WPKH签名数据:{}", CryptoUtil.bytesToHex(realSignature));
+
+        //这里应该根据签名类型 构建对应的 交易签名数据
+        byte[] txHash = createWitnessSignatureHash(
+                tx,
+                inputIndex,
+                utxo.getValue(),
+                sigHashType
+        );
+
+
+        if (signature.length == 0) {
+            log.error("P2WPKH签名数据为空");
+            return false;
+        }
+        if (publicKeyHash == null || publicKeyHash.length == 0) {
+            log.error("P2WPKH公钥数据为空");
+            return false;
+        }
+        ScriptPubKey scriptPubKey = utxo.getScriptPubKey();
+
+        // 3. 解析P2WPKH锁定脚本：格式为 [OP_0 (0x00) + 20字节公钥哈希]
+        byte[] scriptBytes = scriptPubKey.getScriptBytes();
+        if (scriptBytes.length != 22) { // 1字节OP_0 + 20字节哈希 + 1字节结尾？需根据实际脚本结构调整
+            log.error("P2WPKH锁定脚本长度错误，预期22字节，实际{}字节", scriptBytes.length);
+            return false;
+        }
+        ScriptSig scriptSig = new ScriptSig(signature, publicKeyHash);
+        boolean verify = scriptPubKey.verify(scriptSig, txHash, input.getVout(), false);
+        if (!verify) {
+            log.error("P2WPKH输入的签名无效");
+            return false;
+        }
+
+        log.info("P2WPKH脚本验证成功");
+        return true;
     }
 
 
@@ -551,24 +596,39 @@ public class BlockChainService {
         return txCopy.calculateWitnessSignatureHash(inputIndex, amount, sigHashType);
     }
 
-
     private boolean utxoIsMature(UTXO utxo) {
-        //检查UTXO 对应的交易所在的区块 高度是否被一百个区块叠加
         byte[] txId = utxo.getTxId();
         Block blockByTxId = getBlockByTxId(txId);
         if (blockByTxId == null){
             log.info("未找到交易对应的区块");
             return false;
         }
-        // 获取UTXO产出区块的高度
         long utxoBlockHeight = blockByTxId.getHeight();
-        // 获取当前主链的最新高度
         long currentHeight = getMainLatestHeight();
-        // 计算高度差，判断是否达到成熟度要求（通常为100个区块）
-        return (currentHeight - utxoBlockHeight) >= COINBASE_MATURITY;
+       Transaction transaction =  getBlockTransactionByTxId(txId);
+        if (isCoinBaseTransaction(transaction)) {
+            // CoinBase交易产生的UTXO需100个确认
+            return (currentHeight - utxoBlockHeight) >= COINBASE_MATURITY;
+        } else {
+            // 普通交易产生的UTXO需6个确认
+            return (currentHeight - utxoBlockHeight) >= CONFIRMATIONS;
+        }
     }
 
-
+    private Transaction getBlockTransactionByTxId(byte[] txId) {
+        Block block = getBlockByTxId(txId);
+        if (block == null) {
+            log.info("未找到交易对应的区块");
+            return null;
+        }
+        List<Transaction> transactions = block.getTransactions();
+        for (Transaction transaction : transactions) {
+            if (Arrays.equals(transaction.getTxId(), txId)) {
+                return transaction;
+            }
+        }
+        return null;
+    }
 
 
     /**
@@ -675,9 +735,6 @@ public class BlockChainService {
      * 处理区块
      */
     private void processValidBlock(Block block) {
-        log.info("开始处理区块{}",block.getTransactions());
-
-
         // 保存区块到数据库
         popStorage.addBlock(block);
         // 获取主链最新信息
@@ -1267,18 +1324,6 @@ public class BlockChainService {
     }
 
 
-    /**
-     * 区块的确认数量是否足够
-     */
-    public boolean isEnoughConfirm(Transaction transaction) {
-        //获取主链最新高度
-        long mainLatestHeight = getMainLatestHeight();
-        Block blockByTxId = getBlockByTxId(transaction.getTxId());
-        long height = blockByTxId.getHeight();
-        //计算出确认数量
-        long confirmations = mainLatestHeight - height + 1;
-        return confirmations >= CONFIRMATIONS;
-    }
 
 
     public Result<TransactionDTO> getTransaction(String txId) {

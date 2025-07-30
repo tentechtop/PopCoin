@@ -572,10 +572,10 @@ public class WalletService {
 
             // 生成ECDSA签名
             byte[] signature = CryptoUtil.ECDSASigner.applySignature(privateKey, sigHash);
-
+            byte[] sigHashType = SegWitUtils.createSigHashType(signature, SigHashType.ALL);
             // 构建见证数据: [签名, 公钥]
             Witness witness = new Witness();
-            witness.addItem(signature);
+            witness.addItem(sigHashType);
             witness.addItem(publicKeyBytes);
             witnesses.add(witness);
         }
@@ -637,8 +637,6 @@ public class WalletService {
                 // 筛选属于该钱包的UTXO
                 for (UTXO utxo : pageUTXOs) {
                     ScriptPubKey scriptPubKey = utxo.getScriptPubKey();
-                    log.info("UTXO集合 构建钱包的UTXO->scriptPubKey: {}", scriptPubKey.toScripString());
-
                     byte[] scriptPubKeyHash = scriptPubKey.getHash();
                     if (Arrays.equals(scriptPubKeyHash, hash) || Arrays.equals(scriptPubKeyHash, hash1)) {
                         String utxoKey = getUTXOKey(utxo.getTxId(), utxo.getVout());
