@@ -273,7 +273,7 @@ public class BlockChainService {
             new Thread(() -> {
                 log.info("交易验证成功,广播交易");
                 UDPClient udpClient = kademliaNodeServer.getUdpClient();
-                TransactionMessage transactionKademliaMessage = new TransactionMessage(transaction);
+                TransactionMessage transactionKademliaMessage = new TransactionMessage();
                 transactionKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());
                 NodeInfo nodeInfo = new NodeInfo();
                 nodeInfo.setId(BigInteger.ONE);

@@ -10,9 +10,9 @@ import lombok.ToString;
 @ToString(callSuper = true)
 public class TransactionMessage extends KademliaMessage<Transaction>{
 
-    public TransactionMessage(Transaction transaction) {
+    public TransactionMessage() {
         super(MessageType.TRANSACTION.getCode());
-        setData(transaction);
+        setData(null);
     }
 
     public static byte[] serialize(TransactionMessage message) {
