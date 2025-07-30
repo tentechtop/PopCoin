@@ -1,9 +1,9 @@
-package com.pop.popcoinsystem.application.service;
+package com.pop.popcoinsystem.application.service.wallet;
 
 
-import com.pop.popcoinsystem.application.service.vo.BuildWalletUTXODTO;
-import com.pop.popcoinsystem.application.service.vo.TransferVO;
-import com.pop.popcoinsystem.application.service.vo.WalletBalanceVO;
+import com.pop.popcoinsystem.application.service.wallet.vo.BuildWalletUTXODTO;
+import com.pop.popcoinsystem.application.service.wallet.vo.TransferVO;
+import com.pop.popcoinsystem.application.service.wallet.vo.WalletBalanceVO;
 import com.pop.popcoinsystem.data.enums.SigHashType;
 import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.data.script.ScriptSig;

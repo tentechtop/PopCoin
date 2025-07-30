@@ -1,12 +1,7 @@
-package com.pop.popcoinsystem.application.service;
+package com.pop.popcoinsystem.application.service.wallet;
 
-import com.pop.popcoinsystem.data.block.Block;
-import com.pop.popcoinsystem.data.miner.Miner;
 import com.pop.popcoinsystem.data.transaction.UTXO;
 import com.pop.popcoinsystem.data.vo.result.RocksDbPageResult;
-import com.pop.popcoinsystem.network.common.NodeSettings;
-import com.pop.popcoinsystem.util.ByteUtils;
-import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.SerializeUtils;
 import lombok.Getter;
 import lombok.Setter;
@@ -14,16 +9,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.rocksdb.*;
 
 import java.io.File;
-import java.io.Serializable;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArraySet;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
 

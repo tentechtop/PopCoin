@@ -36,20 +36,9 @@ public class KademliaUdpHandler extends SimpleChannelInboundHandler<KademliaMess
 
     @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, KademliaMessage message) throws Exception {
-        //如果是PING消息就回复PONG
         MessageHandler messageHandler = KademliaMessageHandler.get(message.getType());
         messageHandler.handleMesage(nodeServer, message);
     }
-
-
-
-
-
-
-
-
-
-
 
 
     @Override

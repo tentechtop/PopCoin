@@ -1,12 +1,11 @@
 package com.pop.popcoinsystem.application.controller;
 
-import com.pop.popcoinsystem.application.service.Wallet;
-import com.pop.popcoinsystem.application.service.WalletService;
-import com.pop.popcoinsystem.application.service.WalletVO;
-import com.pop.popcoinsystem.application.service.vo.BuildWalletUTXODTO;
-import com.pop.popcoinsystem.application.service.vo.TransferVO;
-import com.pop.popcoinsystem.application.service.vo.WalletBalanceVO;
-import com.pop.popcoinsystem.data.transaction.Transaction;
+import com.pop.popcoinsystem.application.service.wallet.Wallet;
+import com.pop.popcoinsystem.application.service.wallet.WalletService;
+import com.pop.popcoinsystem.application.service.wallet.WalletVO;
+import com.pop.popcoinsystem.application.service.wallet.vo.BuildWalletUTXODTO;
+import com.pop.popcoinsystem.application.service.wallet.vo.TransferVO;
+import com.pop.popcoinsystem.application.service.wallet.vo.WalletBalanceVO;
 import com.pop.popcoinsystem.data.transaction.dto.TransactionDTO;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import jakarta.annotation.Resource;
@@ -22,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @Slf4j
 @RestController
-@RequestMapping("/pop/wallet")
+@RequestMapping("/wallet")
 public class WalletController {
     @Resource
     private WalletService walletService;

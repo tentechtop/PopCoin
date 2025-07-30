@@ -46,8 +46,6 @@ import java.util.Map;
 @Slf4j
 public class CryptoUtil {
 
-
-
     //节点版本
     public static int POP_NET_VERSION = 1; //默认主网
     public static byte PRE_P2PKH = 0x00;

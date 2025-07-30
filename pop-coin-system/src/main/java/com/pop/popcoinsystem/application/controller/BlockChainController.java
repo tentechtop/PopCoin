@@ -3,6 +3,7 @@ package com.pop.popcoinsystem.application.controller;
 import com.pop.popcoinsystem.data.block.BlockVO;
 import com.pop.popcoinsystem.data.blockChain.BlockChain;
 import com.pop.popcoinsystem.data.block.BlockDTO;
+import com.pop.popcoinsystem.data.miner.Miner;
 import com.pop.popcoinsystem.data.transaction.UTXO;
 import com.pop.popcoinsystem.data.transaction.dto.TransactionDTO;
 import com.pop.popcoinsystem.data.transaction.dto.UTXODTO;
@@ -139,26 +140,6 @@ public class BlockChainController {
 
 
     /**
-     * 创建区块
-     * 需要钱包地址
-     */
-    @PostMapping("/createBlock")
-    public String createBlock() {
-        return "";
-    }
-
-    /**
-     * 创建创世区块
-     */
-    @PostMapping("/createGenesisBlock")
-    public String createGenesisBlock() {
-        return "";
-    }
-
-
-
-
-    /**
      * 查询地址中的余额
      */
     @PostMapping("/getBalance")
@@ -166,14 +147,26 @@ public class BlockChainController {
         return "";
     }
 
+    /**
+     * 设置该节点的挖矿信息
+     */
+    @PostMapping("/setMiner")
+    public Result<String> setMiner(@RequestBody Miner miner){
+        return blockChainService.setMiningInfo(miner);
+    }
 
     /**
-     * 查询地址中的余额并带出未花费
+     * 获取交易池中的交易
      */
-    @PostMapping("/getBalanceWithUnspent")
-    public String getBalanceWithUnspent() {
-        return "";
+    @PostMapping("/getTransactionPool")
+    public Result getTransactionPool(){
+        return blockChainService.getTransactionPool();
     }
+
+
+
+
+
 
 
 

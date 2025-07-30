@@ -10,14 +10,10 @@ import java.util.Map;
 @Slf4j
 @Service
 public class NodeService {
-    public static int NODE_TYPE = 1;
-    static {
-        // 从类路径根目录加载application.yml
-        Map<String, Object> config = YamlReaderUtils.loadYaml("application.yml");
-        if (config != null) {
-            NODE_TYPE = (int)YamlReaderUtils.getNestedValue(config, "popcoin.nodetype");
-        }
-    }
+
+
+
+
 
 
 

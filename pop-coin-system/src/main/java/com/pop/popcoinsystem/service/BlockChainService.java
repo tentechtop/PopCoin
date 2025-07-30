@@ -1,7 +1,7 @@
 package com.pop.popcoinsystem.service;
 
-import com.pop.popcoinsystem.application.service.Wallet;
-import com.pop.popcoinsystem.application.service.WalletStorage;
+import com.pop.popcoinsystem.application.service.wallet.Wallet;
+import com.pop.popcoinsystem.application.service.wallet.WalletStorage;
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.blockChain.BlockChain;
@@ -1420,4 +1420,18 @@ public class BlockChainService {
         return transactionDTO;
     }
 
+    public Result<String> setMiningInfo(Miner miner) {
+        miningService.setMiningInfo( miner);
+        return Result.ok();
+    }
+
+    public Result getTransactionPool() {
+        HashMap<String, TransactionDTO> stringTransactionDTOHashMap = new HashMap<>();
+        Map<byte[], Transaction> transactionPool = miningService.getTransactionPool();
+        for (Map.Entry<byte[], Transaction> entry : transactionPool.entrySet()){
+            TransactionDTO transactionDTO = convertTransactionDTO(entry.getValue());
+            stringTransactionDTOHashMap.put(CryptoUtil.bytesToHex(entry.getKey()), transactionDTO);
+        }
+        return Result.ok(stringTransactionDTOHashMap);
+    }
 }

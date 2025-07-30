@@ -1,4 +1,4 @@
-package com.pop.popcoinsystem.application.service.vo;
+package com.pop.popcoinsystem.application.service.wallet.vo;
 
 import lombok.Data;
 import lombok.NonNull;

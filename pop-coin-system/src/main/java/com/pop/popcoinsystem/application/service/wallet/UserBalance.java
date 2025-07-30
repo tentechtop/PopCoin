@@ -1,4 +1,4 @@
-package com.pop.popcoinsystem.application.service;
+package com.pop.popcoinsystem.application.service.wallet;
 
 import java.math.BigDecimal;
 

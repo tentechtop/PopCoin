@@ -27,8 +27,6 @@ public class TCPClient {
     private Bootstrap bootstrap;
     private NioEventLoopGroup group;
 
-
-
     public TCPClient() {
         executorService = Executors.newFixedThreadPool(10);
 
@@ -37,12 +35,8 @@ public class TCPClient {
     /** 节点ID到Channel的映射 */  //不同协议实现的通道不用通用
     private final Map<BigInteger, Channel> nodeTCPChannel = new ConcurrentHashMap<>();
 
-
-
     /** 节点ID到地址的映射 */
     private final Map<BigInteger, InetSocketAddress> nodeAddresses = new ConcurrentHashMap<>();
-
-
 
     public  void sendMessage(KademliaMessage message) throws InterruptedException, ConnectException {
         BigInteger id = message.getReceiver().getId();
@@ -95,10 +89,6 @@ public class TCPClient {
         });
         return channel;
     }
-
-
-
-
 
 
 
