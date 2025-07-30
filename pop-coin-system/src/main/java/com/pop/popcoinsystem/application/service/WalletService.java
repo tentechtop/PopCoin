@@ -44,87 +44,7 @@ public class WalletService {
     public static Wallet walletb;
 
 
-    static {
-        log.info("钱包初始化 WalletService init");
-        //获取公钥和私钥  初始化两个钱包 A B
-        //先从数据库中获取公钥和私钥
-        WalletStorage walletStorage = WalletStorage.getInstance();
-        walleta = walletStorage.getWallet("walleta");
-        log.info("钱包A"+walleta);
-        if (walleta == null){
-            KeyPair keyPairA = CryptoUtil.ECDSASigner.generateKeyPair();
-            PrivateKey privateKey = keyPairA.getPrivate();
-            PublicKey publicKey = keyPairA.getPublic();
-            walleta = new Wallet();
-            walleta.setName("walleta");
-            walleta.setPublicKeyHex(CryptoUtil.bytesToHex(publicKey.getEncoded()));
-            walleta.setPrivateKeyHex(CryptoUtil.bytesToHex(privateKey.getEncoded()));
-            walletStorage.addWallet(walleta);
-        }
-        walletb = walletStorage.getWallet("walletb");
-        log.info("钱包B"+walletb);
-        if (walletb == null){
-            KeyPair keyPairB = CryptoUtil.ECDSASigner.generateKeyPair();
-            PrivateKey privateKey = keyPairB.getPrivate();
-            PublicKey publicKey = keyPairB.getPublic();
-            walletb = new Wallet();
-            walletb.setName("walletb");
-            walletb.setPublicKeyHex(CryptoUtil.bytesToHex(publicKey.getEncoded()));
-            walletb.setPrivateKeyHex(CryptoUtil.bytesToHex(privateKey.getEncoded()));
-            walletStorage.addWallet(walletb);
-        }
-    }
-
-
     public static void main(String[] args) {
-        WalletStorage instance = WalletStorage.getInstance();
-        Wallet wallettest = instance.getWallet("wallettest");
-        log.info("wallettest: "+wallettest);
-        if (wallettest == null){
-            KeyPair keyPairA = CryptoUtil.ECDSASigner.generateKeyPair();
-            PrivateKey privateKey = keyPairA.getPrivate();
-            PublicKey publicKey = keyPairA.getPublic();
-            wallettest = new Wallet();
-            wallettest.setName("wallettest");
-            wallettest.setPublicKeyHex(CryptoUtil.bytesToHex(publicKey.getEncoded()));
-            wallettest.setPrivateKeyHex(CryptoUtil.bytesToHex(privateKey.getEncoded()));
-            instance.addWallet(wallettest);
-        }
-        String publicKeyHexTest = wallettest.getPublicKeyHex();
-        byte[] bytesTest = CryptoUtil.hexToBytes(publicKeyHexTest);
-        String p2PKHAddressByPK = CryptoUtil.ECDSASigner.createP2PKHAddressByPK(bytesTest);
-        log.info("p2PKH Test: {}", p2PKHAddressByPK);
-        String p2WPKHAddressByPK = CryptoUtil.ECDSASigner.createP2WPKHAddressByPK(bytesTest);
-        log.info("p2WPKH Test: {}", p2WPKHAddressByPK);
-
-
-
-
-        Wallet walletBtcminer = instance.getWallet("btcminer");
-        log.info("btcminer: "+walletBtcminer);
-        if (walletBtcminer == null){
-            KeyPair keyPairMiner = CryptoUtil.ECDSASigner.generateKeyPair();
-            PrivateKey privateKeyMiner = keyPairMiner.getPrivate();
-            PublicKey publicKeyMiner = keyPairMiner.getPublic();
-            walletBtcminer = new Wallet();
-            walletBtcminer.setName("btcminer");
-            walletBtcminer.setPublicKeyHex(CryptoUtil.bytesToHex(publicKeyMiner.getEncoded()));
-            walletBtcminer.setPrivateKeyHex(CryptoUtil.bytesToHex(privateKeyMiner.getEncoded()));
-            instance.addWallet(walleta);
-        }
-
-        String publicKeyHexMiner = walletBtcminer.getPublicKeyHex();
-        byte[] bytes1Miner = CryptoUtil.hexToBytes(publicKeyHexMiner);
-        String p2PKHAddressByPKMiner = CryptoUtil.ECDSASigner.createP2PKHAddressByPK(bytes1Miner);
-        log.info("p2PKH btcminer: {}", p2PKHAddressByPKMiner);
-        String p2WPKHAddressByPKMiner = CryptoUtil.ECDSASigner.createP2WPKHAddressByPK(bytes1Miner);
-        log.info("p2WPKH btcminer: {}", p2WPKHAddressByPKMiner);
-
-
-
-
-
-
         //测试密码加密私钥
         String password = "123456";
         KeyPair keyPairP = CryptoUtil.ECDSASigner.generateKeyPair();
@@ -144,8 +64,6 @@ public class WalletService {
                 password
         );
         log.info("privateKey: {}", CryptoUtil.bytesToHex(bytes));
-
-
 
 
         // 16  24  32   只能是这些长度
@@ -353,18 +271,8 @@ public class WalletService {
         String walletName = transferVO.getWalletName();
         try {
             WalletStorage instance = WalletStorage.getInstance();
-            // 获取最新的UTXO状态
-            CopyOnWriteArraySet<String> walletUTXOs = instance.getWalletUTXOs(walletName);
+            Set<String> walletUTXOs = instance.getWalletUTXOs(walletName);
             Wallet wallet = instance.getWallet(walletName);
-            if (!walletUsedUTXOs.containsKey(walletName)){
-                walletUsedUTXOs.put(walletName, new CopyOnWriteArraySet<>());
-            }else {
-                //walletUTXOs 剔除已经再walletUsedUTXOs中的UTXO
-                walletUTXOs.removeAll(walletUsedUTXOs.get(walletName));
-            }
-
-            // 使用更可靠的同步机制
-            // 验证可用余额
             long availableBalance = wallet.getBalance();
             if (availableBalance < transferVO.getAmount()) {
                 return Result.error("余额不足");
@@ -411,7 +319,8 @@ public class WalletService {
         byte[] fromAddressHash = CryptoUtil.ECDSASigner.createP2PKHByPK(publicKeyBytes);
 
         // 查询钱包可用的UTXO
-        CopyOnWriteArraySet<String> walletUTXOs = instance.getWalletUTXOs(transferVO.getWalletName());
+        Set<String> walletUTXOs = instance.getWalletUTXOs(transferVO.getWalletName());
+
         // 用于支付的UTXO key
         HashSet<String> usedUTXOs = new HashSet<>();
 
@@ -533,12 +442,7 @@ public class WalletService {
         // 查询钱包可用的UTXO  walletUTXOs  - 减去usedUTXOs
 
         log.info("刚刚使用的UTXO:{}", usedUTXOs);
-
-        CopyOnWriteArraySet<String> strings = walletUsedUTXOs.get(transferVO.getWalletName());
-        strings.addAll(usedUTXOs);
-        walletUsedUTXOs.put(transferVO.getWalletName(), strings);
-
-
+        instance.removeWalletUTXOBatch(wallet.getName(), usedUTXOs);
         return transaction;
     }
 
@@ -560,7 +464,7 @@ public class WalletService {
         byte[] toAddressHash = CryptoUtil.ECDSASigner.getAddressHash(toAddress);//接收者公钥哈希
 
         // 查询钱包可用的UTXO
-        CopyOnWriteArraySet<String> walletUTXOs = instance.getWalletUTXOs(transferVO.getWalletName());
+        Set<String> walletUTXOs = instance.getWalletUTXOs(transferVO.getWalletName());
         // 用于支付的UTXO key
         HashSet<String> usedUTXOs = new HashSet<>();
 
@@ -651,7 +555,6 @@ public class WalletService {
         // 设置交易输出
         transaction.setOutputs(txOutputs);
 
-
         /*交易的主体 和 输出部分全部构造完毕*/
 
         // 4. 为每个输入创建隔离见证签名
@@ -689,11 +592,8 @@ public class WalletService {
         transaction.setWtxId(Transaction.calculateWtxId(transaction));
         log.info("创建时时->隔离见证ID:: {}", CryptoUtil.bytesToHex(transaction.getWtxId()));
 
-
-        // 6. 更新钱包UTXO集合（异步处理）
-        CopyOnWriteArraySet<String> strings = walletUsedUTXOs.get(transferVO.getWalletName());
-        strings.addAll(usedUTXOs);
-        walletUsedUTXOs.put(transferVO.getWalletName(), strings);
+        log.info("刚刚使用的UTXO{}",usedUTXOs);
+        instance.removeWalletUTXOBatch(wallet.getName(), usedUTXOs);
         return transaction;
     }
 
@@ -732,7 +632,7 @@ public class WalletService {
         while (hasMore) {
             try {
                 // 分页查询UTXO，每次请求500个
-                RocksDbPageResult<UTXO> pageResult = blockChainService.queryUTXOPage(4999, cursor);
+                RocksDbPageResult<UTXO> pageResult = blockChainService.queryUTXOPage(500, cursor);
                 List<UTXO> pageUTXOs = pageResult.getData();
                 // 筛选属于该钱包的UTXO
                 for (UTXO utxo : pageUTXOs) {
@@ -760,7 +660,7 @@ public class WalletService {
         }
         wallet.setBalance(total);
         instance.addWallet(wallet);
-        instance.saveWalletUTXOs(walletName, walletUTXOs);
+        instance.saveWalletUTXOBatch(walletName, walletUTXOs);
         log.info("钱包 {} 的UTXO集合构建完成，共找到 {} 个UTXO", walletName, walletUTXOs.size());
         return Result.ok("正在构建钱包的UTXO集合");
     }
@@ -783,37 +683,6 @@ public class WalletService {
             }
         }
         return total;
-    }
-
-    // 获取钱包锁对象，使用专门的锁管理器
-    private Object getWalletLock(String walletName) {
-        // 使用ConcurrentHashMap确保线程安全
-        return walletLocks.computeIfAbsent(walletName, k -> new Object());
-    }
-
-    // 同步更新UTXO状态
-    private void updateWalletUTXOs(String walletName,
-                                   CopyOnWriteArraySet<String> walletUTXOs,
-                                   Transaction transaction) {
-        WalletStorage instance = WalletStorage.getInstance();
-        // 收集所有使用的UTXO
-        Set<String> usedUTXOs = new HashSet<>();
-        for (TXInput input : transaction.getInputs()) {
-            String utxoKey = input.getTxId() + "-" + input.getVout();
-            usedUTXOs.add(utxoKey);
-        }
-
-        // 从可用UTXO中移除已使用的
-        walletUTXOs.removeAll(usedUTXOs);
-
-        try {
-            // 同步保存更新后的UTXO状态
-            instance.saveWalletUTXOs(walletName, walletUTXOs);
-        } catch (Exception e) {
-            // 记录错误并考虑回滚机制
-            log.error("保存UTXO状态失败", e);
-            throw new RuntimeException("保存交易状态失败", e);
-        }
     }
 
 }
