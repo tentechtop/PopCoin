@@ -31,6 +31,9 @@ public class SerializeUtils {
         kryo.register(HandshakeRequestMessage.class);
         kryo.register(HandshakeResponseMessage.class);
 
+        kryo.register(TransactionMessage.class);
+
+
         kryo.register(java.util.Date.class);
         kryo.register(java.util.UUID.class);
 

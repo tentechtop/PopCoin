@@ -18,6 +18,12 @@ import com.pop.popcoinsystem.data.transaction.dto.TransactionDTO;
 import com.pop.popcoinsystem.data.transaction.dto.WitnessDTO;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.data.vo.result.RocksDbPageResult;
+import com.pop.popcoinsystem.network.KademliaNodeServer;
+import com.pop.popcoinsystem.network.UDPClient;
+import com.pop.popcoinsystem.network.common.NodeInfo;
+import com.pop.popcoinsystem.network.common.NodeSettings;
+import com.pop.popcoinsystem.network.enums.NodeType;
+import com.pop.popcoinsystem.network.protocol.message.TransactionMessage;
 import com.pop.popcoinsystem.util.*;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -50,8 +56,14 @@ public class BlockChainService {
     private POPStorage popStorage;
     private MiningService miningService;
 
+    private KademliaNodeServer kademliaNodeServer;
+
+
+
+
     @PostConstruct
     private void initBlockChain() throws Exception {
+        startNetwork();
         miningService = new MiningService(this);
         popStorage = POPStorage.getInstance();
         log.info("初始化区块链服务...");
@@ -119,7 +131,80 @@ public class BlockChainService {
         //延迟5秒后开始挖矿
         Thread.sleep(5000);
         miningService.startMining();
+
     }
+
+    /**
+     * 启动网络节点
+     */
+    public void startNetwork() {
+        new Thread(() -> {
+            try {
+                int tcpPort = 8334;
+                int udpPort = 8333;
+                Map<String, Object> config = YamlReaderUtils.loadYaml("application.yml");
+                if (config != null) {
+                    tcpPort = (int) YamlReaderUtils.getNestedValue(config, "popcoin.tcpPort");
+                    udpPort = (int) YamlReaderUtils.getNestedValue(config, "popcoin.udpPort");
+                }
+                String localIp = NetworkUtil.getLocalIp();// 获取本机IP
+                log.info("本机IP:{}", localIp);
+                //获取节点信息 先从数据库中获取 如果没有则创建一份
+                POPStorage instance = POPStorage.getInstance();
+                NodeSettings nodeSetting = instance.getNodeSetting();
+                KeyPair keyPair = CryptoUtil.ECDSASigner.generateKeyPair();
+                PrivateKey privateKey = keyPair.getPrivate();
+                PublicKey publicKey = keyPair.getPublic();
+                if (nodeSetting == null){
+                    NodeSettings build = NodeSettings.Default.build();
+                    nodeSetting = BeanCopyUtils.copyObject(build, NodeSettings.class);
+                    //生成这个节点的公钥和私钥并保存到文件夹
+                    nodeSetting.setPrivateKeyHex(CryptoUtil.bytesToHex(privateKey.getEncoded()));
+                    nodeSetting.setPublicKeyHex(CryptoUtil.bytesToHex(publicKey.getEncoded()));
+                    byte[] bytes = CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(publicKey.getEncoded()));
+                    if (bytes.length != 20) {
+                        throw new IllegalArgumentException("RIPEMD-160 输出必须是 20 字节");
+                    }
+                    BigInteger bigInteger = new BigInteger(1, bytes);
+                    //生成节点ID
+                    nodeSetting.setId(bigInteger);
+                    nodeSetting.setNodeType(NodeType.FULL.getValue());//默认是全节点
+                }else {
+                    if (nodeSetting.getPublicKeyHex().isEmpty() || nodeSetting.getPrivateKeyHex().isEmpty()){
+                        nodeSetting.setPrivateKeyHex(CryptoUtil.bytesToHex(privateKey.getEncoded()));
+                        nodeSetting.setPublicKeyHex(CryptoUtil.bytesToHex(publicKey.getEncoded()));
+                    }
+                }
+                nodeSetting.setIpv4(localIp);
+                if (nodeSetting.getId() == null){
+                    byte[] bytes = CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(CryptoUtil.hexToBytes(nodeSetting.getPublicKeyHex())));
+                    if (bytes.length != 20) {
+                        throw new IllegalArgumentException("RIPEMD-160 输出必须是 20 字节");
+                    }
+                    BigInteger bigInteger = new BigInteger(1, bytes);
+                    //生成节点ID
+                    nodeSetting.setId(bigInteger);
+                }
+                instance.addOrUpdateNodeSetting(nodeSetting);
+                log.info("节点信息:{}", nodeSetting);
+                kademliaNodeServer = new KademliaNodeServer(nodeSetting.getId(), localIp, udpPort, tcpPort);
+                kademliaNodeServer.start();
+
+                NodeInfo nodeInfo = new NodeInfo();
+                nodeInfo.setId(BigInteger.ONE);
+                nodeInfo.setIpv4("192.168.137.102");
+                nodeInfo.setTcpPort(8334);
+                nodeInfo.setUdpPort(8333);
+                kademliaNodeServer.connectToBootstrapNodes(nodeInfo);
+
+                //加入到引导节点
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }).start();
+    }
+
+
 
     /**
      * 创建创世区块（区块链的第一个区块）
@@ -187,6 +272,16 @@ public class BlockChainService {
             //广播交易
             new Thread(() -> {
                 log.info("交易验证成功,广播交易");
+                UDPClient udpClient = kademliaNodeServer.getUdpClient();
+                TransactionMessage transactionKademliaMessage = new TransactionMessage(transaction);
+                transactionKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());
+                NodeInfo nodeInfo = new NodeInfo();
+                nodeInfo.setId(BigInteger.ONE);
+                nodeInfo.setIpv4("192.168.137.102");
+                nodeInfo.setTcpPort(8334);
+                nodeInfo.setUdpPort(8333);
+                transactionKademliaMessage.setReceiver(nodeInfo);
+                udpClient.sendAsyncMessage(transactionKademliaMessage);
             }).start();
         }
         return true;

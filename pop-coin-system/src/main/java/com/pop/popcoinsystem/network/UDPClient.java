@@ -114,10 +114,9 @@ public class UDPClient {
 
     /**
      * 异步发送消息
-     * @param nodeId
      * @param message
      */
-    public  void sendAsyncMessage(BigInteger nodeId, KademliaMessage message) {
+    public  void sendAsyncMessage(KademliaMessage message) {
         executorService.submit(() -> {
             try {
                 sendMessage(message);

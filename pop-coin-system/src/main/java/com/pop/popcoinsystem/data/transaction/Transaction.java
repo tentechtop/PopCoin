@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
 
 import java.io.IOException;
+import java.io.Serializable;
 import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
@@ -37,7 +38,7 @@ import static com.pop.popcoinsystem.service.MiningService.*;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class Transaction implements Cloneable{
+public class Transaction implements Serializable {
     /**
      * 交易ID（txid）：
      * - 非隔离见证交易：整个交易数据（不含见证数据，因无见证数据）的双重SHA256哈希
