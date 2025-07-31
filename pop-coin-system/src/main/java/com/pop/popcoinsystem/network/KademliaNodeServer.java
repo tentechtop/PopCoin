@@ -5,6 +5,7 @@ import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.common.NodeSettings;
 import com.pop.popcoinsystem.network.common.RoutingTable;
 import com.pop.popcoinsystem.network.protocol.MessageType;
+import com.pop.popcoinsystem.network.protocol.message.FindNodeRequestMessage;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.TransactionMessage;
@@ -133,22 +134,13 @@ public class KademliaNodeServer {
             startUdpDiscovererServer();
             startTcpTransmitServer();
             running = true;
-
             scheduler = Executors.newSingleThreadScheduledExecutor();
-            scheduler.scheduleAtFixedRate(() -> {
-
-            }, 0, 30, TimeUnit.SECONDS);
+            scheduler.scheduleAtFixedRate(this::maintainNetwork, 0, 30, TimeUnit.SECONDS);//首次执行立即开始，之后每 30 秒执行一次 maintainNetwork 方法
         } catch (Exception e) {
             log.error("KademliaNode start error", e);
             stop();
         }
     }
-
-
-
-
-
-
 
 
 
@@ -288,7 +280,7 @@ public class KademliaNodeServer {
         List<ExternalNodeInfo> closest = this.getRoutingTable().findClosest(this.nodeInfo.getId());
         //去除自己
         closest.removeIf(node -> node.getId().equals(this.nodeInfo.getId()));
-        log.info("开始泛洪广播消息: {}",closest);
+        log.info("广播消息: {}",closest);
         for (ExternalNodeInfo externalNodeInfo: closest) {
             try {
                 kademliaMessage.setReceiver(BeanCopyUtils.copyObject(externalNodeInfo, NodeInfo.class));
@@ -301,21 +293,128 @@ public class KademliaNodeServer {
 
 
     /**
-     * 维护网络 刷新已知节点
+     * 维护网络
      */
+    public void maintainNetwork() {
+        RoutingTable routingTable = getRoutingTable();
+        try {
+            long now = System.currentTimeMillis();
+            // 1. 清理过期的广播消息（避免内存泄漏）
+            cleanExpiredBroadcastMessages(now);
+            // 2. 检查路由表中节点的活性，移除不活跃节点
+            checkNodeLiveness(now);
+            // 3. 随机生成节点ID，执行FindNode操作刷新路由表（Kademlia协议核心）
+            refreshRoutingTable();
+            // 4. 持久化路由表（可选，节点重启后可恢复）
+            routingTable.persistToStorage();
+        } catch (Exception e) {
+            log.error("网络维护任务执行失败", e);
+        }
+    }
+
+
+    /**
+     * 检查节点活性：对超时未响应的节点发送发送Ping，仍无响应则移除
+     */
+    private void checkNodeLiveness(long now) {
+        // 获取路由表中所有节点
+        List<ExternalNodeInfo> allNodes = routingTable.getAllNodes();
+        if (allNodes.isEmpty()) {
+            log.debug("路由表为空，无需检查节点活性");
+            return;
+        }
+
+        for (ExternalNodeInfo node : allNodes) {
+            // 跳过自身节点
+            if (node.getId().equals(nodeInfo.getId())) continue;
+
+            // 计算节点最后活跃时间与当前的差值
+            long inactiveTime = now - node.getLastSeen().getTime();
+
+            // 1. 节点已过期（超过阈值），直接移除
+            if (inactiveTime > NODE_EXPIRATION_TIME) {
+                log.info("节点 {} 已过期（{}ms未响应），直接移除", node.getId(), inactiveTime);
+                routingTable.delete(node);
+                continue;
+            }
+
+            // 2. 节点即将过期（接近阈值阈值），发送Ping确认活性
+            if (inactiveTime > NODE_EXPIRATION_TIME * 0.8) { // 80%阈值时提前检查
+                log.debug("节点 {} 即将过期，发送Ping确认活性", node.getId());
+                sendPingCheckPing(node);
+            }
+        }
+    }
+
+    /**
+     * 向节点发送Ping消息检查活性，超时未响应则移除
+     */
+    private void sendPingCheckPing(ExternalNodeInfo node) {
+        try {
+            // 构建Ping消息
+            PingKademliaMessage pingMsg = new PingKademliaMessage();
+            pingMsg.setSender(nodeInfo);
+            pingMsg.setReceiver(BeanCopyUtils.copyObject(node, NodeInfo.class));
+
+            // 发送Ping并设置超时检查（5秒未响应则判定为失效）
+            udpClient.sendAsyncMessage(pingMsg);
+            scheduler.schedule(() -> {
+                // 检查节点是否仍未活跃
+                ExternalNodeInfo latestNode = routingTable.findNode(node.getId());
+                if (latestNode != null &&
+                        System.currentTimeMillis() - latestNode.getLastSeen().getTime() > 5000) {
+                    log.info("节点 {} Ping超时，移除", node.getId());
+                    routingTable.delete(node);
+                }
+            }, 5, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            log.error("向节点 {} 发送Ping检查失败", node.getId(), e);
+        }
+    }
+
+
+    /**
+     * 清理过期的广播消息
+     */
+    private void cleanExpiredBroadcastMessages(long now) {
+        broadcastMessages.entrySet().removeIf(entry ->
+                now - entry.getValue() > MESSAGE_EXPIRATION_TIME
+        );
+        log.debug("清理 过期广播消息，剩余: {}", broadcastMessages.size());
+    }
 
 
 
 
+    /**
+     * 刷新路由表：随机生成节点ID，执行FindNode发现新节点
+     * （Kademlia协议通过随机查找填充路由表，确保网络覆盖）
+     */
+    private void refreshRoutingTable() {
+        // 随机生成一个160位的节点ID（Kademlia通常使用160位ID）
+        BigInteger randomTargetId = new BigInteger(160, new Random());
 
+        // 查找当前路由表中离目标ID最近的节点
+        List<ExternalNodeInfo> closestNodes = routingTable.findClosest(randomTargetId);
+        if (closestNodes.isEmpty()) {
+            log.debug("路由表为空，无法执行FindNode刷新");
+            return;
+        }
+        // 向这些节点发送FindNode请求，获取更多节点信息
+        for (ExternalNodeInfo peer : closestNodes) {
+            try {
+                FindNodeRequestMessage findNodeMsg = new FindNodeRequestMessage();
+                findNodeMsg.setSender(nodeInfo);
+                findNodeMsg.setReceiver(BeanCopyUtils.copyObject(peer, NodeInfo.class));
+                findNodeMsg.setData(randomTargetId); // 要查找的目标ID
 
-
-
-
-
-
-
-
+                udpClient.sendAsyncMessage(findNodeMsg);
+                log.debug("向节点 {} 发送FindNode请求，目标ID: {}", peer.getId(), randomTargetId);
+            } catch (Exception e) {
+                log.error("向节点 {} 发送FindNode失败", peer.getId(), e);
+            }
+        }
+    }
 
 
 

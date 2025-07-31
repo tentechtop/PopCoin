@@ -24,7 +24,7 @@ public class HandshakeResponseMessage extends KademliaMessage<ExternalNodeInfo>{
         return SerializeUtils.serialize(message);
     }
 
-    public static KademliaMessage deSerialize(byte[] bytes) {
+    public static HandshakeResponseMessage deSerialize(byte[] bytes) {
         return (HandshakeResponseMessage)SerializeUtils.deSerialize(bytes);
     }
 }

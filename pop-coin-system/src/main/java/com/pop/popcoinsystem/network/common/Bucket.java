@@ -61,7 +61,7 @@ public class Bucket {
         nodeMap.remove(nodeId);
     }
 
-    public void remove(NodeInfo node){
+    public void remove(ExternalNodeInfo node){
         this.remove(node.getId());
     }
 

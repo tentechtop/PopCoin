@@ -23,7 +23,7 @@ public class PongKademliaMessage extends KademliaMessage<String>{
         return SerializeUtils.serialize(message);
     }
 
-    public static KademliaMessage deSerialize(byte[] bytes) {
+    public static PongKademliaMessage deSerialize(byte[] bytes) {
         return (PongKademliaMessage)SerializeUtils.deSerialize(bytes);
     }
 

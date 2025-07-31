@@ -20,7 +20,7 @@ public class BlockMessage extends KademliaMessage<Block>{
         return SerializeUtils.serialize(message);
     }
 
-    public static KademliaMessage deSerialize(byte[] bytes) {
+    public static BlockMessage deSerialize(byte[] bytes) {
         return (BlockMessage)SerializeUtils.deSerialize(bytes);
     }
 }

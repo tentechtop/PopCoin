@@ -235,9 +235,11 @@ public class RoutingTable {
     /**
      * 删除节点
      */
-    public void delete(NodeInfo node) {
+    public void delete(ExternalNodeInfo node) {
+        POPStorage instance = POPStorage.getInstance();
         Bucket bucket = this.findBucket(node.getId());
         bucket.remove(node);
+        instance.deleteRouteTableNode(node.getId());
     }
 
 
@@ -307,17 +309,89 @@ public class RoutingTable {
     }
 
 
+    /**
+     * 将当前路由表中的所有节点信息持久化到存储系统
+     */
+    public void persistToStorage() {
+        log.info("开始将路由表节点持久化到存储系统");
 
+        // 获取存储实例
+        POPStorage storage = POPStorage.getInstance();
 
+        // 收集所有需要持久化的节点
+        List<ExternalNodeInfo> nodesToPersist = new ArrayList<>();
 
+        lock.readLock().lock();
+        try {
+            // 遍历所有桶
+            for (Bucket bucket : buckets) {
+                // 遍历桶中的所有节点ID
+                for (BigInteger nodeId : bucket.getNodeIds()) {
+                    // 跳过本地节点（不需要存储自身信息）
+                    if (nodeId.equals(localNodeId)) {
+                        continue;
+                    }
 
+                    // 获取节点信息并添加到待持久化列表
+                    ExternalNodeInfo node = bucket.getNode(nodeId);
+                    if (node != null) {
+                        // 更新最后保存时间
+                        node.setLastSeen(new Date());
+                        nodesToPersist.add(node);
+                    }
+                }
+            }
 
+            log.info("准备持久化 {} 个路由表节点", nodesToPersist.size());
 
+            if (!nodesToPersist.isEmpty()) {
+                // 批量保存节点信息，提高效率
+                storage.addOrUpdateRouteTableNodeBatch(nodesToPersist);
+                log.info("路由表节点持久化完成，成功保存 {} 个节点", nodesToPersist.size());
+            } else {
+                log.info("路由表为空，无需持久化");
+            }
 
+        } catch (Exception e) {
+            log.error("路由表节点持久化失败", e);
+            throw new RuntimeException("路由表节点持久化失败", e);
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
 
+    public List<ExternalNodeInfo> getAllNodes() {
+        // 初始化存储所有节点的列表
+        List<ExternalNodeInfo> allNodes = new ArrayList<>();
+        // 获取读锁，确保线程安全
+        lock.readLock().lock();
+        try {
+            // 遍历所有桶
+            for (Bucket bucket : buckets) {
+                // 遍历当前桶中的所有节点ID
+                for (BigInteger nodeId : bucket.getNodeIds()) {
+                    // 跳过本地节点（不返回自身节点信息）
+                    if (nodeId.equals(localNodeId)) {
+                        continue;
+                    }
+                    // 获取节点信息并添加到列表
+                    ExternalNodeInfo node = bucket.getNode(nodeId);
+                    if (node != null) {
+                        allNodes.add(node);
+                    }
+                }
+            }
+        } finally {
+            // 确保锁被释放
+            lock.readLock().unlock();
+        }
+        return allNodes;
+    }
 
-
-
-
-
+    public ExternalNodeInfo findNode (BigInteger id) {
+        // 查找节点 ID 对应的桶
+        Bucket bucket = findBucket(id);
+        // 从桶中获取节点（Bucket 需实现 getNode (BigInteger id) 方法返回对应节点）
+        return bucket.getNode(id);
+    }
 }

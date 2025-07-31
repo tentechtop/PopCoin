@@ -19,7 +19,7 @@ public class PingKademliaMessage extends KademliaMessage<String>{
         return SerializeUtils.serialize(message);
     }
 
-    public static KademliaMessage deSerialize(byte[] bytes) {
+    public static PingKademliaMessage deSerialize(byte[] bytes) {
         return (PingKademliaMessage)SerializeUtils.deSerialize(bytes);
     }
 }

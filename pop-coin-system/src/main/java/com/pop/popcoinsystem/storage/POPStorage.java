@@ -883,6 +883,45 @@ public class POPStorage {
             throw new RuntimeException("新增路由表节点失败", e);
         }
     }
+    /**
+     * 批量新增或更新路由表节点
+     * @param nodeInfos 节点信息列表
+     */
+    public void addOrUpdateRouteTableNodeBatch(List<ExternalNodeInfo> nodeInfos) {
+        if (nodeInfos == null || nodeInfos.isEmpty()) {
+            log.warn("批量添加路由表节点：空列表，无需处理");
+            return;
+        }
+        rwLock.writeLock().lock();
+        WriteBatch writeBatch = null;
+        WriteOptions writeOptions = null;
+        try {
+            writeBatch = new WriteBatch();
+            writeOptions = new WriteOptions();
+            // 批量写入路由表节点
+            for (ExternalNodeInfo nodeInfo : nodeInfos) {
+                byte[] key = nodeInfo.getId().toByteArray();
+                byte[] valueBytes = SerializeUtils.serialize(nodeInfo);
+                writeBatch.put(ColumnFamily.ROUTING_TABLE.getHandle(), key, valueBytes);
+            }
+            // 执行批量写入（原子操作）
+            db.write(writeOptions, writeBatch);
+            log.info("批量添加路由表节点成功，数量：{}", nodeInfos.size());
+        } catch (RocksDBException e) {
+            log.error("批量添加路由表节点失败，数量：{}", nodeInfos.size(), e);
+            throw new RuntimeException("批量添加路由表节点失败", e);
+        } finally {
+            // 确保资源释放
+            if (writeBatch != null) {
+                writeBatch.close();
+            }
+            if (writeOptions != null) {
+                writeOptions.close();
+            }
+            rwLock.writeLock().unlock();
+        }
+    }
+
     //获取路由表节点
     public ExternalNodeInfo getRouteTableNode(BigInteger nodeId) {
         try {
