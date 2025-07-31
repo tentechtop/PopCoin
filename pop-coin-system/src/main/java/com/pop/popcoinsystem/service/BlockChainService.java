@@ -60,6 +60,37 @@ public class BlockChainService {
     private KademliaNodeServer kademliaNodeServer;
 
 
+    /**
+     * 验证交易
+     */
+    public boolean verifyTransaction(Transaction transaction) {
+        // 基础验证
+        if (!validateTransactionBasics(transaction)) {
+            return false;
+        }
+        // 金额验证
+        if (!validateTransactionAmounts(transaction)) {
+            return false;
+        }
+        // 交易ID验证
+        if (!validateTransactionId(transaction)) {
+            return false;
+        }
+        // UTXO验证与缓存
+        Map<String, UTXO> utxoMap = new HashMap<>();
+        if (!validateAndCacheUTXOs(transaction, utxoMap)) {
+            return false;
+        }
+        //验证交易的输入是否合法
+
+        if (transaction.isSegWit()) {
+            //隔离见证验证
+            return validateSegWitTransaction(transaction, utxoMap);
+        } else {
+            return validateRegularTransaction(transaction, utxoMap);
+        }
+    }
+
 
 
     @PostConstruct
@@ -277,49 +308,13 @@ public class BlockChainService {
                 TransactionMessage transactionKademliaMessage = new TransactionMessage();
                 transactionKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());
                 transactionKademliaMessage.setData(transaction);
-
-
-                NodeInfo nodeInfo = new NodeInfo();
-                nodeInfo.setId(BigInteger.ONE);
-                nodeInfo.setIpv4("192.168.137.102");
-                nodeInfo.setTcpPort(8334);
-                nodeInfo.setUdpPort(8333);
-                transactionKademliaMessage.setReceiver(nodeInfo);
-                udpClient.sendAsyncMessage(transactionKademliaMessage);
+                kademliaNodeServer.broadcastMessage(transactionKademliaMessage);
             }).start();
         }
         return true;
     }
 
-    /**
-     * 验证交易
-     */
-    public boolean verifyTransaction(Transaction transaction) {
-        // 基础验证
-        if (!validateTransactionBasics(transaction)) {
-            return false;
-        }
-        // 金额验证
-        if (!validateTransactionAmounts(transaction)) {
-            return false;
-        }
-        // 交易ID验证
-        if (!validateTransactionId(transaction)) {
-            return false;
-        }
-        // UTXO验证与缓存
-        Map<String, UTXO> utxoMap = new HashMap<>();
-        if (!validateAndCacheUTXOs(transaction, utxoMap)) {
-            return false;
-        }
-        // 根据交易类型执行不同验证逻辑
-        if (transaction.isSegWit()) {
-            //隔离见证验证
-            return validateSegWitTransaction(transaction, utxoMap);
-        } else {
-            return validateRegularTransaction(transaction, utxoMap);
-        }
-    }
+
 
     /**
      * 验证区块
@@ -496,13 +491,13 @@ public class BlockChainService {
         int type = scriptPubKey.getType();//解锁脚本的类型
         log.info("SegWit脚本类型:{}", type);
         // 区分SegWit脚本类型（以OP_0开头的通常为P2WPKH或P2WSH）
-        if (type == ScriptType.TYPE_P2WPKH.getValue()) {
+        if (type == ScriptType.P2WPKH.getValue()) {
             return verifyP2WPKH(tx, input, inputIndex, utxo);
-        } else if (type == ScriptType.TYPE_P2WSH.getValue()) {
+        } else if (type == ScriptType.P2WSH.getValue()) {
             return verifyP2WSH(tx, input, inputIndex, utxo);
-        }else if (type == ScriptType.TYPE_P2PKH.getValue()) {
+        }else if (type == ScriptType.P2PKH.getValue()) {
             return verifyP2PKH(tx, input, inputIndex, utxo);
-        }else if(type == ScriptType.TYPE_P2SH.getValue()){
+        }else if(type == ScriptType.P2SH.getValue()){
             return verifyP2SH(tx, input, inputIndex, utxo);
         }else {
             log.error("不支持的SegWit脚本类型");
@@ -646,13 +641,13 @@ public class BlockChainService {
         int type = scriptPubKey.getType();//解锁脚本的类型
         log.info("SegWit脚本类型:{}", type);
         // 区分SegWit脚本类型（以OP_0开头的通常为P2WPKH或P2WSH）
-        if (type == ScriptType.TYPE_P2WPKH.getValue()) {
+        if (type == ScriptType.P2WPKH.getValue()) {
             return verifyP2WPKH(tx, input, inputIndex, witness, utxo);
-        } else if (type == ScriptType.TYPE_P2WSH.getValue()) {
+        } else if (type == ScriptType.P2WSH.getValue()) {
             return verifyP2WSH(tx, input, inputIndex, witness, utxo);
-        }else if (type == ScriptType.TYPE_P2PKH.getValue()) {
+        }else if (type == ScriptType.P2PKH.getValue()) {
             return verifyP2PKH(tx, input, inputIndex, witness, utxo);
-        }else if(type == ScriptType.TYPE_P2SH.getValue()){
+        }else if(type == ScriptType.P2SH.getValue()){
             return verifyP2SH(tx, input, inputIndex, witness, utxo);
         }else {
             log.error("不支持的SegWit脚本类型");

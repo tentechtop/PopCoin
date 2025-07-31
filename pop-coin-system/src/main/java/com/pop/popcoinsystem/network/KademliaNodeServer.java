@@ -7,6 +7,7 @@ import com.pop.popcoinsystem.network.common.RoutingTable;
 import com.pop.popcoinsystem.network.protocol.MessageType;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
+import com.pop.popcoinsystem.network.protocol.message.TransactionMessage;
 import com.pop.popcoinsystem.network.protocol.messageHandler.*;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import io.netty.bootstrap.Bootstrap;
@@ -256,13 +257,23 @@ public class KademliaNodeServer {
             }
     }
 
+    public void broadcastMessage(TransactionMessage transactionKademliaMessage) {
+        //将消息发送给已知节点
+        List<ExternalNodeInfo> closest = this.getRoutingTable().findClosest(this.nodeInfo.getId());
+        for (ExternalNodeInfo externalNodeInfo: closest) {
+            try {
+                transactionKademliaMessage.setReceiver(BeanCopyUtils.copyObject(externalNodeInfo, NodeInfo.class));
+                udpClient.sendAsyncMessage(transactionKademliaMessage);
+            }catch (Exception e){
+                log.error("Error when sending message to node: {}", externalNodeInfo.getId(), e);
+            }
+        }
+    }
 
 
-
-
-
-
-
+    /**
+     * 路由表隔离
+     */
 
 
 
