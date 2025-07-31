@@ -1,26 +1,22 @@
-package com.pop.popcoinsystem.data.storage;
+package com.pop.popcoinsystem.storage;
 
 import com.pop.popcoinsystem.data.block.Block;
-import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.miner.Miner;
 import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.data.transaction.UTXO;
-import com.pop.popcoinsystem.data.transaction.dto.TransactionDTO;
 import com.pop.popcoinsystem.data.vo.result.PageResult;
-import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.data.vo.result.RocksDbPageResult;
+import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeSettings;
 import com.pop.popcoinsystem.util.ByteUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.SerializeUtils;
-import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.rocksdb.*;
-import org.springframework.stereotype.Component;
 
 import java.io.File;
+import java.math.BigInteger;
 import java.util.*;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -874,6 +870,79 @@ public class POPStorage {
 
 
 
+    //.................................................................................................................
+    //以标准配置（160 位 ID + K=20）为例：
+    //最大节点信息数量 = 20 × 160 = 3200 个。
+    //新增路由表节点
+    public void addOrUpdateRouteTableNode(ExternalNodeInfo nodeInfo) {
+        try {
+            byte[] valueBytes = SerializeUtils.serialize(nodeInfo);
+            db.put(ColumnFamily.ROUTING_TABLE.getHandle(), nodeInfo.getId().toByteArray(), valueBytes);
+        } catch (RocksDBException e) {
+            log.error("新增路由表节点失败: key={}", nodeInfo.getId(), e);
+            throw new RuntimeException("新增路由表节点失败", e);
+        }
+    }
+    //获取路由表节点
+    public ExternalNodeInfo getRouteTableNode(BigInteger nodeId) {
+        try {
+            byte[] valueBytes = db.get(ColumnFamily.ROUTING_TABLE.getHandle(), nodeId.toByteArray());
+            if (valueBytes == null) {
+                return null; // 不存在返回null，避免抛出异常
+            }
+            return (ExternalNodeInfo)SerializeUtils.deSerialize(valueBytes);
+        } catch (RocksDBException e) {
+            log.error("获取路由表节点失败: key={}", nodeId, e);
+            throw new RuntimeException("获取路由表节点失败", e);
+        }
+    }
+    //删除
+    public void deleteRouteTableNode(BigInteger nodeId) {
+        try {
+            db.delete(ColumnFamily.ROUTING_TABLE.getHandle(), nodeId.toByteArray());
+        } catch (RocksDBException e) {
+            log.error("删除路由表节点失败: key={}", nodeId, e);
+            throw new RuntimeException("删除路由表节点失败", e);
+        }
+    }
+
+    /**
+     * 迭代查询所有路由表节点
+     * @return 所有路由表节点列表（无节点时返回空列表）
+     */
+    public List<ExternalNodeInfo> iterateAllRouteTableNodes() {
+        rwLock.readLock().lock();
+        RocksIterator iterator = null;
+        try {
+            // 获取路由表列族的迭代器
+            iterator = db.newIterator(ColumnFamily.ROUTING_TABLE.getHandle());
+            List<ExternalNodeInfo> nodeList = new ArrayList<>();
+
+            // 从第一个键开始遍历
+            iterator.seekToFirst();
+            while (iterator.isValid()) {
+                // 反序列化节点信息
+                byte[] valueBytes = iterator.value();
+                ExternalNodeInfo nodeInfo = (ExternalNodeInfo) SerializeUtils.deSerialize(valueBytes);
+                nodeList.add(nodeInfo);
+                // 移动到下一个键
+                iterator.next();
+            }
+            return nodeList;
+        } catch (Exception e) {
+            log.error("迭代查询所有路由表节点失败", e);
+            throw new RuntimeException("迭代查询路由表节点失败", e);
+        } finally {
+            // 确保迭代器关闭和锁释放
+            if (iterator != null) {
+                iterator.close();
+            }
+            rwLock.readLock().unlock();
+        }
+    }
+
+
+
 
 
 
@@ -885,7 +954,7 @@ public class POPStorage {
     public void addOrUpdateNodeSetting(NodeSettings value) {
         try {
             byte[] valueBytes = SerializeUtils.serialize(value);
-            db.put(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_NODE_SETTING, valueBytes);
+            db.put(ColumnFamily.NODE_INFO.getHandle(), KEY_NODE_SETTING, valueBytes);
         } catch (RocksDBException e) {
             log.error("节点状态失败: key={}", KEY_NODE_SETTING, e);
             throw new RuntimeException("节点状态失败", e);
@@ -895,7 +964,7 @@ public class POPStorage {
     //获取本节点的设置信息
     public NodeSettings getNodeSetting() {
         try {
-            byte[] valueBytes = db.get(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_NODE_SETTING);
+            byte[] valueBytes = db.get(ColumnFamily.NODE_INFO.getHandle(), KEY_NODE_SETTING);
             if (valueBytes == null) {
                 return null; // 不存在返回null，避免抛出异常
             }
@@ -912,7 +981,7 @@ public class POPStorage {
     public void addOrUpdateMiner(Miner value) {
         try {
             byte[] valueBytes = SerializeUtils.serialize(value);
-            db.put(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_MINER, valueBytes);
+            db.put(ColumnFamily.MINER_INFO.getHandle(), KEY_MINER, valueBytes);
         } catch (RocksDBException e) {
             log.error("保存矿工信息失败: key={}", KEY_MINER, e);
             throw new RuntimeException("保存矿工信息失败", e);
@@ -923,7 +992,7 @@ public class POPStorage {
      */
     public Miner getMiner() {
         try {
-            byte[] valueBytes = db.get(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_MINER);
+            byte[] valueBytes = db.get(ColumnFamily.MINER_INFO.getHandle(), KEY_MINER);
             if (valueBytes == null) {
                 return null; // 不存在返回null，避免抛出异常
             }
@@ -936,7 +1005,7 @@ public class POPStorage {
 
 
 
-    //
+    //..................................................................................................................
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final RocksDB db;
     private static class InstanceHolder {

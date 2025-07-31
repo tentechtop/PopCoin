@@ -10,6 +10,7 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigInteger;
@@ -105,5 +106,15 @@ public class TCPClient {
         });
     }
 
+
+    /**
+     * stop
+     */
+    @PreDestroy
+    public void stop() {
+        if (group != null) {
+            group.shutdownGracefully();
+        }
+    }
 
 }

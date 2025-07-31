@@ -25,8 +25,8 @@ public class HandshakeResponseMessageHandle implements MessageHandler{
         return doHandle(kademliaNodeServer, (HandshakeResponseMessage) message);
     }
 
-
     protected EmptyKademliaMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull HandshakeResponseMessage message) throws InterruptedException {
+        log.info("收到握手响应--握手成功");
         RoutingTable routingTable = kademliaNodeServer.getRoutingTable();
         NodeInfo sender = message.getSender();//消息来源
         ExternalNodeInfo data = message.getData();

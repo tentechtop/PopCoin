@@ -1,28 +1,13 @@
 package com.pop.popcoinsystem;
 
-import com.pop.popcoinsystem.data.storage.POPStorage;
-import com.pop.popcoinsystem.network.KademliaNodeServer;
-import com.pop.popcoinsystem.network.common.NodeInfo;
-import com.pop.popcoinsystem.network.common.NodeSettings;
-import com.pop.popcoinsystem.network.enums.NETVersion;
-import com.pop.popcoinsystem.network.enums.NodeType;
-import com.pop.popcoinsystem.util.BeanCopyUtils;
-import com.pop.popcoinsystem.util.CryptoUtil;
-import com.pop.popcoinsystem.util.NetworkUtil;
-import com.pop.popcoinsystem.util.YamlReaderUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.Environment;
 
-import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.security.KeyPair;
-import java.security.PrivateKey;
-import java.security.PublicKey;
-import java.util.Map;
 
 @Slf4j
 @SpringBootApplication

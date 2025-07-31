@@ -1,4 +1,4 @@
-package com.pop.popcoinsystem.data.storage;
+package com.pop.popcoinsystem.storage;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -34,11 +34,11 @@ public enum ColumnFamily {
     //脚本hash_utxoKey - > 金额索引
     SCRIPT_UTXO("CF_SCRIPT_UTXO", "scriptUtxo",new ColumnFamilyOptions()),
 
+    NODE_INFO("CF_NODE_INFO", "nodeInfo",new ColumnFamilyOptions()),
 
+    ROUTING_TABLE("CF_BLOCK_CHAIN", "RoutingTable",new ColumnFamilyOptions()),
 
-
-
-
+    MINER_INFO("CF_MINER_INFO", "minerInfo",new ColumnFamilyOptions()),
     ;
     final String logicalName;
     final String actualName;

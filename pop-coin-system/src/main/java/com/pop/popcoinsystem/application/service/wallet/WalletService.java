@@ -6,12 +6,11 @@ import com.pop.popcoinsystem.application.service.wallet.vo.TransferVO;
 import com.pop.popcoinsystem.application.service.wallet.vo.WalletBalanceVO;
 import com.pop.popcoinsystem.data.enums.SigHashType;
 import com.pop.popcoinsystem.data.script.*;
-import com.pop.popcoinsystem.data.storage.UTXOSearch;
+import com.pop.popcoinsystem.storage.UTXOSearch;
 import com.pop.popcoinsystem.data.transaction.*;
 import com.pop.popcoinsystem.data.transaction.dto.TransactionDTO;
 import com.pop.popcoinsystem.data.vo.result.PageResult;
 import com.pop.popcoinsystem.data.vo.result.Result;
-import com.pop.popcoinsystem.data.vo.result.RocksDbPageResult;
 import com.pop.popcoinsystem.exception.InsufficientFundsException;
 import com.pop.popcoinsystem.exception.UnsupportedAddressException;
 import com.pop.popcoinsystem.service.BlockChainService;
@@ -27,7 +26,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 
-import static com.pop.popcoinsystem.data.storage.POPStorage.getUTXOKey;
+import static com.pop.popcoinsystem.storage.POPStorage.getUTXOKey;
 import static com.pop.popcoinsystem.service.BlockChainService.convertTransactionDTO;
 
 @Slf4j

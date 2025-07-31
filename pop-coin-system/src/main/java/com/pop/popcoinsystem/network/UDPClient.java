@@ -16,6 +16,7 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.codec.MessageToMessageDecoder;
 import io.netty.handler.codec.MessageToMessageEncoder;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.el.util.MessageFactory;
 
@@ -124,5 +125,15 @@ public class UDPClient {
         });
     }
 
+
+    /**
+     * stop
+     */
+    @PreDestroy
+    public void stop() {
+        if (group != null) {
+            group.shutdownGracefully();
+        }
+    }
 
 }

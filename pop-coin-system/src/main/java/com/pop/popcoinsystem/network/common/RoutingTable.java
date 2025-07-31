@@ -1,6 +1,7 @@
 package com.pop.popcoinsystem.network.common;
 
 import com.pop.popcoinsystem.exception.FullBucketException;
+import com.pop.popcoinsystem.storage.POPStorage;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -46,6 +47,7 @@ public class RoutingTable {
      * 更新路由表 添加或移动节点到适当的K桶
      */
     public boolean update(ExternalNodeInfo node) throws FullBucketException {
+        POPStorage instance = POPStorage.getInstance();
         lock.writeLock().lock();
         try {
             node.setLastSeen(new Date());
@@ -53,6 +55,7 @@ public class RoutingTable {
             // 更新桶的访问时间
             lastBucketAccessTime.put(bucket.getId(), System.currentTimeMillis());
             node.setDistance(node.getId().xor(this.localNodeId));
+            instance.addOrUpdateRouteTableNode(node);
             if (bucket.contains(node)) {
                 bucket.pushToFront(node);
                 return false;
@@ -72,8 +75,11 @@ public class RoutingTable {
      * 强制将节点添加到路由表中。若对应K桶已满，会移除最老的节点以腾出空间。
      */
     public synchronized void forceUpdate(ExternalNodeInfo node) {
+        POPStorage instance = POPStorage.getInstance();
         try {
             this.update(node);
+            //持久化
+            instance.addOrUpdateRouteTableNode(node);
         } catch (FullBucketException e) {
             Bucket bucket = this.findBucket(node.getId());
             Date date = null;
@@ -89,6 +95,8 @@ public class RoutingTable {
                 }
             }
             bucket.remove(oldestNode);
+            //删除旧节点
+            instance.deleteRouteTableNode(oldestNode);
             this.forceUpdate(node);
         }
     }
@@ -260,10 +268,56 @@ public class RoutingTable {
     }
 
 
-
     public boolean contains(BigInteger nodeId) {
         Bucket bucket = this.findBucket(nodeId);
         return bucket.contains(nodeId);
     }
+
+
+
+
+    /**
+     * 从节点列表恢复路由表
+     */
+    public void recoverFromNodeList() {
+        log.info("开始从节点列表恢复路由表");
+        // 从存储获取所有路由表节点
+        List<ExternalNodeInfo> nodeList = POPStorage.getInstance().iterateAllRouteTableNodes();
+        if (nodeList == null || nodeList.isEmpty()) {
+            log.info("恢复路由表：节点列表为空，无需处理");
+            return;
+        }
+        log.info("开始从节点列表恢复路由表，共 {} 个节点", nodeList.size());
+        int successCount = 0;
+        for (ExternalNodeInfo node : nodeList) {
+            try {
+                // 跳过本地节点（避免添加自身到路由表）
+                if (node.getId().equals(localNodeId)) {
+                    continue;
+                }
+                // 强制更新路由表（桶满时会替换最老节点）
+                forceUpdate(node);
+                successCount++;
+            } catch (Exception e) {
+                log.error("恢复节点失败：nodeId={}", node.getId(), e);
+            }
+        }
+        log.info("路由表恢复完成，成功添加 {} 个节点，失败 {} 个节点",
+                successCount, nodeList.size() - successCount);
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 }

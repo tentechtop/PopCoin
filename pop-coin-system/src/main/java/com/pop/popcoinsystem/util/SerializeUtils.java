@@ -10,6 +10,7 @@ import com.pop.popcoinsystem.data.script.Script;
 import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.data.script.ScriptSig;
 import com.pop.popcoinsystem.data.transaction.UTXO;
+import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.*;
 
 import java.math.BigInteger;
@@ -39,6 +40,10 @@ public class SerializeUtils {
 
         kryo.register(PrivateKey.class);
         kryo.register(PublicKey.class);
+
+
+        kryo.register(ExternalNodeInfo.class);
+
 
         kryo.register(Script.class);
         kryo.register(ScriptPubKey.class);

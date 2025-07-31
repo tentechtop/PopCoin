@@ -17,7 +17,8 @@ public class PongMessageHandler implements MessageHandler{
     }
 
     protected EmptyKademliaMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull PongKademliaMessage message) throws InterruptedException {
-        //请求握手
+        log.info("收到pong");//pong信息中应该携带网络信息 消息头应该有网络消息
+        //主动和节点握手
         HandshakeRequestMessage handshakeRequestMessage = new HandshakeRequestMessage(kademliaNodeServer.getExternalNodeInfo());
         handshakeRequestMessage.setSender(kademliaNodeServer.getNodeInfo());
         handshakeRequestMessage.setReceiver(message.getSender());

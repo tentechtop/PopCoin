@@ -1,4 +1,4 @@
-package com.pop.popcoinsystem.data.storage;
+package com.pop.popcoinsystem.storage;
 
 import lombok.Data;
 

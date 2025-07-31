@@ -19,6 +19,7 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
 
 
     protected HandshakeResponseMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull HandshakeRequestMessage message) throws InterruptedException {
+        log.info("收到握手请求");
         if (kademliaNodeServer.isRunning()){
             //将该节点添加到路由表中  一定是活跃节点记录下
             ExternalNodeInfo data = message.getData();
