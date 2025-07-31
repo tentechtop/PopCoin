@@ -363,9 +363,10 @@ public class KademliaNodeServer {
             int netVersion = byteBuf.readInt();
             log.info("网络版本:{}", netVersion);
             //是否和我的网络版本一致
-
-
-
+            if (netVersion != POP_NET_VERSION) {
+                log.warn("网络版本不一致");
+                return;
+            }
             // 读取内容长度
             int contentLength = byteBuf.readInt();
             log.info("内容长度:{}", contentLength);
@@ -435,6 +436,10 @@ public class KademliaNodeServer {
             int netVersion = byteBuf.readInt();
             log.info("网络版本:{}", netVersion);
             //是否和我的网络版本一致
+            if (netVersion != POP_NET_VERSION) {
+                log.warn("网络版本不一致");
+                return;
+            }
 
 
 
