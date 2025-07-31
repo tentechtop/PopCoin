@@ -291,11 +291,11 @@ public class KademliaNodeServer {
         }
     }
 
-
     /**
      * 维护网络
      */
     public void maintainNetwork() {
+        log.info("开始维护网络");
         RoutingTable routingTable = getRoutingTable();
         try {
             long now = System.currentTimeMillis();
@@ -430,7 +430,7 @@ public class KademliaNodeServer {
             ByteBuf buf = Unpooled.buffer(data.length + 12); // 4(类型) + 4(网络版本) + 4(内容长)
             buf.writeInt(kademliaMessage.getType());  // 写入消息类型 4
             //写入网络版本
-            buf.writeInt(POP_NET_VERSION);//4
+            buf.writeInt(12 + data.length);//4
             //写入内容长度
             buf.writeInt(data.length);//4
             //写入内容
@@ -503,7 +503,7 @@ public class KademliaNodeServer {
                 // 2. 写入消息类型（4字节整数）
                 byteBuf.writeInt(kademliaMessage.getType());  //4
                 //写入网络版本
-                byteBuf.writeInt(POP_NET_VERSION);//4
+                byteBuf.writeInt(12 + data.length);//4
                 //写入内容长度
                 byteBuf.writeInt(data.length);//4  //32 位（4 字节）的整数
                 //写入类容
