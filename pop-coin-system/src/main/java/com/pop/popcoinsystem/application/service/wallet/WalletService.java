@@ -5,8 +5,7 @@ import com.pop.popcoinsystem.application.service.wallet.vo.BuildWalletUTXODTO;
 import com.pop.popcoinsystem.application.service.wallet.vo.TransferVO;
 import com.pop.popcoinsystem.application.service.wallet.vo.WalletBalanceVO;
 import com.pop.popcoinsystem.data.enums.SigHashType;
-import com.pop.popcoinsystem.data.script.ScriptPubKey;
-import com.pop.popcoinsystem.data.script.ScriptSig;
+import com.pop.popcoinsystem.data.script.*;
 import com.pop.popcoinsystem.data.transaction.*;
 import com.pop.popcoinsystem.data.transaction.dto.TransactionDTO;
 import com.pop.popcoinsystem.data.vo.result.Result;
@@ -14,7 +13,6 @@ import com.pop.popcoinsystem.data.vo.result.RocksDbPageResult;
 import com.pop.popcoinsystem.exception.InsufficientFundsException;
 import com.pop.popcoinsystem.exception.UnsupportedAddressException;
 import com.pop.popcoinsystem.service.BlockChainService;
-import com.pop.popcoinsystem.service.UTXOService;
 import com.pop.popcoinsystem.util.*;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -33,8 +31,6 @@ import static com.pop.popcoinsystem.service.BlockChainService.convertTransaction
 @Slf4j
 @Service
 public class WalletService {
-    @Resource
-    private UTXOService utxoService;
 
     @Resource
     private BlockChainService blockChainService;
@@ -288,10 +284,9 @@ public class WalletService {
             return Result.error("交易创建失败: " + e.getMessage());
         }
     }
-
     private Transaction createTransactionByAddressType(TransferVO transferVO, String toAddress)
             throws UnsupportedAddressException {
-        TxSigType addressType = CryptoUtil.ECDSASigner.getAddressType(toAddress);
+        AddressType addressType = CryptoUtil.ECDSASigner.getAddressType(toAddress);
         switch (addressType) {
             case P2PKH:
             case P2SH:
@@ -361,6 +356,9 @@ public class WalletService {
                     TXInput txInput = new TXInput();
                     txInput.setTxId(utxo.getTxId());
                     txInput.setVout(utxo.getVout());
+
+                    //根据UTXO 决定是创建 解锁脚本 还是见证数据
+
                     byte[] txToSign = CryptoUtil.applySHA256(SerializeUtils.serialize(utxo));//对输入引用的UTXO签名 证明我有权力使用这个UTXO
                     log.info("签名输入 txToSign: {}", CryptoUtil.bytesToHex(txToSign));
                     //对输入签名
@@ -524,12 +522,12 @@ public class WalletService {
         TXOutput mainOutput = new TXOutput();
         mainOutput.setValue(amountToPay);
         // 确定输出地址类型并设置相应的锁定脚本
-        TxSigType toAddressType = CryptoUtil.ECDSASigner.getAddressType(toAddress);
-        if (toAddressType == TxSigType.P2WPKH) {
+        AddressType toAddressType = CryptoUtil.ECDSASigner.getAddressType(toAddress);
+        if (toAddressType == AddressType.P2WPKH) {
             // P2WPKH 锁定脚本: 0 <20-byte key-hash>
             ScriptPubKey scriptPubKey = ScriptPubKey.createP2WPKH(toAddressHash);
             mainOutput.setScriptPubKey(scriptPubKey);
-        } else if (toAddressType == TxSigType.P2WSH) {
+        } else if (toAddressType == AddressType.P2WSH) {
             // P2WSH 锁定脚本: 0 <32-byte script-hash>
             byte[] scriptHash = CryptoUtil.ECDSASigner.getAddressHash(toAddress);
             ScriptPubKey scriptPubKey = ScriptPubKey.createP2WSH(scriptHash);
@@ -596,6 +594,12 @@ public class WalletService {
         instance.removeWalletUTXOBatch(wallet.getName(), usedUTXOs);
         return transaction;
     }
+
+//构造交易
+//如果UTXO的脚本类型是P2PKH  则提供 签名:SigHashType 和 公钥     写入解锁脚本
+//如果UTXO的脚本类型是P2SH   则提供 [签名:SigHashType], 赎回脚本 写入解锁脚本
+//如果UTXO的脚本类型是P2WPKH 则提供 签名:SigHashType 和 公钥     写入见证数据  add(int index, E element) 确保顺序和输入的顺序一致
+//如果UTXO的脚本类型是P2WSH  则提供 [签名:SigHashType], 赎回脚本 写入见证数据  add(int index, E element) 确保顺序和输入的顺序一致
 
 
 
@@ -682,5 +686,284 @@ public class WalletService {
         }
         return total;
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    /**
+     * 创建交易  支持所有脚本类型UTXO（P2PKH/P2SH/P2WPKH/P2WSH）
+     * @param transferVO 转账参数
+     * @return 交易DTO
+     */
+    public Result<TransactionDTO> createTransaction1(TransferVO transferVO) {
+        String walletName = transferVO.getWalletName();
+        try {
+            WalletStorage instance = WalletStorage.getInstance();
+            Set<String> walletUTXOs = instance.getWalletUTXOs(walletName);
+            Wallet wallet = instance.getWallet(walletName);
+            long availableBalance = wallet.getBalance();
+            if (availableBalance < transferVO.getAmount()) {
+                return Result.error("余额不足");
+            }
+            String toAddress = transferVO.getToAddress();
+            // 统一创建交易，不再区分地址类型
+            Transaction transaction = createUniversalTransaction(transferVO, toAddress, walletUTXOs);
+            blockChainService.verifyAndAddTradingPool(transaction);
+            TransactionDTO transactionDTO = convertTransactionDTO(transaction);
+            return Result.OK(transactionDTO);
+        } catch (UnsupportedAddressException | InsufficientFundsException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            return Result.error("交易创建失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 通用交易创建方法，根据UTXO脚本类型动态构造验证数据
+     */
+    private Transaction createUniversalTransaction(TransferVO transferVO, String toAddress, Set<String> walletUTXOs)
+            throws UnsupportedAddressException, InsufficientFundsException {
+        WalletStorage instance = WalletStorage.getInstance();
+        Wallet wallet = instance.getWallet(transferVO.getWalletName());
+        String publicKeyHex = wallet.getPublicKeyHex();
+        String privateKeyHex = wallet.getPrivateKeyHex();
+        byte[] publicKeyBytes = CryptoUtil.hexToBytes(publicKeyHex);
+        byte[] privateKeyBytes = CryptoUtil.hexToBytes(privateKeyHex);
+        PrivateKey privateKey = CryptoUtil.ECDSASigner.bytesToPrivateKey(privateKeyBytes);
+        PublicKey publicKey = CryptoUtil.ECDSASigner.bytesToPublicKey(publicKeyBytes);
+
+        // 接收地址处理
+        byte[] toAddressHash = CryptoUtil.ECDSASigner.getAddressHash(toAddress);
+        AddressType toAddressType = CryptoUtil.ECDSASigner.getAddressType(toAddress);
+
+        // 交易基础信息
+        Transaction transaction = new Transaction();
+        List<TXInput> txInputs = new ArrayList<>();
+        List<Witness> witnesses = new ArrayList<>(); // 隔离见证数据列表
+        HashSet<String> usedUTXOs = new HashSet<>();
+        long totalInputAmount = 0L;
+        long amountToPay = transferVO.getAmount();
+        boolean enoughFunds = false;
+
+        // 迭代处理UTXO
+        Iterator<String> utxoIterator = walletUTXOs.iterator();
+        while (utxoIterator.hasNext() && !enoughFunds) {
+            List<String> batchUTXOs = new ArrayList<>();
+            int count = 0;
+            while (utxoIterator.hasNext() && count < 50) {
+                batchUTXOs.add(utxoIterator.next());
+                count++;
+            }
+
+            for (String utxoKey : batchUTXOs) {
+                UTXO utxo = blockChainService.getUTXO(utxoKey);
+                if (utxo == null) continue;
+
+                // 获取UTXO的脚本类型（核心：根据UTXO脚本类型处理）
+                ScriptPubKey utxoScriptPubKey = utxo.getScriptPubKey();
+                int scriptType = utxoScriptPubKey.getType();
+
+                // 累加金额并标记使用的UTXO
+                usedUTXOs.add(utxoKey);
+                totalInputAmount += utxo.getValue();
+
+                // 构建交易输入
+                TXInput txInput = new TXInput();
+                txInput.setTxId(utxo.getTxId());
+                txInput.setVout(utxo.getVout());
+
+                // 根据UTXO类型生成签名和验证数据
+                byte[] sigHash = generateSigHash(transaction, txInputs.size(), utxo, scriptType);
+                byte[] signature = CryptoUtil.ECDSASigner.applySignature(privateKey, sigHash);
+                byte[] sigWithType = SegWitUtils.createSigHashType(signature, SigHashType.ALL);
+
+                // 按脚本类型设置验证数据（解锁脚本或见证）
+                if (isSegWitType(scriptType)) {
+                    // 隔离见证类型：构建见证数据
+                    Witness witness = createWitness(scriptType, sigWithType, publicKeyBytes, utxoScriptPubKey);
+                    witnesses.add(witness);
+                    txInput.setScriptSig(null); // 隔离见证输入的scriptSig为空
+                } else {
+                    // 普通类型：构建解锁脚本
+                    ScriptSig scriptSig = createScriptSig(scriptType, sigWithType, publicKeyBytes, utxoScriptPubKey);
+                    txInput.setScriptSig(scriptSig);
+                }
+                txInputs.add(txInput);
+                // 检查金额是否足够
+                if (totalInputAmount >= amountToPay) {
+                    enoughFunds = true;
+                    break;
+                }
+            }
+        }
+
+        // 资金不足校验
+        if (!enoughFunds) {
+            throw new InsufficientFundsException("可用余额不足");
+        }
+
+        // 设置交易输入和见证
+        transaction.setInputs(txInputs);
+        if (!witnesses.isEmpty()) {
+            transaction.setWitnesses(witnesses);
+            transaction.setVersion(2); // 隔离见证交易版本为2
+        } else {
+            transaction.setVersion(1); // 普通交易版本为1
+        }
+
+        // 构建交易输出
+        List<TXOutput> txOutputs = new ArrayList<>();
+        // 主输出（支付给接收地址）
+        TXOutput mainOutput = new TXOutput();
+        mainOutput.setValue(amountToPay);
+        mainOutput.setScriptPubKey(createScriptPubKey(toAddressType, toAddressHash));
+        txOutputs.add(mainOutput);
+
+        // 计算手续费和找零
+        calculateAndAddChange(transaction, txOutputs, totalInputAmount, amountToPay, publicKeyBytes, ScriptType.P2WSH.getValue());
+
+        transaction.setOutputs(txOutputs);
+
+        // 交易最终属性设置
+        transaction.setTime(System.currentTimeMillis() / 1000);
+        transaction.setSize(transaction.calculateTotalSize());
+        transaction.calculateWeight();
+        transaction.setTxId(Transaction.calculateTxId(transaction));
+        if (!witnesses.isEmpty()) {
+            transaction.setWtxId(Transaction.calculateWtxId(transaction));
+            log.info("隔离见证交易ID: {}", CryptoUtil.bytesToHex(transaction.getWtxId()));
+        }
+        log.info("交易ID: {}", CryptoUtil.bytesToHex(transaction.getTxId()));
+
+        // 移除使用过的UTXO  或者标记已经使用
+        instance.removeWalletUTXOBatch(wallet.getName(), usedUTXOs);
+        return transaction;
+    }
+
+// ------------------------------ 辅助方法 ------------------------------
+
+    /**
+     * 判断UTXO脚本类型是否为隔离见证
+     */
+    private boolean isSegWitType(int scriptType) {
+        return scriptType == ScriptType.P2WPKH.getValue() || scriptType == ScriptType.P2WSH.getValue();
+    }
+
+    /**
+     * 生成签名哈希
+     */
+    private byte[] generateSigHash(Transaction tx, int inputIndex, UTXO utxo, int scriptType) {
+        if (isSegWitType(scriptType)) {
+            return blockChainService.createWitnessSignatureHash(tx, inputIndex, utxo.getValue(), SigHashType.ALL);
+        } else {
+            return CryptoUtil.applySHA256(SerializeUtils.serialize(utxo));
+        }
+    }
+
+    /**
+     * 创建普通交易的解锁脚本
+     */
+    private ScriptSig createScriptSig(int scriptType, byte[] signature, byte[] pubKey, ScriptPubKey utxoScript) {
+        switch (ScriptType.valueOf(scriptType)) {
+            case P2PKH:
+                return new ScriptSig(signature, pubKey);
+            case P2SH:
+                Script redeemScript = new Script();
+                List<byte[]> signatures  = null;
+                return ScriptSig.createP2SH(signatures, redeemScript);
+            default:
+                throw new UnsupportedAddressException("不支持的普通脚本类型: " + scriptType);
+        }
+    }
+
+    /**
+     * 创建隔离见证的见证数据
+     */
+    public Witness createWitness(int scriptTypeInt, byte[] signature, byte[] pubKey, ScriptPubKey utxoScript) {
+        Witness witness = new Witness();
+        // 1. 将int转换为ScriptType枚举（注意处理无效值的情况）
+        ScriptType scriptType = ScriptType.valueOf(scriptTypeInt);
+        if (scriptType == null) {
+            throw new UnsupportedAddressException("不支持的隔离见证类型: " + scriptTypeInt);
+        }
+        // 2. 以枚举为switch表达式，直接使用枚举常量作为case标签
+        switch (scriptType) {
+            case P2SH:  // 直接使用枚举常量，无需getValue()
+                witness.addItem(signature);
+                witness.addItem(pubKey);
+                break;
+            case P2WSH:  // 对应原代码中的case 4（TYPE_P2WSH的value是4）
+                witness.addItem(signature);
+                byte[] redeemScript = null;  // 注意：这里传入null可能有问题，需确认业务逻辑
+                witness.addItem(redeemScript);
+                break;
+            default:
+                throw new UnsupportedAddressException("不支持的隔离见证类型: " + scriptTypeInt);
+        }
+        return witness;
+    }
+
+    /**
+     * 创建输出锁定脚本
+     */
+    private ScriptPubKey createScriptPubKey(AddressType type, byte[] addressHash) {
+        switch (type) {
+            case P2PKH:
+                return new ScriptPubKey(addressHash);
+            case P2SH:
+                return ScriptPubKey.createP2SH(addressHash);
+            case P2WPKH:
+                return ScriptPubKey.createP2WPKH(addressHash);
+            case P2WSH:
+                return ScriptPubKey.createP2WSH(addressHash);
+            default:
+                throw new UnsupportedAddressException("不支持的输出地址类型: " + type);
+        }
+    }
+
+    /**
+     * 计算并添加找零输出
+     */
+    private void calculateAndAddChange(Transaction tx, List<TXOutput> outputs, long totalInput, long amount, byte[] pubKeyBytes, int scriptType) {
+        long size = tx.calculateTotalSize();
+        long fee = size * 1000; // 每字节手续费
+        long change = totalInput - amount - fee;
+        if (change <= 0) return;
+
+        // 找零地址类型与发送者UTXO类型一致
+        AddressType changeType = isSegWitType(scriptType) ? AddressType.P2WPKH : AddressType.P2PKH;
+        byte[] changeHash = isSegWitType(scriptType)
+                ? CryptoUtil.ECDSASigner.createP2WPKHByPK(pubKeyBytes)
+                : CryptoUtil.ECDSASigner.createP2PKHByPK(pubKeyBytes);
+
+        TXOutput changeOutput = new TXOutput();
+        changeOutput.setValue(change);
+        changeOutput.setScriptPubKey(createScriptPubKey(changeType, changeHash));
+        outputs.add(changeOutput);
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 }

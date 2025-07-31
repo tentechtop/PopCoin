@@ -1,15 +1,12 @@
 package com.pop.popcoinsystem.util;
 
-import com.pop.popcoinsystem.PopCoinSystemApplication;
-import com.pop.popcoinsystem.data.transaction.TxSigType;
+import com.pop.popcoinsystem.data.script.AddressType;
 import com.pop.popcoinsystem.network.enums.NETVersion;
 import lombok.extern.slf4j.Slf4j;
 import org.bouncycastle.asn1.x9.X9ECParameters;
 import org.bouncycastle.crypto.digests.SHA512Digest;
 import org.bouncycastle.crypto.macs.HMac;
 import org.bouncycastle.crypto.params.KeyParameter;
-import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPrivateKey;
-import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPublicKey;
 import org.bouncycastle.jcajce.provider.digest.Keccak;
 import org.bouncycastle.jce.ECNamedCurveTable;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
@@ -675,20 +672,20 @@ public class CryptoUtil {
          * @param address 待判断的地址字符串
          * @return 对应的地址类型枚举，无效地址返回null
          */
-        public static TxSigType getAddressType(String address) {
+        public static AddressType getAddressType(String address) {
             if (address == null || address.trim().isEmpty()) {
                 return null;
             }
             // 优先判断隔离见证地址（Bech32编码）
             if (ECDSASigner.isValidP2WPKHAddress(address)) {
-                return TxSigType.P2WPKH;
+                return AddressType.P2WPKH;
             }else if (ECDSASigner.isValidP2WSHAddress(address)) {
-                return TxSigType.P2WSH;
+                return AddressType.P2WSH;
             }else if (ECDSASigner.isValidP2PKHAddress(address)) {
                 // 再判断Base58编码的地址
-                return TxSigType.P2PKH;
+                return AddressType.P2PKH;
             }else if (ECDSASigner.isValidP2SHAddress(address)) {
-                return TxSigType.P2SH;
+                return AddressType.P2SH;
             }else {
                 // 所有类型均不匹配
                 return null;
@@ -699,7 +696,7 @@ public class CryptoUtil {
          * 获取地址哈希
          */
         public static byte[] getAddressHash(String address) {
-            TxSigType addressType = getAddressType(address);
+            AddressType addressType = getAddressType(address);
             switch (addressType) {
                 case P2PKH:
                     return addressToP2PKH(address);

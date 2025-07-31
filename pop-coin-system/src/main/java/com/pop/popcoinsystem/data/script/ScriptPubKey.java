@@ -22,7 +22,7 @@ public class ScriptPubKey extends Script implements Serializable {
     // P2PKH (Pay-to-Public-Key-Hash) 类型的锁定脚本
     public ScriptPubKey(byte[] pubKeyHash) {
         super();
-        setType(ScriptType.TYPE_P2PKH.getValue());
+        setType(ScriptType.P2PKH.getValue());
         // OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG
         addOpCode(OP_DUP);
         addOpCode(OP_HASH160);
@@ -64,7 +64,7 @@ public class ScriptPubKey extends Script implements Serializable {
     // 创建P2SH (Pay-to-Script-Hash) 类型的锁定脚本
     public static ScriptPubKey createP2SH(byte[] scriptHash) {
         ScriptPubKey script = new ScriptPubKey();
-        script.setType(ScriptType.TYPE_P2SH.getValue());
+        script.setType(ScriptType.P2SH.getValue());
         // OP_HASH160 <scriptHash> OP_EQUAL
         script.addOpCode(OP_HASH160);
         script.addData(scriptHash);
@@ -76,7 +76,7 @@ public class ScriptPubKey extends Script implements Serializable {
     // 创建P2WPKH (Pay-to-Witness-Public-Key-Hash) 类型的锁定脚本
     public static ScriptPubKey createP2WPKH(byte[] pubKeyHash) {
         ScriptPubKey script = new ScriptPubKey();
-        script.setType(ScriptType.TYPE_P2WPKH.getValue());
+        script.setType(ScriptType.P2WPKH.getValue());
 
         // 0 <pubKeyHash>
         script.addOpCode(0); // OP_0
@@ -89,7 +89,7 @@ public class ScriptPubKey extends Script implements Serializable {
     // 创建P2WSH (Pay-to-Witness-Script-Hash) 类型的锁定脚本
     public static ScriptPubKey createP2WSH(byte[] scriptHash) {
         ScriptPubKey script = new ScriptPubKey();
-        script.setType(ScriptType.TYPE_P2WSH.getValue());
+        script.setType(ScriptType.P2WSH.getValue());
         // 0 <scriptHash>
         script.addOpCode(0); // OP_0
         script.addData(scriptHash);
@@ -103,7 +103,7 @@ public class ScriptPubKey extends Script implements Serializable {
             throw new IllegalArgumentException("无效的多重签名参数");
         }
         ScriptPubKey script = new ScriptPubKey();
-        script.setType(ScriptType.TYPE_MULTISIG.getValue());
+        script.setType(ScriptType.MULTISIG.getValue());
         // 添加M
         script.addOpCode(OP_1 + m - 1);
         // 添加所有公钥
@@ -121,7 +121,7 @@ public class ScriptPubKey extends Script implements Serializable {
     // 创建OP_RETURN数据输出
     public static ScriptPubKey createOpReturn(byte[] data) {
         ScriptPubKey script = new ScriptPubKey();
-        script.setType(ScriptType.TYPE_OP_RETURN.getValue());
+        script.setType(ScriptType.OP_RETURN.getValue());
         script.addOpCode(OP_RETURN);
         script.addData(data);
         script.setHash();

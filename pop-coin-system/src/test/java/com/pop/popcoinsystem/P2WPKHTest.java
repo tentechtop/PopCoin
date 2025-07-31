@@ -1,6 +1,6 @@
 package com.pop.popcoinsystem;
 
-import com.pop.popcoinsystem.data.transaction.TxSigType;
+import com.pop.popcoinsystem.data.script.AddressType;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import lombok.extern.slf4j.Slf4j;
 
@@ -40,7 +40,7 @@ public class P2WPKHTest {
         log.info("验证地址是否有效: {}", CryptoUtil.ECDSASigner.isValidP2WPKHAddress(P2WPKHAddress));
         log.info("地址转哈希: {}", CryptoUtil.bytesToHex(Objects.requireNonNull(CryptoUtil.ECDSASigner.addressToP2WPKH(P2WPKHAddress))));
         log.info("公钥转哈希: {}", CryptoUtil.bytesToHex(CryptoUtil.ECDSASigner.createP2PKHByPK(publicKey1.getEncoded())));
-        TxSigType addressType = CryptoUtil.ECDSASigner.getAddressType(P2WPKHAddress);
+        AddressType addressType = CryptoUtil.ECDSASigner.getAddressType(P2WPKHAddress);
         log.info("地址类型: {}", addressType);
 
 

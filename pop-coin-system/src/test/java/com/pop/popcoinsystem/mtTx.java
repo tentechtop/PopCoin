@@ -3,7 +3,7 @@ package com.pop.popcoinsystem;
 import com.pop.popcoinsystem.data.script.Script;
 import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.data.script.ScriptSig;
-import com.pop.popcoinsystem.data.transaction.TxSigType;
+
 import com.pop.popcoinsystem.util.CryptoUtil;
 import lombok.extern.slf4j.Slf4j;
 

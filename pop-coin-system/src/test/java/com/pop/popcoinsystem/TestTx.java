@@ -1,22 +1,12 @@
 package com.pop.popcoinsystem;
 
-import com.pop.popcoinsystem.data.script.Script;
-import com.pop.popcoinsystem.data.script.ScriptPubKey;
-import com.pop.popcoinsystem.data.script.ScriptSig;
-import com.pop.popcoinsystem.data.transaction.TXInput;
-import com.pop.popcoinsystem.data.transaction.TXOutput;
-import com.pop.popcoinsystem.data.transaction.Transaction;
-import com.pop.popcoinsystem.data.transaction.TxSigType;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import lombok.extern.slf4j.Slf4j;
 
 import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
 
 @Slf4j
 public class TestTx {

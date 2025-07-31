@@ -7,6 +7,7 @@ import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.blockChain.BlockChain;
 import com.pop.popcoinsystem.data.enums.SigHashType;
 import com.pop.popcoinsystem.data.miner.Miner;
+import com.pop.popcoinsystem.data.script.Script;
 import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.data.script.ScriptSig;
 import com.pop.popcoinsystem.data.script.ScriptType;
@@ -275,6 +276,9 @@ public class BlockChainService {
                 UDPClient udpClient = kademliaNodeServer.getUdpClient();
                 TransactionMessage transactionKademliaMessage = new TransactionMessage();
                 transactionKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());
+                transactionKademliaMessage.setData(transaction);
+
+
                 NodeInfo nodeInfo = new NodeInfo();
                 nodeInfo.setId(BigInteger.ONE);
                 nodeInfo.setIpv4("192.168.137.102");
@@ -464,29 +468,122 @@ public class BlockChainService {
     }
 
     /**
-     * 验证普通交易
+     * 验证普通交易 P2PKH P2SH
      */
     private boolean validateRegularTransaction(Transaction transaction, Map<String, UTXO> utxoMap) {
-        for (TXInput input : transaction.getInputs()) {
+        List<TXInput> inputs = transaction.getInputs();
+        for (int i = 0; i < inputs.size(); i++) {
+            TXInput input = inputs.get(i);
+
             String utxoKey = getUTXOKey(input.getTxId(), input.getVout());
             UTXO utxo = utxoMap.get(utxoKey);
-
-            // 对输入的UTXO进行摘要
-            byte[] bytes = CryptoUtil.applySHA256(SerializeUtils.serialize(utxo));
-            boolean verify = utxo.getScriptPubKey().verify(
-                    input.getScriptSig(),
-                    bytes,
-                    input.getVout(),
-                    false
-            );
-
-            if (!verify) {
-                log.error("输入的签名无效");
+            if (utxo == null) {
+                log.error("SegWit输入引用的UTXO不存在");
+                return false;
+            }
+            // 验证ScriptPubKey与见证数据  验证输入是否合法
+            boolean verifyResult = verifyScriptPubKey(transaction,input,i,utxo);
+            if (!verifyResult) {
+                log.error("输入 {} 的见证验证失败", i);
                 return false;
             }
         }
         return true;
     }
+
+    private boolean verifyScriptPubKey(Transaction tx, TXInput input,int inputIndex,UTXO utxo) {
+        ScriptPubKey scriptPubKey = utxo.getScriptPubKey();
+        int type = scriptPubKey.getType();//解锁脚本的类型
+        log.info("SegWit脚本类型:{}", type);
+        // 区分SegWit脚本类型（以OP_0开头的通常为P2WPKH或P2WSH）
+        if (type == ScriptType.TYPE_P2WPKH.getValue()) {
+            return verifyP2WPKH(tx, input, inputIndex, utxo);
+        } else if (type == ScriptType.TYPE_P2WSH.getValue()) {
+            return verifyP2WSH(tx, input, inputIndex, utxo);
+        }else if (type == ScriptType.TYPE_P2PKH.getValue()) {
+            return verifyP2PKH(tx, input, inputIndex, utxo);
+        }else if(type == ScriptType.TYPE_P2SH.getValue()){
+            return verifyP2SH(tx, input, inputIndex, utxo);
+        }else {
+            log.error("不支持的SegWit脚本类型");
+            return false;
+        }
+    }
+
+
+    private boolean verifyP2SH(Transaction tx, TXInput input,int inputIndex,UTXO utxo) {
+        log.info("普通交易 验证P2SH");
+        ScriptSig scriptSig = input.getScriptSig();//[签名数据] [赎回脚本]
+        // 赎回脚本为多重签名脚本 [公钥1] [公钥2] [公钥3] 3 OP_CHECKMULTISIG，
+        ScriptPubKey scriptPubKey = utxo.getScriptPubKey(); //OP_HASH160 <ScriptHash> OP_EQUAL
+        //   # 从解锁脚本中提取赎回脚本
+        //   # 计算赎回脚本的哈希值
+
+
+
+
+        return false;
+    }
+
+    private boolean verifyP2PKH(Transaction tx, TXInput input,int inputIndex,UTXO utxo) {
+        ScriptPubKey scriptPubKey = utxo.getScriptPubKey();
+        log.info("验证P2PKH");
+        ScriptSig scriptSig = input.getScriptSig(); //<签名> <公钥>
+        //获取第一个元素
+        List<Script.ScriptElement> elements = scriptSig.getElements();
+        Script.ScriptElement firstElement = elements.get(0);
+        byte[] signature = firstElement.getData();
+        SigHashType sigHashType = SegWitUtils.extractSigHashType(signature);//获取签名的SIGHASH类型
+        log.info("P2PKH签名SIGHASH类型:{}", sigHashType);
+        byte[] realSignature = SegWitUtils.extractOriginalSignature(signature);
+        log.info("P2PKH签名:{}", CryptoUtil.bytesToHex(realSignature));
+
+        //构建交易签名数据
+
+
+
+
+
+
+
+        //这里应该根据签名类型 构建对应的 交易签名数据
+        byte[] txHash = CryptoUtil.applySHA256(SerializeUtils.serialize(utxo));
+        boolean verify = scriptPubKey.verify(scriptSig, txHash, 0, false);
+        if (!verify) {
+            log.error("P2PKH输入的签名无效");
+            return false;
+        }
+        return true;
+    }
+
+
+    private boolean verifyP2WSH(Transaction tx, TXInput input,int inputIndex,UTXO utxo) {
+        log.info("验证P2WSH");
+
+        return false;
+    }
+
+    private boolean verifyP2WPKH(Transaction tx, TXInput input,int inputIndex,UTXO utxo) {
+        // 1. 验证见证数据结构：P2WPKH见证应包含2个元素（签名 + 公钥）
+
+        log.info("P2WPKH脚本验证成功");
+        return true;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     /**
      * 验证隔离见证交易
@@ -515,7 +612,7 @@ public class BlockChainService {
                 return false;
             }
             // 验证ScriptPubKey与见证数据  验证输入是否合法
-            boolean verifyResult = verifyScriptPubKey(transaction,input,i,witness,utxo);
+            boolean verifyResult = verifySegWitScriptPubKey(transaction,input,i,witness,utxo);
             if (!verifyResult) {
                 log.error("SegWit输入 {} 的见证验证失败", i);
                 return false;
@@ -544,7 +641,7 @@ public class BlockChainService {
 
 
 
-    private boolean verifyScriptPubKey(Transaction tx, TXInput input,int inputIndex,Witness witness,UTXO utxo) {
+    private boolean verifySegWitScriptPubKey(Transaction tx, TXInput input,int inputIndex,Witness witness,UTXO utxo) {
         ScriptPubKey scriptPubKey = utxo.getScriptPubKey();
         int type = scriptPubKey.getType();//解锁脚本的类型
         log.info("SegWit脚本类型:{}", type);

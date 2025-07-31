@@ -1,7 +1,6 @@
 package com.pop.popcoinsystem;
 
 import com.pop.popcoinsystem.data.enums.SigHashType;
-import com.pop.popcoinsystem.data.transaction.TxSigType;
 import com.pop.popcoinsystem.util.CryptoUtil;
 
 import java.security.KeyPair;

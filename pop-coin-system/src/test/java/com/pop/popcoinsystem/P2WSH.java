@@ -1,8 +1,8 @@
 package com.pop.popcoinsystem;
 
+import com.pop.popcoinsystem.data.script.AddressType;
 import com.pop.popcoinsystem.data.script.Script;
 import com.pop.popcoinsystem.data.script.ScriptPubKey;
-import com.pop.popcoinsystem.data.script.ScriptSig;
 import com.pop.popcoinsystem.data.transaction.*;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -70,7 +70,7 @@ public class P2WSH {
         log.info("验证地址是否有效: {}", CryptoUtil.ECDSASigner.isValidP2WSHAddress(P2WSHAddress));
         log.info("地址转哈希: {}", CryptoUtil.bytesToHex(Objects.requireNonNull(CryptoUtil.ECDSASigner.addressToP2WSH(P2WSHAddress))));
         log.info("脚本转哈希: {}", CryptoUtil.bytesToHex(CryptoUtil.applySHA256(redeemScript.serialize())));
-        TxSigType addressType = CryptoUtil.ECDSASigner.getAddressType(P2WSHAddress);
+        AddressType addressType = CryptoUtil.ECDSASigner.getAddressType(P2WSHAddress);
         log.info("地址类型: {}", addressType);
 
 

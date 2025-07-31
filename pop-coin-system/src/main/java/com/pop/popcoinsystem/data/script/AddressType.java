@@ -1,10 +1,10 @@
-package com.pop.popcoinsystem.data.transaction;
+package com.pop.popcoinsystem.data.script;
 
 
 import lombok.Getter;
 
 @Getter
-public enum TxSigType {
+public enum AddressType {
     P2PKH(1),           // Pay to Public Key Hash
     P2SH(2),            // Pay to Script Hash
     P2WPKH(3),          // Pay to Witness Public Key Hash
@@ -12,19 +12,19 @@ public enum TxSigType {
 
 
     private final int value;
-    private static final java.util.Map<Integer, TxSigType> map = new java.util.HashMap<>();
+    private static final java.util.Map<Integer, AddressType> map = new java.util.HashMap<>();
 
     static {
-        for (TxSigType type : TxSigType.values()) {
+        for (AddressType type : AddressType.values()) {
             map.put(type.value, type);
         }
     }
 
-    TxSigType(int value) {
+    AddressType(int value) {
         this.value = value;
     }
 
-    public static TxSigType valueOf(int value) {
+    public static AddressType valueOf(int value) {
         return map.get(value);
     }
 }

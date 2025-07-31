@@ -3,17 +3,14 @@ package com.pop.popcoinsystem;
 import com.pop.popcoinsystem.data.script.Script;
 import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.data.script.ScriptSig;
-import com.pop.popcoinsystem.data.transaction.TxSigType;
+import com.pop.popcoinsystem.data.script.AddressType;
 import com.pop.popcoinsystem.util.CryptoUtil;
-import com.pop.popcoinsystem.util.NetworkUtil;
 import lombok.extern.slf4j.Slf4j;
 
-import java.net.InetAddress;
 import java.net.SocketException;
 import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -72,7 +69,7 @@ public class P2SHTEST {
         log.info("验证地址是否有效: {}", CryptoUtil.ECDSASigner.isValidP2SHAddress(P2SHAddress));
         log.info("地址转哈希: {}", CryptoUtil.bytesToHex(Objects.requireNonNull(CryptoUtil.ECDSASigner.addressToP2SH(P2SHAddress))));
         log.info("脚本转哈希: {}", CryptoUtil.bytesToHex(bytes));
-        TxSigType addressType = CryptoUtil.ECDSASigner.getAddressType(P2SHAddress);
+        AddressType addressType = CryptoUtil.ECDSASigner.getAddressType(P2SHAddress);
         log.info("地址类型: {}", addressType);
 
         byte[] txToSign = new byte[32]; //待签名的交易哈希（需按比特币规则生成待签名数据）
