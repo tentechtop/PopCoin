@@ -22,9 +22,6 @@ public enum ColumnFamily {
 
 
 
-
-
-
     //区块链信息  存储一切和区块链有关的信息
     BLOCK_CHAIN("CF_BLOCK_CHAIN", "blockChain",new ColumnFamilyOptions()),
 
@@ -33,6 +30,9 @@ public enum ColumnFamily {
             .setTableFormatConfig(new BlockBasedTableConfig()
                     .setBlockCacheSize(128 * 1024 * 1024) // 64MB 块缓存
                     .setCacheIndexAndFilterBlocks(true)) ),
+
+    //脚本hash_utxoKey - > 金额索引
+    SCRIPT_UTXO("CF_SCRIPT_UTXO", "scriptUtxo",new ColumnFamilyOptions()),
 
 
 

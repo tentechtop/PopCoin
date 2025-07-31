@@ -1297,25 +1297,17 @@ public class Script implements Serializable {
 
 
     }
-
-
     // 类型
     private int type;
-    // hex表示 脚本表示
-    private byte[] hash;
-
     // 提供受保护的设置方法
     protected void setType(int type) {
         this.type = type;
-    }
-    protected void setHash() {
-        this.hash = serialize();
     }
     public int getType() {
         return type;
     }
 
-    public byte[] getHash() {
-        return hash;
+    public byte[] getBytes() {
+        return serialize();
     }
 }

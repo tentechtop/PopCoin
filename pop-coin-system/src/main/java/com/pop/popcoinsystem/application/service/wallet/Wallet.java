@@ -12,6 +12,13 @@ public class Wallet implements Serializable {
     private String privateKeyHex;
     private String publicKeyHex;
 
+    /*测试多签 2-3*/
+    private String privateKeyHex1;
+    private String publicKeyHex1;
+
+    private String privateKeyHex2;
+    private String publicKeyHex2;
+
     //钱包类型
     /**
      * {@link WalletType}

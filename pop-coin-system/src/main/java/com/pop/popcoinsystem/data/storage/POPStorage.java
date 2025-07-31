@@ -3,9 +3,11 @@ package com.pop.popcoinsystem.data.storage;
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.miner.Miner;
+import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.data.transaction.UTXO;
 import com.pop.popcoinsystem.data.transaction.dto.TransactionDTO;
+import com.pop.popcoinsystem.data.vo.result.PageResult;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.data.vo.result.RocksDbPageResult;
 import com.pop.popcoinsystem.network.common.NodeSettings;
@@ -222,8 +224,8 @@ public class POPStorage {
             }
             db.write(writeOptions, writeBatch);
         }catch (RocksDBException e) {
-            log.error("批量保存UTXO信息失败", e);
-            throw new RuntimeException("批量保存UTXO信息失败", e);
+            log.error("批量保存区块信息失败", e);
+            throw new RuntimeException("批量保存区块信息失败", e);
         } finally {
             // 确保资源释放
             if (writeBatch != null) {
@@ -321,18 +323,38 @@ public class POPStorage {
 
 
 
-
+    // 常量定义
+    private static final String UTXO_INDEX_SEPARATOR = "_UTXO_"; // 分隔符
 
     //UTXO操作........................................................................................................
     public void putUTXO(UTXO utxo) {
         byte[] serialize = SerializeUtils.serialize(utxo);
         try {
-            byte[] key = (CryptoUtil.bytesToHex(utxo.getTxId()) + ":" + utxo.getVout()).getBytes();
+            //保存原始UTXO
+            String utxoKey = getUTXOKey(utxo.getTxId(), utxo.getVout());
+            byte[] key = utxoKey.getBytes();
             db.put(ColumnFamily.UTXO.getHandle(),key,serialize );
-            //UTXO总数
+
+            //建立脚本Hash_utxoKey  到 金额的索引
+            ScriptPubKey scriptPubKey = utxo.getScriptPubKey();
+            byte[] scriptKey = CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(scriptPubKey.serialize()));
+
+            // key:<20字节脚本哈希_UTXO_utxoKey> value:<8字节金额>  新的UTXO族列   ColumnFamily.CF_SCRIPT_UTXO.getHandle()
+
+            // 3. 写入脚本哈希-UTXO索引
+            byte[] scriptHash = calculateScriptHash(utxo.getScriptPubKey());
+            String indexKey = generateScriptHashUtxoKey(scriptHash, utxoKey);
+            db.put(ColumnFamily.SCRIPT_UTXO.getHandle(),
+                    indexKey.getBytes(),
+                    amountToBytes(utxo.getValue()));
+
+
+            //更新UTXO总数
             byte[] bytes = db.get(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_UTXO_COUNT);
             long count = bytes == null ? 0 : ByteUtils.bytesToLong(bytes);
             db.put(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_UTXO_COUNT, ByteUtils.toBytes(count + 1));
+
+
         } catch (RocksDBException e) {
             throw new RuntimeException(e);
         }
@@ -348,6 +370,16 @@ public class POPStorage {
                 // 1. 序列化UTXO数据并添加到批量写
                 byte[] utxoData = SerializeUtils.serialize(utxo);
                 writeBatch.put(ColumnFamily.UTXO.getHandle(), utxoKey.getBytes(), utxoData);
+
+
+                // 2. 写入索引
+                byte[] scriptHash = calculateScriptHash(utxo.getScriptPubKey());
+                String indexKey = generateScriptHashUtxoKey(scriptHash, utxoKey);
+                writeBatch.put(ColumnFamily.SCRIPT_UTXO.getHandle(),
+                        indexKey.getBytes(),
+                        amountToBytes(utxo.getValue()));
+
+
             }
             // 执行批量写入
             db.write(writeOptions, writeBatch);
@@ -355,6 +387,8 @@ public class POPStorage {
             byte[] bytes = db.get(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_UTXO_COUNT);
             long count = bytes == null ? 0 : ByteUtils.bytesToLong(bytes);
             db.put(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_UTXO_COUNT, ByteUtils.toBytes(count + batch.size()));
+
+
         }catch (RocksDBException e) {
             log.error("批量保存UTXO信息失败", e);
             throw new RuntimeException("批量保存UTXO信息失败", e);
@@ -368,17 +402,62 @@ public class POPStorage {
     }
     //删除UTXO
     public void deleteUTXO(byte[] txId, int vout) {
+        rwLock.writeLock().lock();
         try {
             String utxoKey = getUTXOKey(txId, vout);
+            // 1. 查询UTXO获取脚本哈希（用于删除索引）
+            UTXO utxo = getUTXO(utxoKey);
+            if (utxo != null) {
+                byte[] scriptHash = calculateScriptHash(utxo.getScriptPubKey());
+                String indexKey = generateScriptHashUtxoKey(scriptHash, utxoKey);
+                db.delete(ColumnFamily.SCRIPT_UTXO.getHandle(), indexKey.getBytes());
+            }
+
+            // 2. 删除原始UTXO
             db.delete(ColumnFamily.UTXO.getHandle(), utxoKey.getBytes());
-            //UTXO总数
-            byte[] bytes = db.get(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_UTXO_COUNT);
-            long count = bytes == null ? 0 : ByteUtils.bytesToLong(bytes);
-            db.put(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_UTXO_COUNT, ByteUtils.toBytes(count - 1));
+
+
+            // 3. 更新UTXO总数
+            byte[] countBytes = db.get(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_UTXO_COUNT);
+            long count = countBytes == null ? 0 : ByteUtils.bytesToLong(countBytes);
+            if (count > 0) {
+                db.put(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_UTXO_COUNT, ByteUtils.toBytes(count - 1));
+            }
+
         } catch (RocksDBException e) {
             throw new RuntimeException(e);
+        }finally {
+            rwLock.writeLock().unlock();
         }
     }
+    public void deleteUTXO(UTXO utxo) {
+        rwLock.writeLock().lock();
+        try {
+            String utxoKey = getUTXOKey(utxo.getTxId(), utxo.getVout());
+            // 1. 查询UTXO获取脚本哈希（用于删除索引）
+            byte[] scriptHash = calculateScriptHash(utxo.getScriptPubKey());
+            String indexKey = generateScriptHashUtxoKey(scriptHash, utxoKey);
+            db.delete(ColumnFamily.SCRIPT_UTXO.getHandle(), indexKey.getBytes());
+
+            // 2. 删除原始UTXO
+            db.delete(ColumnFamily.UTXO.getHandle(), utxoKey.getBytes());
+
+            // 3. 更新UTXO总数
+            byte[] countBytes = db.get(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_UTXO_COUNT);
+            long count = countBytes == null ? 0 : ByteUtils.bytesToLong(countBytes);
+            if (count > 0) {
+                db.put(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_UTXO_COUNT, ByteUtils.toBytes(count - 1));
+            }
+
+        } catch (RocksDBException e) {
+            throw new RuntimeException(e);
+        }finally {
+            rwLock.writeLock().unlock();
+        }
+    }
+
+
+
     //批量删除UTXO
     public void deleteUTXOBatch(List<UTXO> batch) {
         rwLock.writeLock().lock();
@@ -388,9 +467,23 @@ public class POPStorage {
             WriteOptions writeOptions = new WriteOptions();
             for (UTXO utxo: batch) {
                 String utxoKey = getUTXOKey(utxo.getTxId(), utxo.getVout());
+                // 1. 删除索引
+                byte[] scriptHash = calculateScriptHash(utxo.getScriptPubKey());
+                String indexKey = generateScriptHashUtxoKey(scriptHash, utxoKey);
+                writeBatch.delete(ColumnFamily.SCRIPT_UTXO.getHandle(), indexKey.getBytes());
+
                 writeBatch.delete(ColumnFamily.UTXO.getHandle(), utxoKey.getBytes());
             }
             db.write(writeOptions, writeBatch);
+
+
+            // 更新UTXO总数
+            byte[] countBytes = db.get(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_UTXO_COUNT);
+            long count = countBytes == null ? 0 : ByteUtils.bytesToLong(countBytes);
+            long newCount = Math.max(0, count - batch.size());
+            db.put(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_UTXO_COUNT, ByteUtils.toBytes(newCount));
+
+
         }catch (RocksDBException e) {
             log.error("批量删除UTXO信息失败", e);
             throw new RuntimeException("批量删除UTXO信息失败", e);
@@ -485,6 +578,230 @@ public class POPStorage {
         }
     }
 
+
+
+
+    /**
+     * 分页查询指定脚本哈希的UTXO金额
+     * @param scriptHash 20字节脚本哈希
+     * @param pageSize 每页数量(1-5000)
+     * @param lastUtxoKey 上一页最后一个UTXO键(首次查询传null)
+     * @return 分页结果(包含金额列表、最后一个UTXO键、是否为最后一页)
+     */
+    public RocksDbPageResult<Long> queryUtxoAmountsByScriptHash(byte[] scriptHash, int pageSize, String lastUtxoKey) {
+        if (scriptHash == null || scriptHash.length != 20) {
+            throw new IllegalArgumentException("脚本哈希必须为20字节");
+        }
+        if (pageSize <= 0 || pageSize > 5000) {
+            throw new IllegalArgumentException("每页数量必须在1-5000之间");
+        }
+
+        rwLock.readLock().lock();
+        RocksIterator iterator = null;
+        ReadOptions readOptions = null;
+        try {
+            // 1. 构建前缀
+            String scriptHashHex = CryptoUtil.bytesToHex(scriptHash);
+            String prefix = scriptHashHex + UTXO_INDEX_SEPARATOR;
+            byte[] prefixBytes = prefix.getBytes();
+
+            // 2. 配置迭代器
+            readOptions = new ReadOptions().setPrefixSameAsStart(true);
+            iterator = db.newIterator(ColumnFamily.SCRIPT_UTXO.getHandle(), readOptions);
+
+            // 3. 定位起始位置
+            if (lastUtxoKey != null && !lastUtxoKey.isEmpty()) {
+                String startKey = prefix + lastUtxoKey;
+                iterator.seek(startKey.getBytes());
+                // 跳过上一页最后一个键
+                if (iterator.isValid() && new String(iterator.key()).equals(startKey)) {
+                    iterator.next();
+                }
+            } else {
+                iterator.seek(prefixBytes);
+            }
+
+            // 4. 扫描分页数据
+            List<Long> amounts = new ArrayList<>(pageSize);
+            String currentLastUtxoKey = null;
+            int count = 0;
+
+            while (iterator.isValid() && count < pageSize) {
+                byte[] keyBytes = iterator.key();
+                String key = new String(keyBytes);
+
+                // 检查是否仍为当前脚本哈希的前缀
+                if (!key.startsWith(prefix)) {
+                    break;
+                }
+
+                // 提取金额和UTXO键
+                long amount = bytesToAmount(iterator.value());
+                amounts.add(amount);
+
+                // 提取utxoKey(格式: 脚本哈希_UTXO_utxoKey → 截取后半部分)
+                currentLastUtxoKey = key.substring(prefix.length());
+
+                iterator.next();
+                count++;
+            }
+
+            // 判断是否为最后一页
+            boolean isLastPage = count < pageSize;
+            return new RocksDbPageResult<>(amounts, currentLastUtxoKey, isLastPage);
+
+        } catch (Exception e) {
+            log.error("分页查询脚本哈希UTXO金额失败", e);
+            throw new RuntimeException("分页查询失败", e);
+        } finally {
+            if (iterator != null) iterator.close();
+            if (readOptions != null) readOptions.close();
+            rwLock.readLock().unlock();
+        }
+    }
+
+
+    public PageResult<UTXOSearch> selectUtxoAmountsByScriptHash(byte[] scriptHash, int pageSize, String lastUtxoKey) {
+        if (scriptHash == null || scriptHash.length != 20) {
+            throw new IllegalArgumentException("脚本哈希必须为20字节");
+        }
+        if (pageSize <= 0 || pageSize > 5000) {
+            throw new IllegalArgumentException("每页数量必须在1-5000之间");
+        }
+
+        HashSet<String> utxoKeySet = new HashSet<>();
+
+
+        rwLock.readLock().lock();
+        RocksIterator iterator = null;
+        ReadOptions readOptions = null;
+        try {
+            // 1. 构建前缀
+            String scriptHashHex = CryptoUtil.bytesToHex(scriptHash);
+            String prefix = scriptHashHex + UTXO_INDEX_SEPARATOR;
+            byte[] prefixBytes = prefix.getBytes();
+
+            // 2. 配置迭代器
+            readOptions = new ReadOptions().setPrefixSameAsStart(true);
+            iterator = db.newIterator(ColumnFamily.SCRIPT_UTXO.getHandle(), readOptions);
+
+            // 3. 定位起始位置
+            if (lastUtxoKey != null && !lastUtxoKey.isEmpty()) {
+                String startKey = prefix + lastUtxoKey;
+                iterator.seek(startKey.getBytes());
+                // 跳过上一页最后一个键
+                if (iterator.isValid() && new String(iterator.key()).equals(startKey)) {
+                    iterator.next();
+                }
+            } else {
+                iterator.seek(prefixBytes);
+            }
+
+            // 4. 扫描分页数据
+            List<Long> amounts = new ArrayList<>(pageSize);
+            String currentLastUtxoKey = null;
+            int count = 0;
+
+            while (iterator.isValid() && count < pageSize) {
+                byte[] keyBytes = iterator.key();
+                String key = new String(keyBytes);
+
+                // 检查是否仍为当前脚本哈希的前缀
+                if (!key.startsWith(prefix)) {
+                    break;
+                }
+
+                // 提取金额和UTXO键
+                long amount = bytesToAmount(iterator.value());
+                amounts.add(amount);
+
+                // 提取utxoKey(格式: 脚本哈希_UTXO_utxoKey → 截取后半部分)
+                currentLastUtxoKey = key.substring(prefix.length());
+                utxoKeySet.add(currentLastUtxoKey);
+
+                iterator.next();
+                count++;
+            }
+            // 判断是否为最后一页
+            //计算 amounts 总额
+            long total = amounts.stream().mapToLong(Long::longValue).sum();
+            boolean isLastPage = count < pageSize;
+            UTXOSearch utxoSearch = new UTXOSearch();
+            utxoSearch.setTotal(total);
+            utxoSearch.setUtxos(utxoKeySet);
+            return new PageResult<>(utxoSearch, currentLastUtxoKey, isLastPage)  ;
+        } catch (Exception e) {
+            log.error("分页查询脚本哈希UTXO金额失败", e);
+            throw new RuntimeException("分页查询失败", e);
+        } finally {
+            if (iterator != null) iterator.close();
+            if (readOptions != null) readOptions.close();
+            rwLock.readLock().unlock();
+        }
+    }
+
+
+
+
+
+
+
+
+
+    /**
+     * 计算指定脚本哈希的总余额(聪)
+     * @param scriptHash 20字节脚本哈希
+     * @return 总余额
+     */
+    public long calculateBalanceByScriptHash(byte[] scriptHash) {
+        if (scriptHash == null || scriptHash.length != 20) {
+            return 0;
+        }
+
+        rwLock.readLock().lock();
+        RocksIterator iterator = null;
+        ReadOptions readOptions = null;
+        try {
+            String prefix = CryptoUtil.bytesToHex(scriptHash) + UTXO_INDEX_SEPARATOR;
+            readOptions = new ReadOptions().setPrefixSameAsStart(true);
+            iterator = db.newIterator(ColumnFamily.SCRIPT_UTXO.getHandle(), readOptions);
+            iterator.seek(prefix.getBytes());
+
+            long total = 0;
+            while (iterator.isValid()) {
+                String key = new String(iterator.key());
+                if (!key.startsWith(prefix)) {
+                    break;
+                }
+                total += bytesToAmount(iterator.value());
+                iterator.next();
+            }
+            return total;
+
+        } catch (Exception e) {
+            log.error("计算脚本哈希余额失败", e);
+            throw new RuntimeException("计算余额失败", e);
+        } finally {
+            if (iterator != null) iterator.close();
+            if (readOptions != null) readOptions.close();
+            rwLock.readLock().unlock();
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     public Transaction getTransaction(byte[] txId) {
         //根据交易Id查询区块
         byte[] blockHash = getBlockHashByTxId(txId);
@@ -503,9 +820,43 @@ public class POPStorage {
     }
 
 
+    /**
+     * 生成索引键: <20字节脚本哈希(hex)>_UTXO_<utxoKey>
+     * @param scriptHash 20字节脚本哈希
+     * @param utxoKey 原始UTXO键(txid:vout)
+     * @return 索引键字符串
+     */
+    private String generateScriptHashUtxoKey(byte[] scriptHash, String utxoKey) {
+        if (scriptHash.length != 20) {
+            throw new IllegalArgumentException("脚本哈希必须为20字节");
+        }
+        return CryptoUtil.bytesToHex(scriptHash) + UTXO_INDEX_SEPARATOR + utxoKey;
+    }
 
+    /**
+     * 将金额(聪)转换为8字节数组
+     */
+    private byte[] amountToBytes(long amount) {
+        return ByteUtils.toBytes(amount);
+    }
 
+    /**
+     * 将8字节数组转换为金额(聪)
+     */
+    private long bytesToAmount(byte[] bytes) {
+        if (bytes == null || bytes.length != 8) {
+            return 0;
+        }
+        return ByteUtils.bytesToLong(bytes);
+    }
 
+    /**
+     * 计算脚本哈希(20字节): SHA-256 → RIPEMD-160
+     */
+    private byte[] calculateScriptHash(ScriptPubKey scriptPubKey) {
+        byte[] scriptBytes = scriptPubKey.serialize();
+        return CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(scriptBytes));
+    }
 
 
 

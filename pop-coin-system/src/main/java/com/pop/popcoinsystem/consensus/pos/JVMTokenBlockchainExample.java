@@ -1,4 +1,4 @@
-package com.pop.popcoinsystem.data.storage.back;
+package com.pop.popcoinsystem.consensus.pos;
 
 import java.math.BigInteger;
 import java.security.MessageDigest;

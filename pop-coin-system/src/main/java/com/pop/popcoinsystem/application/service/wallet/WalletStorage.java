@@ -133,7 +133,7 @@ public class WalletStorage {
             rwLock.writeLock().unlock();
         }
     }
-    public void saveWalletUTXOBatch(String walletName, HashSet<String> utxoKeyList) {
+    public void saveWalletUTXOBatch(String walletName, Set<String> utxoKeyList) {
         log.info("批量保存钱包 {} 的 UTXO，数量: {}", walletName, utxoKeyList.size());
         rwLock.writeLock().lock();
         WriteBatch writeBatch = null;

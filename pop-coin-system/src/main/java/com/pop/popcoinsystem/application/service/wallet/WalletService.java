@@ -6,8 +6,10 @@ import com.pop.popcoinsystem.application.service.wallet.vo.TransferVO;
 import com.pop.popcoinsystem.application.service.wallet.vo.WalletBalanceVO;
 import com.pop.popcoinsystem.data.enums.SigHashType;
 import com.pop.popcoinsystem.data.script.*;
+import com.pop.popcoinsystem.data.storage.UTXOSearch;
 import com.pop.popcoinsystem.data.transaction.*;
 import com.pop.popcoinsystem.data.transaction.dto.TransactionDTO;
+import com.pop.popcoinsystem.data.vo.result.PageResult;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.data.vo.result.RocksDbPageResult;
 import com.pop.popcoinsystem.exception.InsufficientFundsException;
@@ -258,414 +260,152 @@ public class WalletService {
 
 
 
-    /**
-     * 创建交易  目前仅仅支持 P2PKH P2WPKH
-     * @param transferVO  对方是什么地址，你就得按什么地址的规则发币，这是区块链交易的基础逻辑。
-     * @return
-     */
-    public Result<TransactionDTO> createTransaction(TransferVO transferVO) {
-        String walletName = transferVO.getWalletName();
+    public Result<String> buildWalletUTXO(BuildWalletUTXODTO buildWalletUTXODTO) {
+        // 常量定义：避免硬编码，提高可维护性
+        final int PAGE_SIZE = 5000; // 分页大小，5000更符合常见分页逻辑
+        final int RETRY_COUNT = 3; // 重试次数
+
+        WalletStorage walletStorage = WalletStorage.getInstance();
+        String walletName = buildWalletUTXODTO.getWalletName();
+        Wallet wallet = walletStorage.getWallet(walletName);
+
+        if (wallet == null) {
+            log.error("钱包不存在: {}", walletName);
+            return Result.error("钱包不存在");
+        }
+
         try {
-            WalletStorage instance = WalletStorage.getInstance();
-            Set<String> walletUTXOs = instance.getWalletUTXOs(walletName);
-            Wallet wallet = instance.getWallet(walletName);
-            long availableBalance = wallet.getBalance();
-            if (availableBalance < transferVO.getAmount()) {
-                return Result.error("余额不足");
-            }
-            String toAddress = transferVO.getToAddress();
-            Transaction transaction = createTransactionByAddressType(transferVO, toAddress);
-            blockChainService.verifyAndAddTradingPool(transaction);
-            TransactionDTO transactionDTO = convertTransactionDTO(transaction);
-            return Result.OK(transactionDTO);
-        } catch (UnsupportedAddressException | InsufficientFundsException e) {
-            return Result.error(e.getMessage());
-        } catch (Exception e) {
-            return Result.error("交易创建失败: " + e.getMessage());
-        }
-    }
-    private Transaction createTransactionByAddressType(TransferVO transferVO, String toAddress)
-            throws UnsupportedAddressException {
-        AddressType addressType = CryptoUtil.ECDSASigner.getAddressType(toAddress);
-        switch (addressType) {
-            case P2PKH:
-            case P2SH:
-                return createRegularTransaction(transferVO);
-            case P2WPKH:
-            case P2WSH:
-                return createSegWitTransaction(transferVO);
-            default:
-                throw new UnsupportedAddressException("不支持的地址类型: " + addressType);
-        }
-    }
+            // 1. 准备钱包相关的脚本哈希（支持P2PKH和P2WPKH两种类型）
+            byte[] publicKey = CryptoUtil.hexToBytes(wallet.getPublicKeyHex());
 
+            // P2PKH脚本哈希
+            ScriptPubKey p2PKH = ScriptPubKey.createP2PKH(publicKey);
+            byte[] p2pkhScriptHash = calculateScriptHash(p2PKH);
+            log.info("构建钱包UTXO -> P2PKH脚本: {}", p2PKH.toScripString());
 
-    private Transaction createRegularTransaction(TransferVO transferVO) {
-        WalletStorage instance = WalletStorage.getInstance();
-        Wallet wallet = instance.getWallet(transferVO.getWalletName());
-        String publicKeyHex = wallet.getPublicKeyHex();
-        String privateKeyHex = wallet.getPrivateKeyHex();
-        byte[] publicKeyBytes = CryptoUtil.hexToBytes(publicKeyHex);
-        byte[] privateKeyBytes = CryptoUtil.hexToBytes(privateKeyHex);
-        PrivateKey privateKey = CryptoUtil.ECDSASigner.bytesToPrivateKey(privateKeyBytes);
-        PublicKey publicKey = CryptoUtil.ECDSASigner.bytesToPublicKey(publicKeyBytes);
+            // P2WPKH脚本哈希（原代码遗漏处理，此处补充）
+            byte[] p2wpkhPubKeyHash = CryptoUtil.ECDSASigner.createP2WPKHByPK(publicKey);
+            ScriptPubKey p2WPKH = ScriptPubKey.createP2WPKH(p2wpkhPubKeyHash);
+            byte[] p2wpkhScriptHash = calculateScriptHash(p2WPKH);
+            log.info("构建钱包UTXO -> P2WPKH脚本: {}", p2WPKH.toScripString());
 
+            // 2. 初始化存储容器（使用普通HashSet+同步，比CopyOnWriteArraySet更高效）
+            HashSet<String> walletUTXOs = new HashSet<>();
+            long totalBalance = 0;
 
-        byte[] fromAddressHash = CryptoUtil.ECDSASigner.createP2PKHByPK(publicKeyBytes);
-
-        // 查询钱包可用的UTXO
-        Set<String> walletUTXOs = instance.getWalletUTXOs(transferVO.getWalletName());
-
-        // 用于支付的UTXO key
-        HashSet<String> usedUTXOs = new HashSet<>();
-
-        String toAddress = transferVO.getToAddress();
-        //地址转公钥哈希
-        byte[] toAddressHash = CryptoUtil.ECDSASigner.getAddressHash(toAddress);
-
-
-        long amountToPay = transferVO.getAmount();
-        long totalInputAmount = 0L;
-
-        // 创建交易对象
-        Transaction transaction = new Transaction();
-        ArrayList<TXInput> txInputs = new ArrayList<>();
-        ArrayList<TXOutput> txOutputs = new ArrayList<>();
-
-        // 迭代器用于分批处理UTXO
-        Iterator<String> utxoIterator = walletUTXOs.iterator();
-        boolean enoughFunds = false;
-
-        while (utxoIterator.hasNext() && !enoughFunds) {
-            // 分批获取50个UTXO
-            List<String> batchUTXOs = new ArrayList<>();
-            log.info("batchUTXOs: {}", batchUTXOs);
-            int count = 0;
-            while (utxoIterator.hasNext() && count < 50) {
-                batchUTXOs.add(utxoIterator.next());
-                count++;
-            }
-            log.info("batchUTXOs: {}", batchUTXOs);
-            // 查询UTXO本体并累加金额
-            for (String utxoKey : batchUTXOs) {
-                UTXO utxo = blockChainService.getUTXO(utxoKey);
-                if (utxo != null) {
-                    usedUTXOs.add(utxoKey);
-                    totalInputAmount += utxo.getValue();
-                    // 创建交易输入
-                    TXInput txInput = new TXInput();
-                    txInput.setTxId(utxo.getTxId());
-                    txInput.setVout(utxo.getVout());
-
-                    //根据UTXO 决定是创建 解锁脚本 还是见证数据
-
-                    byte[] txToSign = CryptoUtil.applySHA256(SerializeUtils.serialize(utxo));//对输入引用的UTXO签名 证明我有权力使用这个UTXO
-                    log.info("签名输入 txToSign: {}", CryptoUtil.bytesToHex(txToSign));
-                    //对输入签名
-                    byte[] signature = CryptoUtil.ECDSASigner.applySignature(privateKey, txToSign);
-                    ScriptSig scriptSig = new ScriptSig(signature, publicKey);
-                    txInput.setScriptSig(scriptSig);
-                    txInputs.add(txInput);
-                }
-                // 检查是否足够支付
-                log.info("totalInputAmount: {}", totalInputAmount);
-                log.info("enoughFunds: {}", enoughFunds);
-                if (totalInputAmount >= amountToPay) {
-                    enoughFunds = true;
-                    break;
-                }
-            }
-        }
-
-        // 如果资金不足，处理异常情况
-        if (!enoughFunds) {
-            throw new InsufficientFundsException("可用余额不足");
-        }
-        //设置交易输入
-        transaction.setInputs(txInputs);
-
-        // 创建交易输出 (主输出)
-        TXOutput mainOutput = new TXOutput();
-        mainOutput.setValue(amountToPay);
-        //创建锁定脚本
-        ScriptPubKey pubKey = new ScriptPubKey(toAddressHash);
-        mainOutput.setScriptPubKey(pubKey);
-        txOutputs.add(mainOutput);
-        transaction.setOutputs(txOutputs);
-
-        // 预计算交易大小（不含找零输出）
-        long estimatedSize  = transaction.calculateBaseSize();
-        log.info("这笔交易的预计大小 size: {}", estimatedSize);
-        long estimatedFee = estimatedSize * 1000;
-        long initialChange = totalInputAmount - amountToPay - estimatedFee;
-        if (initialChange > 0) {
-            TXOutput changeOutput = new TXOutput();
-            changeOutput.setValue(initialChange);
-            //转给自己
-            ScriptPubKey pubKey1 = new ScriptPubKey(fromAddressHash);//公钥哈希
-            changeOutput.setScriptPubKey(pubKey1);
-            txOutputs.add(changeOutput);
-            log.info("转给自己: {}", txOutputs);
-
-            // 更新交易输出并重新计算实际大小
-            transaction.setOutputs(txOutputs);
-            long actualSize = transaction.calculateBaseSize();
-            log.info("这笔交易的实际大小 size: {}", actualSize);
-            long actualFee = actualSize * 1000;
-            long actualChange = totalInputAmount - amountToPay - actualFee;
-            log.info("实际费用: {}", actualFee);
-            log.info("实际找零: {}", actualChange);
-
-            // 如果重新计算后找零有变化，进行调整
-            if (actualChange != initialChange) {
-                if (actualChange > 0) {
-                    changeOutput.setValue(actualChange);
-                } else {
-                    // 若重新计算后不需要找零，移除找零输出
-                    txOutputs.remove(changeOutput);
-                    transaction.setOutputs(txOutputs);
-                }
-            }
-        }
-        // 最终确定交易属性
-        transaction.setTime(System.currentTimeMillis());
-        transaction.setSize(transaction.calculateBaseSize());
-        transaction.calculateWeight();
-        transaction.setVersion(1);
-        transaction.setTime(System.currentTimeMillis()/1000);//秒级别
-        transaction.setTxId(Transaction.calculateTxId(transaction));
-        log.info("提交时交易ID:{}", CryptoUtil.bytesToHex(transaction.getTxId()));
-
-        //对于已经使用的UTXO要删除
-        // 查询钱包可用的UTXO  walletUTXOs  - 减去usedUTXOs
-
-        log.info("刚刚使用的UTXO:{}", usedUTXOs);
-        instance.removeWalletUTXOBatch(wallet.getName(), usedUTXOs);
-        return transaction;
-    }
-
-    private Transaction createSegWitTransaction(TransferVO transferVO) {
-        WalletStorage instance = WalletStorage.getInstance();
-        Wallet wallet = instance.getWallet(transferVO.getWalletName());
-        String publicKeyHex = wallet.getPublicKeyHex();
-        String privateKeyHex = wallet.getPrivateKeyHex();
-        byte[] publicKeyBytes = CryptoUtil.hexToBytes(publicKeyHex);
-        byte[] privateKeyBytes = CryptoUtil.hexToBytes(privateKeyHex);
-
-        PrivateKey privateKey = CryptoUtil.ECDSASigner.bytesToPrivateKey(privateKeyBytes);
-        PublicKey publicKey = CryptoUtil.ECDSASigner.bytesToPublicKey(publicKeyBytes);
-
-        byte[] fromAddressHash = CryptoUtil.ECDSASigner.createP2WPKHByPK(publicKeyBytes);//发送者P2WPKH公钥哈希
-
-        String toAddress = transferVO.getToAddress();
-        // 计算公钥哈希
-        byte[] toAddressHash = CryptoUtil.ECDSASigner.getAddressHash(toAddress);//接收者公钥哈希
-
-        // 查询钱包可用的UTXO
-        Set<String> walletUTXOs = instance.getWalletUTXOs(transferVO.getWalletName());
-        // 用于支付的UTXO key
-        HashSet<String> usedUTXOs = new HashSet<>();
-
-        long amountToPay = transferVO.getAmount();
-        long totalInputAmount = 0L;
-
-        // 创建交易对象
-        Transaction transaction = new Transaction();
-        // 启用隔离见证标记
-        transaction.setVersion(2);
-        ArrayList<TXInput> txInputs = new ArrayList<>();
-        ArrayList<TXOutput> txOutputs = new ArrayList<>();
-        // 迭代器用于分批处理UTXO
-        Iterator<String> utxoIterator = walletUTXOs.iterator();
-        boolean enoughFunds = false;
-
-        // 收集所有输入的UTXO信息，用于签名计算
-        List<UTXO> inputUTXOs = new ArrayList<>();
-
-        // 1. 选择输入并收集足够的金额
-        while (utxoIterator.hasNext() && !enoughFunds) {
-            List<String> batchUTXOs = new ArrayList<>();
-            int count = 0;
-            while (utxoIterator.hasNext() && count < 50) {
-                batchUTXOs.add(utxoIterator.next());
-                count++;
-            }
-            // 查询UTXO本体并累加金额
-            for (String utxoKey : batchUTXOs) {
-                UTXO utxo = blockChainService.getUTXO(utxoKey);
-                if (utxo != null) {
-                    usedUTXOs.add(utxoKey);
-                    totalInputAmount += utxo.getValue();
-                    inputUTXOs.add(utxo);
-                    TXInput txInput = new TXInput();
-                    txInput.setTxId(utxo.getTxId());
-                    txInput.setVout(utxo.getVout());
-                    txInput.setScriptSig(null);
-                    txInputs.add(txInput);
-                }
-                // 检查是否足够支付
-                if (totalInputAmount >= amountToPay) {
-                    enoughFunds = true;
-                    break;
-                }
-            }
-        }
-
-        // 如果资金不足，处理异常情况
-        if (!enoughFunds) {
-            throw new InsufficientFundsException("可用余额不足");
-        }
-        // 设置交易输入
-        transaction.setInputs(txInputs);
-        // 2. 创建输出
-        // 主输出 - 支付给目标地址
-        TXOutput mainOutput = new TXOutput();
-        mainOutput.setValue(amountToPay);
-        // 确定输出地址类型并设置相应的锁定脚本
-        AddressType toAddressType = CryptoUtil.ECDSASigner.getAddressType(toAddress);
-        if (toAddressType == AddressType.P2WPKH) {
-            // P2WPKH 锁定脚本: 0 <20-byte key-hash>
-            ScriptPubKey scriptPubKey = ScriptPubKey.createP2WPKH(toAddressHash);
-            mainOutput.setScriptPubKey(scriptPubKey);
-        } else if (toAddressType == AddressType.P2WSH) {
-            // P2WSH 锁定脚本: 0 <32-byte script-hash>
-            byte[] scriptHash = CryptoUtil.ECDSASigner.getAddressHash(toAddress);
-            ScriptPubKey scriptPubKey = ScriptPubKey.createP2WSH(scriptHash);
-            mainOutput.setScriptPubKey(scriptPubKey);
-        } else {
-            throw new UnsupportedAddressException("接收地址类型不支持隔离见证: " + toAddressType);
-        }
-        txOutputs.add(mainOutput);
-        // 计算找零金额
-        long estimatedSize = transaction.calculateBaseSize() + 100L * txInputs.size(); // 预估大小，包含见证数据
-        long estimatedFee = estimatedSize * 1000; // 每字节1000聪的手续费率
-        long changeAmount = totalInputAmount - amountToPay - estimatedFee;
-
-        // 3. 添加找零输出（如果有）
-        if (changeAmount > 0) {
-            TXOutput changeOutput = new TXOutput();
-            changeOutput.setValue(changeAmount);
-            // 创建P2WPKH格式的找零输出
-            ScriptPubKey changeScriptPubKey = ScriptPubKey.createP2WPKH(fromAddressHash);
-            changeOutput.setScriptPubKey(changeScriptPubKey);
-            txOutputs.add(changeOutput);
-        }
-        // 设置交易输出
-        transaction.setOutputs(txOutputs);
-
-        /*交易的主体 和 输出部分全部构造完毕*/
-
-        // 4. 为每个输入创建隔离见证签名
-        List<Witness> witnesses = new ArrayList<>();
-        for (int i = 0; i < txInputs.size(); i++) {
-            TXInput input = txInputs.get(i);//当前输入
-            UTXO utxo = inputUTXOs.get(i);
-            // 创建签名哈希
-            byte[] sigHash = blockChainService.createWitnessSignatureHash(
-                    transaction,
-                    i,
-                    utxo.getValue(),
-                    SigHashType.ALL
+            // 3. 封装分页查询逻辑为工具方法，避免代码重复
+            totalBalance += queryAndCollectUTXOs(
+                    p2pkhScriptHash,
+                    PAGE_SIZE,
+                    RETRY_COUNT,
+                    walletUTXOs,
+                    "P2PKH"
             );
 
-            // 生成ECDSA签名
-            byte[] signature = CryptoUtil.ECDSASigner.applySignature(privateKey, sigHash);
-            byte[] sigHashType = SegWitUtils.createSigHashType(signature, SigHashType.ALL);
-            // 构建见证数据: [签名, 公钥]
-            Witness witness = new Witness();
-            witness.addItem(sigHashType);
-            witness.addItem(publicKeyBytes);
-            witnesses.add(witness);
+            totalBalance += queryAndCollectUTXOs(
+                    p2wpkhScriptHash,
+                    PAGE_SIZE,
+                    RETRY_COUNT,
+                    walletUTXOs,
+                    "P2WPKH"
+            );
+
+            // 4. 批量保存UTXO并更新钱包余额（原子操作）
+            wallet.setBalance(totalBalance);
+            walletStorage.addWallet(wallet);
+            walletStorage.saveWalletUTXOBatch(walletName, walletUTXOs);
+
+            log.info("钱包中的UTXO:{}",walletUTXOs);
+
+            log.info("钱包UTXO构建完成 -> 钱包名: {}, 总UTXO数: {}, 总余额: {}",
+                    walletName, walletUTXOs.size(), totalBalance);
+            return Result.ok("钱包UTXO构建完成，共找到" + walletUTXOs.size() + "个UTXO");
+
+        } catch (Exception e) {
+            log.error("构建钱包UTXO失败 -> 钱包名: {}", walletName, e);
+            return Result.error("构建UTXO失败：" + e.getMessage());
         }
-
-        // 设置交易见证
-        transaction.setWitnesses(witnesses);
-
-        // 5. 最终确定交易属性
-        transaction.setTime(System.currentTimeMillis() / 1000); // 秒级别
-        transaction.setSize(transaction.calculateTotalSize()); // 计算包含见证的总大小
-        transaction.calculateWeight();
-        transaction.setTxId(Transaction.calculateTxId(transaction));
-        log.info("创建时->交易ID: {}", CryptoUtil.bytesToHex(transaction.getTxId()));
-        transaction.setWtxId(Transaction.calculateWtxId(transaction));
-        log.info("创建时时->隔离见证ID:: {}", CryptoUtil.bytesToHex(transaction.getWtxId()));
-
-        log.info("刚刚使用的UTXO{}",usedUTXOs);
-        instance.removeWalletUTXOBatch(wallet.getName(), usedUTXOs);
-        return transaction;
     }
-
-//构造交易
-//如果UTXO的脚本类型是P2PKH  则提供 签名:SigHashType 和 公钥     写入解锁脚本
-//如果UTXO的脚本类型是P2SH   则提供 [签名:SigHashType], 赎回脚本 写入解锁脚本
-//如果UTXO的脚本类型是P2WPKH 则提供 签名:SigHashType 和 公钥     写入见证数据  add(int index, E element) 确保顺序和输入的顺序一致
-//如果UTXO的脚本类型是P2WSH  则提供 [签名:SigHashType], 赎回脚本 写入见证数据  add(int index, E element) 确保顺序和输入的顺序一致
-
-
-
-
-
 
     /**
-     * 构建钱包的UTXO集合
-     * 目前仅仅支持两种地址 P2PKH P2WPKH
+     * 计算脚本哈希（抽取为工具方法，避免重复代码）
      */
-    public Result<String> buildWalletUTXO(BuildWalletUTXODTO buildWalletUTXODTO) {
-        //首先要获取全节点中所有的UTXO集合
-        WalletStorage instance = WalletStorage.getInstance();
-        String walletName = buildWalletUTXODTO.getWalletName();
-        Wallet wallet = instance.getWallet(walletName);
-        String publicKeyHex = wallet.getPublicKeyHex();
-        //遍历节点中全部的UTXO 找到属于该钱包的UTXO
-        byte[] publicKey = CryptoUtil.hexToBytes(publicKeyHex);
-
-        ScriptPubKey p2PKH = ScriptPubKey.createP2PKH(publicKey);
-        log.info("构建钱包的UTXO->P2PKH: {}", p2PKH.toScripString());
-
-        byte[] p2WPKHByPK = CryptoUtil.ECDSASigner.createP2WPKHByPK(publicKey);
-        ScriptPubKey p2WPKH = ScriptPubKey.createP2WPKH(p2WPKHByPK);
-        log.info("构建钱包的UTXO->P2WPKH: {}", p2WPKH.toScripString());
-
-        byte[] hash = p2PKH.getHash();
-        byte[] hash1 = p2WPKH.getHash();
-        //总额
-        long total = 0;
-        String cursor = null; // 字符串类型游标，初始为null
-        boolean hasMore = true;
-        CopyOnWriteArraySet<String> walletUTXOs = new CopyOnWriteArraySet<>();
-        while (hasMore) {
-            try {
-                // 分页查询UTXO，每次请求500个
-                RocksDbPageResult<UTXO> pageResult = blockChainService.queryUTXOPage(500, cursor);
-                List<UTXO> pageUTXOs = pageResult.getData();
-                // 筛选属于该钱包的UTXO
-                for (UTXO utxo : pageUTXOs) {
-                    ScriptPubKey scriptPubKey = utxo.getScriptPubKey();
-                    byte[] scriptPubKeyHash = scriptPubKey.getHash();
-                    if (Arrays.equals(scriptPubKeyHash, hash) || Arrays.equals(scriptPubKeyHash, hash1)) {
-                        String utxoKey = getUTXOKey(utxo.getTxId(), utxo.getVout());
-                        total+=utxo.getValue();
-                        walletUTXOs.add(utxoKey);
-                    }
-                }
-                // 更新游标和判断是否有下一页
-                hasMore = !pageResult.isLastPage();
-                log.info("是否还有下一页"+hasMore);
-                cursor = pageResult.getLastKey();
-                log.info("已处理 {} 个UTXO，找到 {} 个属于钱包 {}",
-                        pageUTXOs.size(), walletUTXOs.size(), walletName);
-
-            } catch (Exception e) {
-                log.error("获取UTXO分页失败", e);
-                hasMore = false;
-            }
-        }
-        wallet.setBalance(total);
-        instance.addWallet(wallet);
-        instance.saveWalletUTXOBatch(walletName, walletUTXOs);
-        log.info("钱包 {} 的UTXO集合构建完成，共找到 {} 个UTXO", walletName, walletUTXOs.size());
-        return Result.ok("正在构建钱包的UTXO集合");
+    private byte[] calculateScriptHash(ScriptPubKey scriptPubKey) {
+        byte[] scriptBytes = scriptPubKey.serialize();
+        return CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(scriptBytes));
     }
+
+    /**
+     * 分页查询并收集指定脚本哈希的UTXO
+     * @param scriptHash 脚本哈希
+     * @param pageSize 分页大小
+     * @param retryCount 重试次数
+     * @param utxoSet 收集UTXO的集合
+     * @param scriptType 脚本类型（用于日志）
+     * @return 该脚本类型对应的总余额
+     */
+    private long queryAndCollectUTXOs(byte[] scriptHash, int pageSize, int retryCount,
+                                      Set<String> utxoSet, String scriptType) {
+        String cursor = null;
+        boolean hasMore = true;
+        long typeBalance = 0;
+        int totalFetched = 0;
+
+        while (hasMore) {
+            PageResult<UTXOSearch> pageResult = null;
+            // 带重试的分页查询
+            for (int i = 0; i < retryCount; i++) {
+                try {
+                    pageResult = blockChainService.selectUtxoAmountsByScriptHash(
+                            scriptHash, pageSize, cursor);
+                    break; // 成功查询则退出重试
+                } catch (Exception e) {
+                    log.warn("查询{} UTXO失败（第{}次重试）-> cursor: {}",
+                            scriptType, i + 1, cursor, e);
+                    if (i == retryCount - 1) {
+                        throw new RuntimeException("超过最大重试次数，查询" + scriptType + " UTXO失败", e);
+                    }
+                    // 重试前短暂休眠
+                    try { Thread.sleep(500 * (i + 1)); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                }
+            }
+
+            if (pageResult == null) {
+                log.error("{} UTXO查询返回空结果 -> cursor: {}", scriptType, cursor);
+                break;
+            }
+
+            UTXOSearch searchResult = pageResult.getData();
+            if (searchResult == null) {
+                log.warn("{} UTXO分页数据为空 -> cursor: {}", scriptType, cursor);
+                break;
+            }
+
+            // 收集UTXO并累加余额
+            Set<String> currentPageUTXOs = searchResult.getUtxos();
+            if (currentPageUTXOs != null && !currentPageUTXOs.isEmpty()) {
+                synchronized (utxoSet) { // 同步操作，避免并发问题
+                    utxoSet.addAll(currentPageUTXOs);
+                }
+                typeBalance += searchResult.getTotal();
+                totalFetched += currentPageUTXOs.size();
+                log.info("{} UTXO分页处理完成 -> 本次获取: {}, 累计: {}, 余额: {}",
+                        scriptType, currentPageUTXOs.size(), totalFetched, typeBalance);
+            }
+
+            // 更新分页状态
+            hasMore = !pageResult.isLastPage();
+            cursor = pageResult.getLastKey();
+        }
+
+        log.info("{} UTXO查询完成 -> 总数量: {}, 总余额: {}",
+                scriptType, totalFetched, typeBalance);
+        return typeBalance;
+    }
+
+
+
+
 
 
     public Result getBalance(WalletBalanceVO walletBalanceVO) {
@@ -706,7 +446,7 @@ public class WalletService {
      * @param transferVO 转账参数
      * @return 交易DTO
      */
-    public Result<TransactionDTO> createTransaction1(TransferVO transferVO) {
+    public Result<TransactionDTO> createTransaction(TransferVO transferVO) {
         String walletName = transferVO.getWalletName();
         try {
             WalletStorage instance = WalletStorage.getInstance();
@@ -719,7 +459,10 @@ public class WalletService {
             String toAddress = transferVO.getToAddress();
             // 统一创建交易，不再区分地址类型
             Transaction transaction = createUniversalTransaction(transferVO, toAddress, walletUTXOs);
-            blockChainService.verifyAndAddTradingPool(transaction);
+            boolean b = blockChainService.verifyAndAddTradingPool(transaction);
+            if (!b) {
+                return Result.error("交易创建失败");
+            }
             TransactionDTO transactionDTO = convertTransactionDTO(transaction);
             return Result.OK(transactionDTO);
         } catch (UnsupportedAddressException | InsufficientFundsException e) {
@@ -738,7 +481,27 @@ public class WalletService {
         Wallet wallet = instance.getWallet(transferVO.getWalletName());
         String publicKeyHex = wallet.getPublicKeyHex();
         String privateKeyHex = wallet.getPrivateKeyHex();
-        byte[] publicKeyBytes = CryptoUtil.hexToBytes(publicKeyHex);
+
+        String publicKeyHex1 = wallet.getPublicKeyHex1();
+        String privateKeyHex1 = wallet.getPrivateKeyHex1();
+
+        String publicKeyHex2 = wallet.getPublicKeyHex2();
+        String privateKeyHex2 = wallet.getPrivateKeyHex2();
+
+        //创建赎回脚本
+        byte[] pubKey1 = CryptoUtil.hexToBytes(publicKeyHex);
+        byte[] pubKey2 = CryptoUtil.hexToBytes(publicKeyHex1);
+        byte[] pubKey3 = CryptoUtil.hexToBytes(publicKeyHex2);
+        List<byte[]> pubKeys = Arrays.asList(
+                pubKey1,
+                pubKey2,
+                pubKey3
+        );
+        ScriptPubKey redeemScript = ScriptPubKey.createMultisig(2, pubKeys);
+        log.info("创建赎回脚本: {}", redeemScript.toScripString());
+
+        byte[] publicKeyBytes = CryptoUtil.hexToBytes(publicKeyHex);//发送者的公钥
+
         byte[] privateKeyBytes = CryptoUtil.hexToBytes(privateKeyHex);
         PrivateKey privateKey = CryptoUtil.ECDSASigner.bytesToPrivateKey(privateKeyBytes);
         PublicKey publicKey = CryptoUtil.ECDSASigner.bytesToPublicKey(publicKeyBytes);
@@ -751,6 +514,8 @@ public class WalletService {
         Transaction transaction = new Transaction();
         List<TXInput> txInputs = new ArrayList<>();
         List<Witness> witnesses = new ArrayList<>(); // 隔离见证数据列表
+        //缓存UTXO
+        HashMap<String, UTXO> UTXOHashMap = new HashMap<>();
         HashSet<String> usedUTXOs = new HashSet<>();
         long totalInputAmount = 0L;
         long amountToPay = transferVO.getAmount();
@@ -765,14 +530,12 @@ public class WalletService {
                 batchUTXOs.add(utxoIterator.next());
                 count++;
             }
-
             for (String utxoKey : batchUTXOs) {
                 UTXO utxo = blockChainService.getUTXO(utxoKey);
+                UTXOHashMap.put(utxoKey, utxo);
                 if (utxo == null) continue;
-
                 // 获取UTXO的脚本类型（核心：根据UTXO脚本类型处理）
                 ScriptPubKey utxoScriptPubKey = utxo.getScriptPubKey();
-                int scriptType = utxoScriptPubKey.getType();
 
                 // 累加金额并标记使用的UTXO
                 usedUTXOs.add(utxoKey);
@@ -783,22 +546,6 @@ public class WalletService {
                 txInput.setTxId(utxo.getTxId());
                 txInput.setVout(utxo.getVout());
 
-                // 根据UTXO类型生成签名和验证数据
-                byte[] sigHash = generateSigHash(transaction, txInputs.size(), utxo, scriptType);
-                byte[] signature = CryptoUtil.ECDSASigner.applySignature(privateKey, sigHash);
-                byte[] sigWithType = SegWitUtils.createSigHashType(signature, SigHashType.ALL);
-
-                // 按脚本类型设置验证数据（解锁脚本或见证）
-                if (isSegWitType(scriptType)) {
-                    // 隔离见证类型：构建见证数据
-                    Witness witness = createWitness(scriptType, sigWithType, publicKeyBytes, utxoScriptPubKey);
-                    witnesses.add(witness);
-                    txInput.setScriptSig(null); // 隔离见证输入的scriptSig为空
-                } else {
-                    // 普通类型：构建解锁脚本
-                    ScriptSig scriptSig = createScriptSig(scriptType, sigWithType, publicKeyBytes, utxoScriptPubKey);
-                    txInput.setScriptSig(scriptSig);
-                }
                 txInputs.add(txInput);
                 // 检查金额是否足够
                 if (totalInputAmount >= amountToPay) {
@@ -807,20 +554,13 @@ public class WalletService {
                 }
             }
         }
-
         // 资金不足校验
         if (!enoughFunds) {
             throw new InsufficientFundsException("可用余额不足");
         }
-
-        // 设置交易输入和见证
+        // 设置交易输入
         transaction.setInputs(txInputs);
-        if (!witnesses.isEmpty()) {
-            transaction.setWitnesses(witnesses);
-            transaction.setVersion(2); // 隔离见证交易版本为2
-        } else {
-            transaction.setVersion(1); // 普通交易版本为1
-        }
+        log.info("交易输入构建完毕: {}", txInputs);
 
         // 构建交易输出
         List<TXOutput> txOutputs = new ArrayList<>();
@@ -829,12 +569,42 @@ public class WalletService {
         mainOutput.setValue(amountToPay);
         mainOutput.setScriptPubKey(createScriptPubKey(toAddressType, toAddressHash));
         txOutputs.add(mainOutput);
-
         // 计算手续费和找零
         calculateAndAddChange(transaction, txOutputs, totalInputAmount, amountToPay, publicKeyBytes, ScriptType.P2WSH.getValue());
-
         transaction.setOutputs(txOutputs);
+        log.info("交易输出构建完毕: {}", txOutputs);
 
+        //构建交易的输入的解锁脚本或者见证数据
+        for (int i = 0; i < txInputs.size(); i++) {
+            TXInput txInput = txInputs.get(i);
+            UTXO utxo = UTXOHashMap.get(getUTXOKey(txInput.getTxId(), txInput.getVout()));
+            if (utxo == null){
+                throw new InsufficientFundsException("UTXO不存在");
+            }
+            ScriptPubKey scriptPubKey = utxo.getScriptPubKey();
+            int scriptType = scriptPubKey.getType();
+            byte[] sigHash = generateSigHash(transaction, i, utxo, scriptType);
+            log.info("生成需要签名数据: {}", CryptoUtil.bytesToHex(sigHash));
+            byte[] originalSignature = CryptoUtil.ECDSASigner.applySignature(privateKey, sigHash);
+            byte[] signature = SegWitUtils.createSigHashType(originalSignature, SigHashType.ALL);
+            if (isSegWitType(scriptType)) {
+                log.info("UTXO是隔离见证交易发行的 构建隔离见证数据: {}", CryptoUtil.bytesToHex(signature));
+                // 隔离见证类型：构建见证数据
+                Witness witness = createWitness(scriptType, signature, publicKeyBytes, scriptPubKey,null,null);
+                witnesses.add(i,witness);
+                txInput.setScriptSig(null); // 隔离见证输入的scriptSig为空
+            }else {
+                //普通交易发行的UTXO
+                ScriptSig scriptSig = createScriptSig(scriptType, signature, publicKeyBytes, scriptPubKey,null,null);
+                txInput.setScriptSig(scriptSig);
+            }
+        }
+        if (!witnesses.isEmpty()) {
+            transaction.setWitnesses(witnesses);
+            transaction.setVersion(2); // 隔离见证交易版本为2
+        } else {
+            transaction.setVersion(1); // 普通交易版本为1
+        }
         // 交易最终属性设置
         transaction.setTime(System.currentTimeMillis() / 1000);
         transaction.setSize(transaction.calculateTotalSize());
@@ -851,7 +621,7 @@ public class WalletService {
         return transaction;
     }
 
-// ------------------------------ 辅助方法 ------------------------------
+    // ------------------------------ 辅助方法 ------------------------------
 
     /**
      * 判断UTXO脚本类型是否为隔离见证
@@ -860,27 +630,52 @@ public class WalletService {
         return scriptType == ScriptType.P2WPKH.getValue() || scriptType == ScriptType.P2WSH.getValue();
     }
 
-    /**
-     * 生成签名哈希
-     */
-    private byte[] generateSigHash(Transaction tx, int inputIndex, UTXO utxo, int scriptType) {
-        if (isSegWitType(scriptType)) {
-            return blockChainService.createWitnessSignatureHash(tx, inputIndex, utxo.getValue(), SigHashType.ALL);
-        } else {
-            return CryptoUtil.applySHA256(SerializeUtils.serialize(utxo));
+
+
+
+    public Witness createWitness(int scriptTypeInt, byte[] signature, byte[] pubKey, ScriptPubKey utxoScript, List<byte[]> signatures, Script redeemScript  ) {
+        Witness witness = new Witness();
+        ScriptType scriptType = ScriptType.valueOf(scriptTypeInt);
+        if (scriptType == null) {
+            throw new UnsupportedAddressException("不支持的隔离见证类型: " + scriptTypeInt);
         }
+        switch (scriptType) {
+            case P2WPKH:
+                witness.addItem(signature);
+                witness.addItem(pubKey);
+                break;
+            case P2WSH:
+                //[
+                //  OP_0,  // 占位符（兼容CHECKMULTISIG的历史bug）
+                //  <签名1>,  // 公钥1对应的私钥签名
+                //  <签名2>,  // 公钥2对应的私钥签名
+                //  <见证脚本>  // 即2 <公钥1> <公钥2> <公钥3> 3 CHECKMULTISIG
+                //]
+                ScriptSig p2WSH = ScriptSig.createP2WSH(signatures, redeemScript);
+                List<Script.ScriptElement> elements = p2WSH.getElements();
+                for (Script.ScriptElement element : elements) {
+                    if (element.isOpCode()) {
+                        witness.addItem(ByteUtils.intToBytes(element.getOpCode()));
+                    } else {
+                        witness.addItem(element.getData());
+                    }
+                }
+                break;
+            default:
+                throw new UnsupportedAddressException("不支持的隔离见证类型: " + scriptTypeInt);
+        }
+        return witness;
     }
+
 
     /**
      * 创建普通交易的解锁脚本
      */
-    private ScriptSig createScriptSig(int scriptType, byte[] signature, byte[] pubKey, ScriptPubKey utxoScript) {
+    private ScriptSig createScriptSig(int scriptType, byte[] signature, byte[] pubKey, ScriptPubKey utxoScript, List<byte[]> signatures, Script redeemScript) {
         switch (ScriptType.valueOf(scriptType)) {
             case P2PKH:
                 return new ScriptSig(signature, pubKey);
             case P2SH:
-                Script redeemScript = new Script();
-                List<byte[]> signatures  = null;
                 return ScriptSig.createP2SH(signatures, redeemScript);
             default:
                 throw new UnsupportedAddressException("不支持的普通脚本类型: " + scriptType);
@@ -888,31 +683,17 @@ public class WalletService {
     }
 
     /**
-     * 创建隔离见证的见证数据
+     * 生成签名哈希
      */
-    public Witness createWitness(int scriptTypeInt, byte[] signature, byte[] pubKey, ScriptPubKey utxoScript) {
-        Witness witness = new Witness();
-        // 1. 将int转换为ScriptType枚举（注意处理无效值的情况）
-        ScriptType scriptType = ScriptType.valueOf(scriptTypeInt);
-        if (scriptType == null) {
-            throw new UnsupportedAddressException("不支持的隔离见证类型: " + scriptTypeInt);
-        }
-        // 2. 以枚举为switch表达式，直接使用枚举常量作为case标签
-        switch (scriptType) {
-            case P2SH:  // 直接使用枚举常量，无需getValue()
-                witness.addItem(signature);
-                witness.addItem(pubKey);
-                break;
-            case P2WSH:  // 对应原代码中的case 4（TYPE_P2WSH的value是4）
-                witness.addItem(signature);
-                byte[] redeemScript = null;  // 注意：这里传入null可能有问题，需确认业务逻辑
-                witness.addItem(redeemScript);
-                break;
-            default:
-                throw new UnsupportedAddressException("不支持的隔离见证类型: " + scriptTypeInt);
-        }
-        return witness;
+    private byte[] generateSigHash(Transaction tx, int inputIndex, UTXO utxo, int scriptType) {
+        return blockChainService.createWitnessSignatureHash(tx, inputIndex, utxo.getValue(), SigHashType.ALL);
+/*        if (isSegWitType(scriptType)) {
+            return blockChainService.createWitnessSignatureHash(tx, inputIndex, utxo.getValue(), SigHashType.ALL);
+        } else {
+            return CryptoUtil.applySHA256(SerializeUtils.serialize(utxo));
+        }*/
     }
+
 
     /**
      * 创建输出锁定脚本
@@ -943,27 +724,11 @@ public class WalletService {
 
         // 找零地址类型与发送者UTXO类型一致
         AddressType changeType = isSegWitType(scriptType) ? AddressType.P2WPKH : AddressType.P2PKH;
-        byte[] changeHash = isSegWitType(scriptType)
-                ? CryptoUtil.ECDSASigner.createP2WPKHByPK(pubKeyBytes)
-                : CryptoUtil.ECDSASigner.createP2PKHByPK(pubKeyBytes);
-
+        byte[] changeHash = isSegWitType(scriptType) ? CryptoUtil.ECDSASigner.createP2WPKHByPK(pubKeyBytes) : CryptoUtil.ECDSASigner.createP2PKHByPK(pubKeyBytes);
         TXOutput changeOutput = new TXOutput();
         changeOutput.setValue(change);
         changeOutput.setScriptPubKey(createScriptPubKey(changeType, changeHash));
         outputs.add(changeOutput);
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 }

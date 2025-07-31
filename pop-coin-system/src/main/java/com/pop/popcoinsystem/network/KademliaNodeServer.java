@@ -260,6 +260,9 @@ public class KademliaNodeServer {
     public void broadcastMessage(TransactionMessage transactionKademliaMessage) {
         //将消息发送给已知节点
         List<ExternalNodeInfo> closest = this.getRoutingTable().findClosest(this.nodeInfo.getId());
+        //去除自己
+        closest.removeIf(node -> node.getId().equals(this.nodeInfo.getId()));
+        log.info("开始泛洪广播消息: {}",closest);
         for (ExternalNodeInfo externalNodeInfo: closest) {
             try {
                 transactionKademliaMessage.setReceiver(BeanCopyUtils.copyObject(externalNodeInfo, NodeInfo.class));
@@ -272,7 +275,7 @@ public class KademliaNodeServer {
 
 
     /**
-     * 路由表隔离
+     * 路由表管理 定期刷新路由表 将不活跃的路由表清除
      */
 
 

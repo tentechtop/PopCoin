@@ -24,7 +24,7 @@ import lombok.Setter;
  */
 
 
-@Data
+@Getter
 public enum ScriptType {
     P2PKH(1, "pubkeyhash"),
     P2SH(2, "scripthash"),

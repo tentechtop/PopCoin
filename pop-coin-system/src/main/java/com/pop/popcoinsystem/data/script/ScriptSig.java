@@ -26,7 +26,7 @@ public class ScriptSig extends Script implements Serializable {
         // 添加嵌入的文本（如果有）
         addOpCode(OP_RETURN);
         addData(embeddedMessage);
-        setHash();
+        
     }
 
 
@@ -38,7 +38,7 @@ public class ScriptSig extends Script implements Serializable {
         if (publicKey != null){
             addData(publicKey.getEncoded());
         }
-        setHash();
+        
     }
 
     public ScriptSig( byte[] signature,byte[] publicKey) {
@@ -47,7 +47,7 @@ public class ScriptSig extends Script implements Serializable {
         addData(signature);
         // 添加公钥哈希
         addData(publicKey);
-        setHash();
+        
     }
 
 
@@ -59,7 +59,7 @@ public class ScriptSig extends Script implements Serializable {
         // 添加公钥
         addData(publicKey.getEncoded());
         // 添加嵌入的文本（如果有）
-        setHash();
+        
     }
 
 
@@ -88,7 +88,6 @@ public class ScriptSig extends Script implements Serializable {
         //对交易进行签名
         byte[] signature = CryptoUtil.ECDSASigner.applySignature(privateKey, bytes);
         ScriptSig scriptSig = new ScriptSig(signature, publicKey);
-        scriptSig.setHash();
         return scriptSig;
     }
 
@@ -100,7 +99,6 @@ public class ScriptSig extends Script implements Serializable {
         //对交易进行签名
         byte[] signature = CryptoUtil.ECDSASigner.applySignature(privateKey, bytes);
         ScriptSig scriptSig = new ScriptSig(signature, publicKey);
-        scriptSig.setHash();
         return scriptSig;
     }
 
@@ -124,7 +122,6 @@ public class ScriptSig extends Script implements Serializable {
                 script.addData(element.getData());
             }
         }*/
-        script.setHash();
         return script;
     }
 
@@ -147,7 +144,6 @@ public class ScriptSig extends Script implements Serializable {
                 script.addData(element.getData());
             }
         }*/
-        script.setHash();
         return script;
     }
 
@@ -160,7 +156,6 @@ public class ScriptSig extends Script implements Serializable {
         script.addData(signature);
         // 添加公钥哈希
         script.addData(publicKey);
-        script.setHash();
         return script;
     }
 

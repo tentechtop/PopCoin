@@ -57,6 +57,8 @@ public class P2SHTEST {
                 pubKey4.getEncoded()
         );
         ScriptPubKey multisig = ScriptPubKey.createMultisig(4, pubKeys);//构造赎回脚本  （Redeem Script）：  OP_2 <公钥1> <公钥2> <公钥3> OP_3 OP_CHECKMULTISIG
+
+
         log.info("脚本格式:"+multisig.toScripString());
 
 

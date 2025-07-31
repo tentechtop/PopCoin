@@ -29,15 +29,12 @@ public class ScriptPubKey extends Script implements Serializable {
         addData(pubKeyHash);
         addOpCode(OP_EQUALVERIFY);
         addOpCode(OP_CHECKSIG);
-        // 计算hex表示
-        setHash();
     }
 
 
     // 从公钥生成P2PKH锁定脚本
     public static ScriptPubKey createP2PKH(byte[] publicKey) {
         byte[] pubKeyHash = CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(publicKey));
-        log.info("锁定脚本公钥哈希: " + CryptoUtil.bytesToHex(pubKeyHash));
         return new ScriptPubKey(pubKeyHash);
     }
 
@@ -69,7 +66,7 @@ public class ScriptPubKey extends Script implements Serializable {
         script.addOpCode(OP_HASH160);
         script.addData(scriptHash);
         script.addOpCode(OP_EQUAL);
-        script.setHash();
+        
         return script;
     }
 
@@ -82,7 +79,7 @@ public class ScriptPubKey extends Script implements Serializable {
         script.addOpCode(0); // OP_0
         script.addData(pubKeyHash);
 
-        script.setHash();
+        
         return script;
     }
 
@@ -93,7 +90,7 @@ public class ScriptPubKey extends Script implements Serializable {
         // 0 <scriptHash>
         script.addOpCode(0); // OP_0
         script.addData(scriptHash);
-        script.setHash();
+        
         return script;
     }
 
@@ -103,7 +100,7 @@ public class ScriptPubKey extends Script implements Serializable {
             throw new IllegalArgumentException("无效的多重签名参数");
         }
         ScriptPubKey script = new ScriptPubKey();
-        script.setType(ScriptType.MULTISIG.getValue());
+        script.setType(ScriptType.P2SH.getValue());
         // 添加M
         script.addOpCode(OP_1 + m - 1);
         // 添加所有公钥
@@ -114,7 +111,7 @@ public class ScriptPubKey extends Script implements Serializable {
         script.addOpCode(OP_1 + publicKeys.size() - 1);
         // 添加OP_CHECKMULTISIG
         script.addOpCode(OP_CHECKMULTISIG);
-        script.setHash();
+        
         return script;
     }
 
@@ -124,7 +121,7 @@ public class ScriptPubKey extends Script implements Serializable {
         script.setType(ScriptType.OP_RETURN.getValue());
         script.addOpCode(OP_RETURN);
         script.addData(data);
-        script.setHash();
+        
         return script;
     }
 
