@@ -2,16 +2,11 @@ package com.pop.popcoinsystem.service;
 
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.miner.Miner;
-import com.pop.popcoinsystem.data.storage.POPStorage;
-import com.pop.popcoinsystem.data.transaction.TXInput;
-import com.pop.popcoinsystem.data.transaction.TXOutput;
+import com.pop.popcoinsystem.storage.POPStorage;
 import com.pop.popcoinsystem.data.transaction.Transaction;
-import com.pop.popcoinsystem.data.transaction.UTXO;
 import com.pop.popcoinsystem.data.vo.result.Result;
-import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.DifficultyUtils;
-import com.pop.popcoinsystem.util.SerializeUtils;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,10 +17,6 @@ import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-
 
 
 /**
@@ -77,7 +68,7 @@ public class MiningService {
     //是否启动挖矿服务 用于停止挖矿的标志
     public static boolean isMining = false;
     // 难度调整周期的区块数量
-    private static final int DIFFICULTY_ADJUSTMENT_INTERVAL = 24;//2016大概两周调整一次  144一天调整一次 2小时
+    private static final int DIFFICULTY_ADJUSTMENT_INTERVAL = 2016;//2016大概两周调整一次  144一天调整一次 2小时
     //区块生成时间
     private static final long BLOCK_GENERATION_TIME = 30; //600是600秒 10分钟
     //货币总供应量

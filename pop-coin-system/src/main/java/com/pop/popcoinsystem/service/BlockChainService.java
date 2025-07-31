@@ -1,5 +1,6 @@
 package com.pop.popcoinsystem.service;
 
+import com.lmax.disruptor.EventHandler;
 import com.pop.popcoinsystem.application.service.wallet.Wallet;
 import com.pop.popcoinsystem.application.service.wallet.WalletStorage;
 import com.pop.popcoinsystem.data.block.Block;
@@ -11,8 +12,8 @@ import com.pop.popcoinsystem.data.script.Script;
 import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.data.script.ScriptSig;
 import com.pop.popcoinsystem.data.script.ScriptType;
-import com.pop.popcoinsystem.data.storage.POPStorage;
-import com.pop.popcoinsystem.data.storage.UTXOSearch;
+import com.pop.popcoinsystem.storage.POPStorage;
+import com.pop.popcoinsystem.storage.UTXOSearch;
 import com.pop.popcoinsystem.data.transaction.*;
 import com.pop.popcoinsystem.data.transaction.dto.TXInputDTO;
 import com.pop.popcoinsystem.data.transaction.dto.TXOutputDTO;
@@ -22,11 +23,12 @@ import com.pop.popcoinsystem.data.vo.result.PageResult;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.data.vo.result.RocksDbPageResult;
 import com.pop.popcoinsystem.network.KademliaNodeServer;
-import com.pop.popcoinsystem.network.UDPClient;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.common.NodeSettings;
 import com.pop.popcoinsystem.network.enums.NodeType;
+import com.pop.popcoinsystem.network.protocol.message.BlockMessage;
 import com.pop.popcoinsystem.network.protocol.message.TransactionMessage;
+import com.pop.popcoinsystem.network.protocol.messageHandler.TransactionEvent;
 import com.pop.popcoinsystem.util.*;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -38,13 +40,13 @@ import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.*;
 
-import static com.pop.popcoinsystem.data.storage.POPStorage.getUTXOKey;
+import static com.pop.popcoinsystem.storage.POPStorage.getUTXOKey;
 import static com.pop.popcoinsystem.data.transaction.Transaction.calculateBlockReward;
 import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
 
 @Slf4j
 @Service
-public class BlockChainService {
+public class BlockChainService implements EventHandler<TransactionEvent> {
     // 最低交易输出金额（防止粉尘交易，参考比特币粉尘限制）
     private static final long MIN_TRANSACTION_OUTPUT_AMOUNT = 10000;
     //MAX_BLOCK_WEIGHT
@@ -60,6 +62,31 @@ public class BlockChainService {
     private MiningService miningService;
 
     private KademliaNodeServer kademliaNodeServer;
+
+
+
+
+
+
+    @Override
+    public void onEvent(TransactionEvent event, long sequence, boolean endOfBatch) {
+        Transaction transaction = event.getTransaction();
+        log.info("Disruptor处理交易事件，sequence: {}, 交易ID: {}", sequence, CryptoUtil.bytesToHex(transaction.getTxId()));
+        try {
+            // 处理交易（验证并添加到交易池）
+            verifyAndAddTradingPool(transaction);
+        } catch (Exception e) {
+            log.error("交易事件处理失败", e);
+        }
+    }
+
+
+
+
+
+
+
+
 
     @PostConstruct
     private void initBlockChain() throws Exception {
@@ -164,6 +191,11 @@ public class BlockChainService {
         miningService.startMining();
     }
 
+
+
+
+
+
     /**
      * 启动网络节点
      */
@@ -219,10 +251,11 @@ public class BlockChainService {
                 log.info("节点信息:{}", nodeSetting);
                 kademliaNodeServer = new KademliaNodeServer(nodeSetting.getId(), localIp, udpPort, tcpPort);
                 kademliaNodeServer.start();
+                kademliaNodeServer.setBlockChainService(this);
 
                 NodeInfo nodeInfo = new NodeInfo();
                 nodeInfo.setId(BigInteger.ONE);
-                nodeInfo.setIpv4("192.168.181.136");
+                nodeInfo.setIpv4("192.168.137.102");
                 nodeInfo.setTcpPort(8334);
                 nodeInfo.setUdpPort(8333);
                 kademliaNodeServer.connectToBootstrapNodes(nodeInfo);
@@ -586,14 +619,13 @@ public class BlockChainService {
      * 交易验证成功后 广播交易 如果本节点是矿工节点 则再添加到交易池 由矿工打包
      */
     public boolean verifyAndAddTradingPool(Transaction transaction) {
-        log.info("您的交易已提交,正在 验证交易...");
+        log.info("您的交易已提交,正在验证交易...");
         if (verifyTransaction(transaction)) {
             // 验证成功，将交易添加到交易池
             miningService.addTransaction(transaction);
             //广播交易
             new Thread(() -> {
                 log.info("交易验证成功,广播交易");
-                UDPClient udpClient = kademliaNodeServer.getUdpClient();
                 TransactionMessage transactionKademliaMessage = new TransactionMessage();
                 transactionKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());
                 transactionKademliaMessage.setData(transaction);
@@ -641,7 +673,11 @@ public class BlockChainService {
         //广播区块
         new Thread(() -> {
             log.info("区块验证成功,广播区块");
-        });
+            BlockMessage blockMessage = new BlockMessage();
+            blockMessage.setSender(kademliaNodeServer.getNodeInfo());
+            blockMessage.setData(block);
+            kademliaNodeServer.broadcastMessage(blockMessage);
+        }).start();
         return true;
     }
 
@@ -1528,4 +1564,6 @@ public class BlockChainService {
         }
         return Result.ok(stringTransactionDTOHashMap);
     }
+
+
 }

@@ -9,6 +9,8 @@ import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.TransactionMessage;
 import com.pop.popcoinsystem.network.protocol.messageHandler.*;
+import com.pop.popcoinsystem.service.BlockChainService;
+import com.pop.popcoinsystem.service.DisruptorManager;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
@@ -23,7 +25,7 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.*;
 
 
-
+import jakarta.annotation.PreDestroy;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
@@ -31,6 +33,8 @@ import java.math.BigInteger;
 import java.net.InetSocketAddress;
 import java.util.*;
 import java.util.concurrent.*;
+
+import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
 
 @Slf4j
 @Data
@@ -68,6 +72,11 @@ public class KademliaNodeServer {
     private EventLoopGroup workerGroup;
     private ServerBootstrap tcpBootstrap;
 
+    private DisruptorManager disruptorManager;
+    private BlockChainService blockChainService;
+
+    // 在KademliaNodeServer的start()方法中初始化定时任务
+    private ScheduledExecutorService scheduler;
 
     //主要用于异步操作的状态追踪。
     private ChannelFuture udpBindFuture;
@@ -86,13 +95,14 @@ public class KademliaNodeServer {
         this.nodeInfo = NodeInfo.builder().id(id).ipv4(ipv4).udpPort(udpPort).tcpPort(tcpPort).build();
         this.externalNodeInfo = BeanCopyUtils.copyObject(nodeInfo, ExternalNodeInfo.class);
         //补充数据 如网络类型
-
         this.nodeSettings = NodeSettings.Default.build();
         init();
     }
 
     private void init() {
         routingTable = new RoutingTable(nodeInfo.getId(), nodeSettings);
+        routingTable.recoverFromNodeList();
+
         //注册消息处理器
         this.registerMessageHandler(MessageType.EMPTY.getCode(), new EmptyMessageHandler());
         this.registerMessageHandler(MessageType.PING.getCode(), new PingMessageHandler());
@@ -102,7 +112,7 @@ public class KademliaNodeServer {
         this.registerMessageHandler(MessageType.HANDSHAKE_RES.getCode(), new HandshakeResponseMessageHandle());
         this.registerMessageHandler(MessageType.HANDSHAKE_REQ.getCode(), new HandshakeRequestMessageHandle());
         this.registerMessageHandler(MessageType.TRANSACTION.getCode(), new TransactionMessageHandler());
-
+        this.registerMessageHandler(MessageType.BLOCK.getCode(), new BlockMessageHandler());
         this.registerMessageHandler(MessageType.SHUTDOWN.getCode(), new ShutdownMessageHandler());
 
         //初始化UDP客户端
@@ -122,13 +132,26 @@ public class KademliaNodeServer {
             // 启动服务
             startUdpDiscovererServer();
             startTcpTransmitServer();
-
             running = true;
+
+            scheduler = Executors.newSingleThreadScheduledExecutor();
+            scheduler.scheduleAtFixedRate(() -> {
+
+            }, 0, 30, TimeUnit.SECONDS);
         } catch (Exception e) {
             log.error("KademliaNode start error", e);
             stop();
         }
     }
+
+
+
+
+
+
+
+
+
 
     // UDP服务 - 节点发现
     public void startUdpDiscovererServer() {
@@ -221,9 +244,12 @@ public class KademliaNodeServer {
     }
 
 
+    @PreDestroy
     public void stop() throws InterruptedException {
         this.running = false;
-
+        if (scheduler != null){
+            scheduler.shutdown(); // 优雅关闭
+        }
         if (udpBindFuture != null) {
             udpBindFuture.channel().closeFuture().sync();
         }
@@ -257,7 +283,7 @@ public class KademliaNodeServer {
             }
     }
 
-    public void broadcastMessage(TransactionMessage transactionKademliaMessage) {
+    public void broadcastMessage(KademliaMessage kademliaMessage) {
         //将消息发送给已知节点
         List<ExternalNodeInfo> closest = this.getRoutingTable().findClosest(this.nodeInfo.getId());
         //去除自己
@@ -265,8 +291,8 @@ public class KademliaNodeServer {
         log.info("开始泛洪广播消息: {}",closest);
         for (ExternalNodeInfo externalNodeInfo: closest) {
             try {
-                transactionKademliaMessage.setReceiver(BeanCopyUtils.copyObject(externalNodeInfo, NodeInfo.class));
-                udpClient.sendAsyncMessage(transactionKademliaMessage);
+                kademliaMessage.setReceiver(BeanCopyUtils.copyObject(externalNodeInfo, NodeInfo.class));
+                udpClient.sendAsyncMessage(kademliaMessage);
             }catch (Exception e){
                 log.error("Error when sending message to node: {}", externalNodeInfo.getId(), e);
             }
@@ -275,8 +301,24 @@ public class KademliaNodeServer {
 
 
     /**
-     * 路由表管理 定期刷新路由表 将不活跃的路由表清除
+     * 维护网络 刷新已知节点
      */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -286,10 +328,10 @@ public class KademliaNodeServer {
             // 序列化消息
             byte[] data = KademliaMessage.serialize(kademliaMessage);
             // 创建 ByteBuf 并写入消息数据
-            ByteBuf buf = Unpooled.buffer(data.length + 12); // 4(类型) + 4(总长) + 4(内容长)
+            ByteBuf buf = Unpooled.buffer(data.length + 12); // 4(类型) + 4(网络版本) + 4(内容长)
             buf.writeInt(kademliaMessage.getType());  // 写入消息类型 4
-            //写入消息总长
-            buf.writeInt(12 + data.length);//4
+            //写入网络版本
+            buf.writeInt(POP_NET_VERSION);//4
             //写入内容长度
             buf.writeInt(data.length);//4
             //写入内容
@@ -318,8 +360,12 @@ public class KademliaNodeServer {
             int messageType = byteBuf.readInt();
             log.info("消息类型:{}", MessageType.getDescriptionByCode(messageType));
             // 读取总长度（内容长度字段 + 内容长度）
-            int totalLength = byteBuf.readInt();
-            log.info("总长度:{}", totalLength);
+            int netVersion = byteBuf.readInt();
+            log.info("网络版本:{}", netVersion);
+            //是否和我的网络版本一致
+
+
+
             // 读取内容长度
             int contentLength = byteBuf.readInt();
             log.info("内容长度:{}", contentLength);
@@ -356,8 +402,8 @@ public class KademliaNodeServer {
                 byte[] data = KademliaMessage.serialize(kademliaMessage);
                 // 2. 写入消息类型（4字节整数）
                 byteBuf.writeInt(kademliaMessage.getType());  //4
-                //写入消息总长
-                byteBuf.writeInt(12 + data.length);//4
+                //写入网络版本
+                byteBuf.writeInt(POP_NET_VERSION);//4
                 //写入内容长度
                 byteBuf.writeInt(data.length);//4  //32 位（4 字节）的整数
                 //写入类容
@@ -386,8 +432,12 @@ public class KademliaNodeServer {
             int messageType = byteBuf.readInt();
             log.info("消息类型:{}", MessageType.getDescriptionByCode(messageType));
             // 读取总长度（内容长度字段 + 内容长度）
-            int totalLength = byteBuf.readInt();
-            log.info("总长度:{}", totalLength);
+            int netVersion = byteBuf.readInt();
+            log.info("网络版本:{}", netVersion);
+            //是否和我的网络版本一致
+
+
+
             // 读取内容长度
             int contentLength = byteBuf.readInt();
             log.info("内容长度:{}", contentLength);
@@ -407,5 +457,20 @@ public class KademliaNodeServer {
             list.add(message);
         }
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 }

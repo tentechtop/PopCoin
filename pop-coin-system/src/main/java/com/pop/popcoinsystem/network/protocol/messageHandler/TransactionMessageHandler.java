@@ -1,22 +1,18 @@
 package com.pop.popcoinsystem.network.protocol.messageHandler;
 
-import com.pop.popcoinsystem.exception.FullBucketException;
+import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.network.KademliaNodeServer;
-import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
-import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
-import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
-import com.pop.popcoinsystem.network.protocol.message.PongKademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.TransactionMessage;
-import com.pop.popcoinsystem.util.BeanCopyUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.Serializable;
-import java.util.UUID;
 
 @Slf4j
 public class TransactionMessageHandler implements MessageHandler {
+
+
 
     @Override
     public KademliaMessage<? extends Serializable> handleMesage(KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) throws InterruptedException {
@@ -25,7 +21,14 @@ public class TransactionMessageHandler implements MessageHandler {
 
 
     protected TransactionMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull TransactionMessage message) throws InterruptedException {
-        log.info("收到交易消息{}",message);
+        Transaction data = message.getData();
+        log.info("收到交易消息{}",data);
+
+        //事件生产者
+        //接收交易消息后，通过RingBuffer发布事件到 Disruptor，触发后续处理。
+        // 通过管理器发布事件，无需直接依赖BlockChainService
+
+        kademliaNodeServer.getBlockChainService().verifyAndAddTradingPool(data);
         return null;
     }
 
