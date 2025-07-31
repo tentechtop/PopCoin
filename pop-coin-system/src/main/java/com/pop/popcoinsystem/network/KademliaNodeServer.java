@@ -158,12 +158,13 @@ public class KademliaNodeServer {
                         @Override
                         protected void initChannel(NioDatagramChannel ch) throws Exception {
                             ChannelPipeline pipeline = ch.pipeline();
+                            // 帧解码器：解析类型(4) + 版本(4) + 内容长度(4) + 内容结构
                             pipeline.addLast(new LengthFieldBasedFrameDecoder(
                                     10 * 1024 * 1024,  // 最大帧长度
-                                    4,                 // 长度字段偏移量（跳过类型字段）
-                                    4,                 // 长度字段长度（总长度字段）
-                                    -8,                // 长度调整值 = 内容长度 - 总长度 = -8
-                                    0                 // 跳过前12字节（类型+总长度+内容长度）  目前不跳过
+                                    8,                 // 长度字段偏移量（跳过类型4字节 + 版本4字节）
+                                    4,                 // 长度字段长度（内容长度字段，4字节）
+                                    0,                 // 长度调整值（总长度 = 内容长度 + 12字节头部）
+                                    0                  // 不跳过字节
                             ));
                             pipeline.addLast(new LengthFieldPrepender(4));
                             pipeline.addLast(new UDPKademliaMessageEncoder());
@@ -194,19 +195,13 @@ public class KademliaNodeServer {
                         @Override
                         public void initChannel(SocketChannel ch) throws Exception {
                             ChannelPipeline pipeline = ch.pipeline();
-                            // 添加长度字段基于的帧解码器（处理粘包/半包问题）
-                            // 配置长度字段解码器：
-                            // - 最大帧长度：10MB
-                            // - 长度字段偏移：4（类型字段之后）
-                            // - 长度字段长度：4（内容长度字段）
-                            // - 长度调整：0（内容紧跟长度字段）
-                            // - 初始跳过字节数：4（跳过类型字段，直接处理内容）
+                            // 帧解码器：解析类型(4) + 版本(4) + 内容长度(4) + 内容结构
                             pipeline.addLast(new LengthFieldBasedFrameDecoder(
                                     10 * 1024 * 1024,  // 最大帧长度
-                                    4,                 // 长度字段偏移量（跳过类型字段）
-                                    4,                 // 长度字段长度（总长度字段）
-                                    -8,                // 长度调整值 = 内容长度 - 总长度 = -8
-                                    0                 // 跳过前12字节（类型+总长度+内容长度）  目前不跳过
+                                    8,                 // 长度字段偏移量（跳过类型4字节 + 版本4字节）
+                                    4,                 // 长度字段长度（内容长度字段，4字节）
+                                    0,                 // 长度调整值（总长度 = 内容长度 + 12字节头部）
+                                    0                  // 不跳过字节
                             ));
                             pipeline.addLast(new LengthFieldPrepender(4));
                             pipeline.addLast(new TCPKademliaMessageDecoder());
@@ -430,7 +425,7 @@ public class KademliaNodeServer {
             ByteBuf buf = Unpooled.buffer(data.length + 12); // 4(类型) + 4(网络版本) + 4(内容长)
             buf.writeInt(kademliaMessage.getType());  // 写入消息类型 4
             //写入网络版本
-            buf.writeInt(12 + data.length);//4
+            buf.writeInt(POP_NET_VERSION);//4
             //写入内容长度
             buf.writeInt(data.length);//4
             //写入内容
@@ -503,7 +498,7 @@ public class KademliaNodeServer {
                 // 2. 写入消息类型（4字节整数）
                 byteBuf.writeInt(kademliaMessage.getType());  //4
                 //写入网络版本
-                byteBuf.writeInt(12 + data.length);//4
+                byteBuf.writeInt(POP_NET_VERSION);//4
                 //写入内容长度
                 byteBuf.writeInt(data.length);//4  //32 位（4 字节）的整数
                 //写入类容

@@ -30,6 +30,17 @@ public class PopCoinSystemApplication {
 
 
 
+    //           pipeline.addLast(new LengthFieldBasedFrameDecoder(
+    //                                    10 * 1024 * 1024,  // 最大帧长度
+    //                                    4,                 // 长度字段偏移量（跳过类型字段）
+    //                                    4,                 // 长度字段长度（总长度字段）
+    //                                    -8,                // 长度调整值 = 内容长度 - 总长度 = -8
+    //                                    0                 // 跳过前12字节（类型+总长度+内容长度）  目前不跳过
+    //                            ));
+
+
+
+
 
     //logging:
     //  level:
