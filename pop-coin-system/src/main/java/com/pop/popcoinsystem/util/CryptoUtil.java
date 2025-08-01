@@ -2,6 +2,7 @@ package com.pop.popcoinsystem.util;
 
 import com.pop.popcoinsystem.data.script.AddressType;
 import com.pop.popcoinsystem.network.enums.NETVersion;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.bouncycastle.asn1.x9.X9ECParameters;
 import org.bouncycastle.crypto.digests.SHA512Digest;
@@ -41,30 +42,26 @@ import java.util.Map;
  * 加密工具类 - 提供哈希、签名和密钥管理功能
  */
 @Slf4j
+
 public class CryptoUtil {
+
 
     //节点版本
     public static int POP_NET_VERSION = 1; //默认主网
     public static byte PRE_P2PKH = 0x00;
     public static byte PRE_P2SH = 0x05;
-
+    public static void setNetVersion(int netVersion) {
+        POP_NET_VERSION = netVersion;
+        // 根据网络版本更新地址前缀
+        PRE_P2PKH = NETVersion.getP2PKHPreAddress(POP_NET_VERSION);
+        PRE_P2SH = NETVersion.getP2SHPreAddress(POP_NET_VERSION);
+        log.info("CryptoUtil初始化网络版本: {}", POP_NET_VERSION);
+    }
 
     // secp256k1曲线参数（比特币/以太坊使用）
     private static final X9ECParameters SECP256K1_PARAMS = org.bouncycastle.asn1.sec.SECNamedCurves.getByName("secp256k1");
     private static final BigInteger CURVE_ORDER = SECP256K1_PARAMS.getN(); // 曲线阶数（私钥必须小于该值）
     private static final ECPoint G = SECP256K1_PARAMS.getG(); // 生成点
-
-
-    static {
-        // 从类路径根目录加载application.yml
-        Map<String, Object> config = YamlReaderUtils.loadYaml("application.yml");
-        if (config != null) {
-            POP_NET_VERSION = (int)YamlReaderUtils.getNestedValue(config, "popcoin.netversion");
-            PRE_P2PKH = NETVersion.getP2PKHPreAddress(POP_NET_VERSION);
-            PRE_P2SH = NETVersion.getP2SHPreAddress(POP_NET_VERSION);
-        }
-        log.info("网络版本:"+POP_NET_VERSION);
-    }
 
     // ------------------------------
     // 1. 实现HMAC-SHA512算法（BIP-32基础）
@@ -77,8 +74,6 @@ public class CryptoUtil {
         hmac.doFinal(result, 0);
         return result;
     }
-
-
     // ------------------------------
     // 2. 从私钥派生公钥（secp256k1曲线）
     // ------------------------------
@@ -97,7 +92,6 @@ public class CryptoUtil {
             throw new RuntimeException("公钥派生失败", e);
         }
     }
-
 
     // ------------------------------
     // 3. 派生子私钥（BIP-32分层派生）
@@ -182,28 +176,17 @@ public class CryptoUtil {
         PublicKey publicKey1 = ECDSASigner.bytesToPublicKey(encoded);
         byte[] encoded1 = privateKey.getEncoded();
         PrivateKey privateKey1 = ECDSASigner.bytesToPrivateKey(encoded1);
-
-
         byte[] txToSign = new byte[32];
         Arrays.fill(txToSign, (byte)0x01);
         byte[] signature = CryptoUtil.ECDSASigner.applySignature(privateKey1, txToSign);
-
         boolean b = ECDSASigner.verifySignature(publicKey1, txToSign, signature);
         log.info("signature: {}",b);
-
-
-
     }
-
-
-
 
     /**
      * 椭圆曲线
      */
     public static class ECDSASigner {
-
-
         /**
          * 将字节数组转换为EC公钥对象
          * @param publicKeyBytes X.509编码的公钥字节数组（与exportPublicKey导出格式对应）
@@ -219,7 +202,6 @@ public class CryptoUtil {
                 throw new RuntimeException("字节数组转换为公钥失败", e);
             }
         }
-
         /**
          * 将字节数组转换为EC私钥对象
          * @param privateKeyBytes PKCS#8编码的私钥字节数组（与exportPrivateKey导出格式对应）
@@ -235,8 +217,6 @@ public class CryptoUtil {
                 throw new RuntimeException("字节数组转换为私钥失败", e);
             }
         }
-
-
         // 静态初始化Bouncy Castle提供者
         static {
             Security.addProvider(new BouncyCastleProvider());
@@ -283,8 +263,6 @@ public class CryptoUtil {
                 throw new RuntimeException("验证签名失败", e);
             }
         }
-
-
         /**
          * 从种子(seed)生成ECDSA密钥对（遵循BIP-32派生规则，基于secp256k1曲线）
          * @param seed 种子字节数组（通常由助记词生成）
@@ -324,19 +302,6 @@ public class CryptoUtil {
                 throw new RuntimeException("从种子生成密钥对失败", e);
             }
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
         //根据公钥生成P2PKH类型地址

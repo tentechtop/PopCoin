@@ -1,5 +1,6 @@
 package com.pop.popcoinsystem.util;
 
+import com.pop.popcoinsystem.constant.BlockChainConstants;
 import com.pop.popcoinsystem.network.enums.NETVersion;
 import lombok.extern.slf4j.Slf4j;
 
@@ -12,19 +13,9 @@ import static com.pop.popcoinsystem.util.CryptoUtil.bytesToHex;
 @Slf4j
 public class DifficultyUtils {
 
-    public static  String initDifficulty;
-
-    static {
-        // 从类路径根目录加载application.yml
-        Map<String, Object> config = YamlReaderUtils.loadYaml("application.yml");
-        if (config != null) {
-            initDifficulty = (String) YamlReaderUtils.getNestedValue(config, "popcoin.initDifficulty");
-        }
-    }
-
     // 难度1对应的目标值（256位）：0x1d00ffff对应的展开值
     private static final BigInteger DIFFICULTY_1_TARGET = new BigInteger(
-            initDifficulty, 16);
+            BlockChainConstants.INIT_DIFFICULTY_TARGET_HEX, 16);
 
     // 每个区块预期出块时间（10分钟，单位：秒）
     private static final long EXPECTED_BLOCK_TIME = 600;
@@ -32,8 +23,6 @@ public class DifficultyUtils {
     private static final int DIFFICULTY_ADJUSTMENT_INTERVAL = 2016;
     // 预期周期总时间（2016*10分钟，单位：秒）
     private static final long EXPECTED_CYCLE_TIME = DIFFICULTY_ADJUSTMENT_INTERVAL * EXPECTED_BLOCK_TIME;
-
-
 
     // 字节数组与字节数组相加
     public static byte[] add(byte[] a, byte[] b) {

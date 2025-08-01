@@ -1,11 +1,9 @@
 package com.pop.popcoinsystem.data.transaction;
 
 import com.pop.popcoinsystem.data.enums.SigHashType;
-import com.pop.popcoinsystem.data.script.AddressType;
 import com.pop.popcoinsystem.data.script.Script;
 import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.data.script.ScriptSig;
-import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.SerializeUtils;
 import lombok.AllArgsConstructor;
@@ -24,7 +22,7 @@ import java.util.Arrays;
 import java.util.List;
 
 
-import static com.pop.popcoinsystem.data.transaction.constant.VERSION_1;
+import static com.pop.popcoinsystem.constant.BlockChainConstants.*;
 import static com.pop.popcoinsystem.service.MiningService.*;
 
 /**

@@ -20,9 +20,6 @@ import com.pop.popcoinsystem.data.vo.result.PageResult;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.data.vo.result.RocksDbPageResult;
 import com.pop.popcoinsystem.network.KademliaNodeServer;
-import com.pop.popcoinsystem.network.common.NodeInfo;
-import com.pop.popcoinsystem.network.common.NodeSettings;
-import com.pop.popcoinsystem.network.enums.NodeType;
 import com.pop.popcoinsystem.network.protocol.message.BlockMessage;
 import com.pop.popcoinsystem.network.protocol.message.TransactionMessage;
 import com.pop.popcoinsystem.util.*;
@@ -32,13 +29,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigInteger;
-import java.security.KeyPair;
-import java.security.PrivateKey;
-import java.security.PublicKey;
 import java.util.*;
 
-import static com.pop.popcoinsystem.data.transaction.constant.VERSION_1;
-import static com.pop.popcoinsystem.service.BlockChainConstants.*;
+import static com.pop.popcoinsystem.constant.BlockChainConstants.TRANSACTION_VERSION_1;
+import static com.pop.popcoinsystem.constant.BlockChainConstants.*;
 import static com.pop.popcoinsystem.storage.StorageService.getUTXOKey;
 import static com.pop.popcoinsystem.data.transaction.Transaction.calculateBlockReward;
 import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
@@ -1289,7 +1283,7 @@ public class BlockChainService {
         ScriptPubKey scriptPubKey = createScriptPubKey(addressType, bytes);
         TXOutput output = new TXOutput(calculateBlockReward(height)+totalFee, scriptPubKey);
         Transaction coinbaseTx = new Transaction();
-        coinbaseTx.setVersion(VERSION_1);
+        coinbaseTx.setVersion(TRANSACTION_VERSION_1);
         coinbaseTx.getInputs().add(input);
         coinbaseTx.getOutputs().add(output);
         coinbaseTx.setTime(System.currentTimeMillis());

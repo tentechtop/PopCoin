@@ -21,6 +21,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import static com.pop.popcoinsystem.constant.BlockChainConstants.*;
+
 
 /**
  * 打包交易服务
@@ -64,41 +66,16 @@ public class MiningService {
     public static Miner miner;
     // 当前难度目标（前导零的数量）
     private static long currentDifficulty = 1;
-    // 最大区块奖励（延迟10分钟时的奖励）
-    public static final long INITIAL_REWARD = 50;
-    //单位 1e8
-    public static final long BLOCK_REWARD_UNIT = 100000000;
-
 
     //是否启动挖矿服务 用于停止挖矿的标志
     public static boolean isMining = false;
-    // 难度调整周期的区块数量
-    private static final int DIFFICULTY_ADJUSTMENT_INTERVAL = 20;//2016大概两周调整一次  144一天调整一次 2小时
-    //区块生成时间
-    private static final long BLOCK_GENERATION_TIME = 20; //600是600秒 10分钟
-    //货币总供应量
-    private static final long MONEY_SUPPLY = 2100000000;
-    //减半周期
-    public static final int HALVING_PERIOD = 21000000;
-    //时间窗口大小
-    public static final int TIME_WINDOW_SIZE = 11;
-    //交易列表大小 1M
-    public static final int MAX_TRANSACTION_SIZE = 1024 * 1024;
 
 
-
-
-    /**
-     * 交易池  最大300M
-     */
-    private static final long MAX_SIZE_BYTES = 300 * 1024 * 1024; // 300MB
     //交易池
     private final Map<byte[], Transaction> transactions = new ConcurrentHashMap<>();
     private long currentSize = 0;
     private static int threadCount =  Runtime.getRuntime().availableProcessors();
     private static ExecutorService executor = Executors.newFixedThreadPool(threadCount);
-
-
 
 
 

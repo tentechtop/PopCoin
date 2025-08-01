@@ -1,28 +1,26 @@
 spring:
   application:
     name: PopCoinSystem
-    version: 1.0.0  #系统版本
-    description: PopCoinSystem
-    author: PopCoin
-    email: popcoin@163.com
-    url: https://github.com/PopCoin/PopCoinSystem
-    license: Apache-2.0
-    copyright: Copyright ? 2019 PopCoin. All rights reserved.
+    version: 1.0.0
+
 server:
   port: 9999
 
+logging:
+  level:
+    root: INFO
 
-popcoin:
-  publickey: "" #节点公钥hash编码后的值放在这里 只有拥有私钥的人才能再本节点 进行节点控制 和钱包等服务  可以用空格隔开设置多个公钥  提供公钥哈市和签名就能登录
-  netversion: 1  #节点网络版本 1主网  2测试网络1  3测试网络2
-  nodetype: 0   #全节点 1轻节点 2仅出站节点
-  genesisblockhash: "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"      #创世区块hash
-  initDifficulty: "ffffffffffff0000000000000000000000000000000000000000000000000000"    #难度1对应的难度目标
-  tcpPort: 8339
-  udpPort: 8338
-
+system:
+  # 网络版本 决定这个服务能否参与网络共识
+  netVersion: 1
+  # 公钥 持有公钥的人能够控制这个节点
+  publicKey:
+    - 1321313132
+    - 1321313132
+    - 3123131324
 
 kademlia:
+  nodeType: 1
   node:
     tcpPort: 8334
     udpPort: 8333
@@ -32,16 +30,3 @@ kademlia:
       tcpPort: 8334
       udpPort: 8333
       nodeId: 0
-
-
-
-
-
-
-logging:
-  level:
-    root: INFO  # 全局日志级别设为ERROR
-
-
-
-

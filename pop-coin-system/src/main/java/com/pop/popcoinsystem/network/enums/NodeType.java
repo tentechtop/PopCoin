@@ -1,9 +1,9 @@
 package com.pop.popcoinsystem.network.enums;
 
 public enum NodeType {
-    FULL(0),      // 全节点
-    LIGHT(1),     // 轻节点
-    OUTBOUND(2);  // 仅出站
+    FULL(1),      // 全节点
+    LIGHT(2),     // 轻节点
+    OUTBOUND(3);  // 仅出站
 
     private final int value;
     private static final java.util.Map<Integer, NodeType> map = new java.util.HashMap<>();

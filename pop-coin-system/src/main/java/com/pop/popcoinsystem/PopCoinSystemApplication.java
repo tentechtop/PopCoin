@@ -18,7 +18,7 @@ public class PopCoinSystemApplication {
         String ip = InetAddress.getLocalHost().getHostAddress();
         String port = env.getProperty("server.port");
         log.info("\n----------------------------------------------------------\n\t" +
-                "Application POPCoinSystem is running! Access URLs:\n\t" +
+                "Application is running! Access URLs:\n\t" +
                 "Local: \t\thttp://localhost:" + port + "/\n\t" +
                 "Net: "  + "\t\thttp://" + ip + ":" + port + "/\n\t" +
                 "----------------------------------------------------------");
