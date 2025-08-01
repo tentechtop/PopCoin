@@ -37,6 +37,8 @@ import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.pop.popcoinsystem.data.transaction.constant.VERSION_1;
 import static com.pop.popcoinsystem.storage.POPStorage.getUTXOKey;
@@ -405,8 +407,25 @@ public class BlockChainService implements EventHandler<TransactionEvent> {
 
     private boolean verifyP2WPKH(Transaction tx, TXInput input,int inputIndex,UTXO utxo) {
         // 1. 验证见证数据结构：P2WPKH见证应包含2个元素（签名 + 公钥）
+        List<TXInput> inputs = tx.getInputs();//顺序不变获取 隔离见证输入
         List<Witness> witnesses = tx.getWitnesses();
-        Witness witness = witnesses.get(inputIndex);
+        List<TXInput> segWitInputs = inputs.stream()
+                .filter(data -> data.getScriptSig() == null)  // 核心条件：scriptSig 为空
+                .toList();
+
+        int realIndex = IntStream.range(0, segWitInputs.size())
+                .filter(index -> {
+                    TXInput current = segWitInputs.get(index);
+                    // 比较txId和vout（假设TXInput有getTxId()和getVout()方法）
+                    return current.getTxId().equals(input.getTxId())
+                            && current.getVout() == input.getVout();
+                })
+                .findFirst() // 找到第一个匹配的索引（唯一，因为输入唯一）
+                .orElse(-1);// 未找到返回-1（理论上不会出现，因为input来自segWitInputs的源列表）
+
+        log.info("真实见证位置:{}", realIndex);
+
+        Witness witness = witnesses.get(realIndex);
         if (witness.getSize() != 2) {
             log.error("P2WPKH见证数据元素数量错误，预期2个，实际{}个", witness.getSize());
             return false;

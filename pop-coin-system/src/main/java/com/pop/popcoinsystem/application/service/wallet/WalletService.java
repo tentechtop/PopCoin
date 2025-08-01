@@ -561,7 +561,9 @@ public class WalletService {
         log.info("交易输入构建完毕: {}", txInputs);
 
         // 初始化时用空见证填充，大小与输入列表一致
-        List<Witness> witnesses = new ArrayList<>(Collections.nCopies(txInputs.size(), new Witness()));
+        //List<Witness> witnesses = new ArrayList<>(Collections.nCopies(txInputs.size(), new Witness()));
+
+        List<Witness> witnesses = new ArrayList<>();
 
         // 构建交易输出
         List<TXOutput> txOutputs = new ArrayList<>();
@@ -591,7 +593,7 @@ public class WalletService {
             if (isSegWitType(scriptType)) {
                 // 隔离见证类型：构建见证数据
                 Witness witness = createWitness(scriptType, signature, publicKeyBytes, scriptPubKey,null,null);
-                witnesses.set(i, witness); // 直接替换第i个位置的元素，而非插入
+                witnesses.add(witness); // 直接替换第i个位置的元素，而非插入
                 txInput.setScriptSig(null); // 隔离见证输入的scriptSig为空
             }else {
                 //普通交易发行的UTXO

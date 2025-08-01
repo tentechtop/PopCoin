@@ -100,13 +100,59 @@ public class MiningService {
 
     @PostConstruct
     public void init() {
-        //初始化难度
-        byte[] mainLatestBlockHash = blockChainService.getMainLatestBlockHash();
-        Block blockByHash = blockChainService.getBlockByHash(mainLatestBlockHash);
-        currentDifficulty = blockByHash.getDifficulty();
-        log.info("最新区块难度: {}", currentDifficulty);
+        log.info("开始初始化挖矿服务...");
+        int maxRetries = 3; // 最大重试次数
+        int retryDelay = 1000; // 重试间隔（毫秒）
+
+        for (int i = 0; i < maxRetries; i++) {
+            try {
+                byte[] mainLatestBlockHash = blockChainService.getMainLatestBlockHash();
+                if (mainLatestBlockHash == null) {
+                    log.warn("第{}次尝试：未获取到最新区块Hash，等待{}ms后重试", i+1, retryDelay);
+                    Thread.sleep(retryDelay);
+                    continue;
+                }
+
+                Block blockByHash = blockChainService.getBlockByHash(mainLatestBlockHash);
+                if (blockByHash == null) {
+                    log.warn("第{}次尝试：未找到Hash对应的区块，等待{}ms后重试", i+1, retryDelay);
+                    Thread.sleep(retryDelay);
+                    continue;
+                }
+
+                // 初始化成功
+                log.info("最新区块: {}", blockByHash);
+                log.info("最新区块高度: {}", blockByHash.getHeight());
+                currentDifficulty = blockByHash.getDifficulty();
+                log.info("最新区块难度: {}", currentDifficulty);
+                initExecutor();
+                return; // 成功后退出方法
+
+            } catch (Exception e) {
+                log.error("第{}次初始化失败：{}", i+1, e.getMessage(), e);
+                if (i < maxRetries - 1) { // 非最后一次重试时休眠
+                    try {
+                        Thread.sleep(retryDelay);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+                }
+            }
+        }
+
+        // 多次重试失败后的降级处理
+        log.error("达到最大重试次数，初始化难度失败，使用默认难度值: 1");
+        currentDifficulty = 1; // 兜底默认值
         initExecutor();
     }
+
+    /**
+     * stop
+     */
+
+
+
 
     private void initExecutor() {
         if (executor == null || executor.isShutdown() || executor.isTerminated()) {

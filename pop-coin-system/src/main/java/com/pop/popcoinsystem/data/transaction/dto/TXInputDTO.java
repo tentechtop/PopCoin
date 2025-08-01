@@ -34,11 +34,6 @@ public class TXInputDTO {
         }
     }
 
-
-    /** 隔离见证数据（每个输入的见证栈） */
-    private Witness witness; // 引用之前实现的Witness类
-
-
     /** 序列号（用于时间锁定，默认0xFFFFFFFF） */
     private long sequence = 0xFFFFFFFFL;
 }
