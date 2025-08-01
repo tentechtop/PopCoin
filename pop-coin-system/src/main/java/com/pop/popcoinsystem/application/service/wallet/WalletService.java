@@ -313,9 +313,6 @@ public class WalletService {
             wallet.setBalance(totalBalance);
             walletStorage.addWallet(wallet);
             walletStorage.saveWalletUTXOBatch(walletName, walletUTXOs);
-
-            log.info("钱包中的UTXO:{}",walletUTXOs);
-
             log.info("钱包UTXO构建完成 -> 钱包名: {}, 总UTXO数: {}, 总余额: {}",
                     walletName, walletUTXOs.size(), totalBalance);
             return Result.ok("钱包UTXO构建完成，共找到" + walletUTXOs.size() + "个UTXO");

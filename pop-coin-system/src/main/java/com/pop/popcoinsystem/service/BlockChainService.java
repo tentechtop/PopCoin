@@ -726,6 +726,9 @@ public class BlockChainService implements EventHandler<TransactionEvent> {
             input.setScriptSig(null);
         }
 
+        txCopy.setTime(0L);
+        txCopy.setVersion(0);
+
         // 获取当前处理的输入
         TXInput currentInput = txCopy.getInputs().get(inputIndex);
         if (currentInput == null){
@@ -1478,6 +1481,8 @@ public class BlockChainService implements EventHandler<TransactionEvent> {
 
 
     public Result<TransactionDTO> getTransaction(String txId) {
+        //主链中查询  和 交易池中查询
+
         Transaction transaction = popStorage.getTransaction(CryptoUtil.hexToBytes(txId));
         if (transaction == null){
             return Result.error("交易不存在");
