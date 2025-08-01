@@ -33,7 +33,7 @@ public class DisruptorExample {
         }
     }
 
-    // 3. 事件处理器
+    // 3. 事件处理器  implements EventHandler<TransactionEvent>
     static class EventHandlerImpl implements EventHandler<Event> {
         @Override
         public void onEvent(Event event, long sequence, boolean endOfBatch) {
