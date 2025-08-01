@@ -43,7 +43,7 @@ public class BlockChainConstants {
     public static final long BLOCK_REWARD_UNIT = 100000000;
 
     //难度调整周期的区块数量
-    public static final int DIFFICULTY_ADJUSTMENT_INTERVAL = 200;
+    public static final int DIFFICULTY_ADJUSTMENT_INTERVAL = 24;
 
     //货币总供应量
     public static final long MONEY_SUPPLY = 2100000000;

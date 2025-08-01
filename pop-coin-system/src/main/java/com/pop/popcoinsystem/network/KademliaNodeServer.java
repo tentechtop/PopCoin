@@ -1,5 +1,7 @@
 package com.pop.popcoinsystem.network;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import com.pop.popcoinsystem.network.protocol.messageHandler.TransactionMessageHandler;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeInfo;
@@ -42,7 +44,8 @@ import java.util.*;
 import java.util.concurrent.*;
 
 import static com.pop.popcoinsystem.constant.BlockChainConstants.NET_VERSION;
-
+// 替换为带容量限制的LRU Map（需引入Guava或自定义）
+import com.google.common.collect.EvictingQueue;
 
 @Slf4j
 @Data
@@ -71,12 +74,19 @@ public class KademliaNodeServer {
     private UDPClient udpClient;
     private TCPClient tcpClient;
 
-    // 已广播消息记录，避免重复广播
-    private final Map<String, Long> broadcastMessages = new ConcurrentHashMap<>();
+    // 替换原有ConcurrentHashMap为Guava Cache：自动过期+最大容量
+    private final Cache<Long, Boolean> broadcastMessages = CacheBuilder.newBuilder()
+            .maximumSize(10000) // 最大缓存10000条消息（防止内存溢出）
+            .expireAfterWrite(30, TimeUnit.SECONDS) // 写入后30秒自动过期（无需手动清理）
+            .concurrencyLevel(Runtime.getRuntime().availableProcessors()) // 并发级别（默认4，可设为CPU核心数）
+            .build();
+
+
+
     // 消息过期时间（毫秒）
-    private static final long MESSAGE_EXPIRATION_TIME = 30000;
+    public static final long MESSAGE_EXPIRATION_TIME = 30000;
     // 节点过期时间（毫秒）
-    private static final long NODE_EXPIRATION_TIME = 300000;
+    public static final long NODE_EXPIRATION_TIME = 300000;
 
     //UDP服务
     private EventLoopGroup udpGroup;
@@ -147,7 +157,7 @@ public class KademliaNodeServer {
             startTcpTransmitServer();
             running = true;
             scheduler = Executors.newSingleThreadScheduledExecutor();
-            scheduler.scheduleAtFixedRate(this::maintainNetwork, 0, 60 * 15, TimeUnit.SECONDS);//首次执行立即开始，之后每 30 秒执行一次 maintainNetwork 方法
+            scheduler.scheduleAtFixedRate(this::maintainNetwork, 0, 60 * 5, TimeUnit.SECONDS);//首次执行立即开始，之后每 30 秒执行一次 maintainNetwork 方法
         } catch (Exception e) {
             log.error("KademliaNode start error", e);
             stop();
@@ -283,6 +293,22 @@ public class KademliaNodeServer {
     }
 
     public void broadcastMessage(KademliaMessage kademliaMessage) {
+        long messageId = kademliaMessage.getMessageId();
+        long now = System.currentTimeMillis();
+        // 检查：如果消息已处理过（未过期），直接返回，不重复广播
+
+        // 检查：若消息已存在（未过期），则跳过广播
+        if (broadcastMessages.getIfPresent(messageId) != null) {
+            log.debug("消息 {} 已广播过（未过期），跳过", messageId);
+            return;
+        }
+
+
+        // 记录：将消息ID存入缓存（自动过期）
+        broadcastMessages.put(messageId, Boolean.TRUE);
+
+
+
         //将消息发送给已知节点
         List<ExternalNodeInfo> closest = this.getRoutingTable().findClosest(this.nodeInfo.getId());
         //去除自己
@@ -306,8 +332,7 @@ public class KademliaNodeServer {
         RoutingTable routingTable = getRoutingTable();
         try {
             long now = System.currentTimeMillis();
-            // 1. 清理过期的广播消息（避免内存泄漏）
-            cleanExpiredBroadcastMessages(now);
+
             // 2. 检查路由表中节点的活性，移除不活跃节点
             checkNodeLiveness(now);
             // 3. 随机生成节点ID，执行FindNode操作刷新路由表（Kademlia协议核心）
@@ -383,12 +408,14 @@ public class KademliaNodeServer {
     /**
      * 清理过期的广播消息
      */
+/*
     private void cleanExpiredBroadcastMessages(long now) {
         broadcastMessages.entrySet().removeIf(entry ->
                 now - entry.getValue() > MESSAGE_EXPIRATION_TIME
         );
         log.debug("清理 过期广播消息，剩余: {}", broadcastMessages.size());
     }
+*/
 
 
 
@@ -528,7 +555,6 @@ public class KademliaNodeServer {
     public static class TCPKademliaMessageDecoder extends ByteToMessageDecoder {
         @Override
         protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf, List<Object> list) throws Exception {
-            log.info("TCP开始解码");
             if (byteBuf.readableBytes() < 12) {
                 log.warn("确保有足够的数据读取消息类型和长度信息");
                 return;
@@ -546,7 +572,6 @@ public class KademliaNodeServer {
                 log.warn("网络版本不一致");
                 return;
             }
-
             // 读取内容长度
             int contentLength = byteBuf.readInt();
             log.info("内容长度:{}", contentLength);

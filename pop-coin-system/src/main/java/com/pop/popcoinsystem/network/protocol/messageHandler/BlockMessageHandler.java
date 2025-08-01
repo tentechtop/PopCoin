@@ -6,6 +6,7 @@ import com.pop.popcoinsystem.network.protocol.message.BlockMessage;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.TransactionMessage;
 import com.pop.popcoinsystem.service.BlockChainService;
+import com.pop.popcoinsystem.util.ByteUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,7 +27,15 @@ public class BlockMessageHandler implements MessageHandler {
     protected BlockMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull BlockMessage message) throws InterruptedException {
         Block data = message.getData();
         log.info("收到区块消息消息{}",data);
-        kademliaNodeServer.getBlockChainService().verifyBlock(data);
+        byte[] bytes = data.getHash();
+        long blockMessageId = ByteUtils.bytesToLong(bytes);
+        if (kademliaNodeServer.getBroadcastMessages().getIfPresent(blockMessageId) != null) {
+            log.info("接收已处理的区块消息 {}，丢弃", blockMessageId);
+        }else {
+            // 记录：标记为已处理
+            kademliaNodeServer.getBroadcastMessages().put(blockMessageId, Boolean.TRUE);
+            kademliaNodeServer.getBlockChainService().verifyBlock(data);
+        }
         return null;
     }
 

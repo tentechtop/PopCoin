@@ -6,6 +6,7 @@ import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.TransactionMessage;
 import com.pop.popcoinsystem.network.protocol.messageHandler.MessageHandler;
 import com.pop.popcoinsystem.service.BlockChainService;
+import com.pop.popcoinsystem.util.ByteUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,11 +31,16 @@ public class TransactionMessageHandler implements MessageHandler {
     protected TransactionMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull TransactionMessage message) throws InterruptedException {
         Transaction data = message.getData();
         log.info("收到交易消息{}",data);
+        byte[] txId = data.getTxId();
+        long txMessageId = ByteUtils.bytesToLong(txId);
 
-        //事件生产者
-        //接收交易消息后，通过RingBuffer发布事件到 Disruptor，触发后续处理。
-        // 通过管理器发布事件，无需直接依赖BlockChainService
-        kademliaNodeServer.getBlockChainService().verifyAndAddTradingPool(data);
+        if (kademliaNodeServer.getBroadcastMessages().getIfPresent(txMessageId) != null) {
+            log.info("接收已处理的交易消息 {}，丢弃", txMessageId);
+        }else {
+            // 记录：标记为已处理
+            kademliaNodeServer.getBroadcastMessages().put(txMessageId, Boolean.TRUE);
+            kademliaNodeServer.getBlockChainService().verifyAndAddTradingPool(data);
+        }
         return null;
     }
 

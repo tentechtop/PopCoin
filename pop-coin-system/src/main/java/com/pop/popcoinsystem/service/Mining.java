@@ -76,31 +76,11 @@ public class Mining {
             return Result.error("ERROR: The node is already mining ! ");
         }
         log.info("开始初始化挖矿服务...");
-        int maxRetries = 3; // 最大重试次数
+
+ /*       int maxRetries = 3; // 最大重试次数
         int retryDelay = 1000; // 重试间隔（毫秒）
         for (int i = 0; i < maxRetries; i++) {
             try {
-                byte[] mainLatestBlockHash = blockChainService.getMainLatestBlockHash();
-                if (mainLatestBlockHash == null) {
-                    log.warn("第{}次尝试：未获取到最新区块Hash，等待{}ms后重试", i+1, retryDelay);
-                    sleep(retryDelay);
-                    continue;
-                }
-
-                Block blockByHash = blockChainService.getBlockByHash(mainLatestBlockHash);
-                if (blockByHash == null) {
-                    log.warn("第{}次尝试：未找到Hash对应的区块，等待{}ms后重试", i+1, retryDelay);
-                    sleep(retryDelay);
-                    continue;
-                }
-
-                // 初始化成功
-                log.info("最新区块: {}", blockByHash);
-                log.info("最新区块高度: {}", blockByHash.getHeight());
-                currentDifficulty = blockByHash.getDifficulty();
-                log.info("当前难度目标: {}", blockByHash.getDifficulty());
-                log.info("最新区块难度: {}", currentDifficulty);
-                initExecutor();
 
             } catch (Exception e) {
                 log.error("第{}次初始化失败：{}", i+1, e.getMessage(), e);
@@ -112,11 +92,18 @@ public class Mining {
                     }
                 }
             }
-        }
+        }*/
 
-        // 多次重试失败后的降级处理
-        log.error("达到最大重试次数，初始化难度失败，使用默认难度值: 1");
-        currentDifficulty = 1; // 兜底默认值
+        byte[] mainLatestBlockHash = blockChainService.getMainLatestBlockHash();
+        Block block = blockChainService.getBlockByHash(mainLatestBlockHash);
+
+        // 初始化成功
+        log.info("最新区块: {}", block);
+        log.info("最新区块高度: {}", block.getHeight());
+        currentDifficulty = block.getDifficulty();
+        log.info("当前难度值: {}", block.getDifficulty());
+        log.info("最新区块难度目标: {}", CryptoUtil.bytesToHex(block.getDifficultyTarget()));
+        log.info("最新区块难度: {}", currentDifficulty);
         initExecutor();
 
         //获取矿工信息
@@ -652,10 +639,11 @@ public class Mining {
         long targetTime = DIFFICULTY_ADJUSTMENT_INTERVAL * BLOCK_GENERATION_TIME; //600秒 10分钟
 
         log.info("\n难度调整:" +
-                "\n\"\\n目标总时间: \" + targetTime + \"秒\"" +
-                "\n\"\\n实际\" + DIFFICULTY_ADJUSTMENT_INTERVAL + \"个区块总生成时间: \" + actualTimeTaken + \"秒\"" +
-                "\n\"\\n目标平均生成时间: \"+BLOCK_GENERATION_TIME+\"秒\"" +
-                "\n\"\\n实际平均生成时间: \" + (double) actualTimeTaken / DIFFICULTY_ADJUSTMENT_INTERVAL + \"秒\"");
+                "\n目标总时间: " +  targetTime + "秒\"" +
+                "\n实际" + DIFFICULTY_ADJUSTMENT_INTERVAL + "个区块总生成时间: " + actualTimeTaken + "秒\"" +
+                "\n目标平均生成时间: "+BLOCK_GENERATION_TIME+"秒\"" +
+                "\n实际平均生成时间: " + (double) actualTimeTaken / DIFFICULTY_ADJUSTMENT_INTERVAL + "秒\"");
+
         // 修正方向：目标时间/实际时间
         double factor = (double) targetTime / actualTimeTaken;
         factor = Math.max(0.25, Math.min(4.0, factor));  // 保持限制范围

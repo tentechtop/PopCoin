@@ -19,6 +19,7 @@ import java.util.UUID;
 
 
 import static com.pop.popcoinsystem.network.KademliaNodeServer.KademliaMessageHandler;
+import static com.pop.popcoinsystem.network.KademliaNodeServer.MESSAGE_EXPIRATION_TIME;
 import static java.lang.Thread.sleep;
 
 
@@ -36,6 +37,13 @@ public class KademliaUdpHandler extends SimpleChannelInboundHandler<KademliaMess
 
     @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, KademliaMessage message) throws Exception {
+        long messageId = message.getMessageId();
+        if (nodeServer.getBroadcastMessages().getIfPresent(messageId) != null) {
+            log.info("接收已处理的广播消息 {}，丢弃", messageId);
+            return;
+        }
+        // 记录：标记为已处理
+        nodeServer.getBroadcastMessages().put(messageId, Boolean.TRUE);
         MessageHandler messageHandler = KademliaMessageHandler.get(message.getType());
         messageHandler.handleMesage(nodeServer, message);
     }
