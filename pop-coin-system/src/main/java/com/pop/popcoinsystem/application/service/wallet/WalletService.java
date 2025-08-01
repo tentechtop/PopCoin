@@ -15,8 +15,11 @@ import com.pop.popcoinsystem.exception.InsufficientFundsException;
 import com.pop.popcoinsystem.exception.UnsupportedAddressException;
 import com.pop.popcoinsystem.service.BlockChainService;
 import com.pop.popcoinsystem.util.*;
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.security.KeyPair;
@@ -26,19 +29,90 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 
-import static com.pop.popcoinsystem.storage.POPStorage.getUTXOKey;
+import static com.pop.popcoinsystem.storage.StorageService.getUTXOKey;
 import static com.pop.popcoinsystem.service.BlockChainService.convertTransactionDTO;
 
 @Slf4j
 @Service
 public class WalletService {
 
-    @Resource
+    @Lazy
+    @Autowired
     private BlockChainService blockChainService;
 
 
-    public static Wallet walleta;
-    public static Wallet walletb;
+    @PostConstruct
+    public void  init(){
+        WalletStorage walletStorage = WalletStorage.getInstance();
+        Wallet walleta = walletStorage.getWallet("btcminer");
+        if (walleta == null){
+            KeyPair keyPairA = CryptoUtil.ECDSASigner.generateKeyPair();
+            PublicKey publicKey = keyPairA.getPublic();
+            PrivateKey privateKey = keyPairA.getPrivate();
+
+            KeyPair keyPairA1 = CryptoUtil.ECDSASigner.generateKeyPair();
+            PublicKey publicKey1 = keyPairA1.getPublic();
+            PrivateKey privateKey1 = keyPairA1.getPrivate();
+
+            KeyPair keyPairA2 = CryptoUtil.ECDSASigner.generateKeyPair();
+            PublicKey publicKey2 = keyPairA2.getPublic();
+            PrivateKey privateKey2 = keyPairA2.getPrivate();
+
+            walleta = new Wallet();
+            walleta.setName("btcminer");
+            walleta.setPublicKeyHex(CryptoUtil.bytesToHex(publicKey.getEncoded()));
+            walleta.setPrivateKeyHex(CryptoUtil.bytesToHex(privateKey.getEncoded()));
+
+            walleta.setPublicKeyHex1(CryptoUtil.bytesToHex(publicKey1.getEncoded()));
+            walleta.setPrivateKeyHex1(CryptoUtil.bytesToHex(privateKey1.getEncoded()));
+
+            walleta.setPublicKeyHex2(CryptoUtil.bytesToHex(publicKey2.getEncoded()));
+            walleta.setPrivateKeyHex2(CryptoUtil.bytesToHex(privateKey2.getEncoded()));
+
+            walletStorage.addWallet(walleta);
+        }
+        byte[] bytesMiner = CryptoUtil.hexToBytes(walleta.getPublicKeyHex());
+        String p2PKHAddressMiner = CryptoUtil.ECDSASigner.createP2PKHAddressByPK(bytesMiner);
+        String p2WPKHAddressMiner = CryptoUtil.ECDSASigner.createP2WPKHAddressByPK(bytesMiner);
+        log.info("矿工钱包地址P2PKH：{}",p2PKHAddressMiner);
+        log.info("矿工钱包地址P2WPKH：{}",p2WPKHAddressMiner);
+        /*新增测试钱包*/
+        Wallet wallettest = walletStorage.getWallet("wallettest");
+        log.info("wallettest: "+wallettest);
+        if (wallettest == null){
+            KeyPair keyPairA = CryptoUtil.ECDSASigner.generateKeyPair();
+            PublicKey publicKey = keyPairA.getPublic();
+            PrivateKey privateKey = keyPairA.getPrivate();
+
+            KeyPair keyPairA1 = CryptoUtil.ECDSASigner.generateKeyPair();
+            PublicKey publicKey1 = keyPairA1.getPublic();
+            PrivateKey privateKey1 = keyPairA1.getPrivate();
+
+            KeyPair keyPairA2 = CryptoUtil.ECDSASigner.generateKeyPair();
+            PublicKey publicKey2 = keyPairA2.getPublic();
+            PrivateKey privateKey2 = keyPairA2.getPrivate();
+
+            wallettest = new Wallet();
+            wallettest.setName("wallettest");
+            wallettest.setPublicKeyHex(CryptoUtil.bytesToHex(publicKey.getEncoded()));
+            wallettest.setPrivateKeyHex(CryptoUtil.bytesToHex(privateKey.getEncoded()));
+
+            wallettest.setPublicKeyHex1(CryptoUtil.bytesToHex(publicKey1.getEncoded()));
+            wallettest.setPrivateKeyHex1(CryptoUtil.bytesToHex(privateKey1.getEncoded()));
+
+            wallettest.setPublicKeyHex2(CryptoUtil.bytesToHex(publicKey2.getEncoded()));
+            wallettest.setPrivateKeyHex2(CryptoUtil.bytesToHex(privateKey2.getEncoded()));
+            walletStorage.addWallet(wallettest);
+        }
+        String publicKeyHexTest = wallettest.getPublicKeyHex();
+        byte[] bytesTest = CryptoUtil.hexToBytes(publicKeyHexTest);
+        String p2PKHAddressByPK = CryptoUtil.ECDSASigner.createP2PKHAddressByPK(bytesTest);
+        String p2WPKHAddressByPK = CryptoUtil.ECDSASigner.createP2WPKHAddressByPK(bytesTest);
+        log.info("p2PKH Test 测试钱包地址: {}", p2PKHAddressByPK);
+        log.info("p2WPKH Test 测试钱包地址: {}", p2WPKHAddressByPK);
+    }
+
+
 
 
     public static void main(String[] args) {
@@ -138,8 +212,6 @@ public class WalletService {
         //而是采用按需派生和 ** 间隙检测（Gap Limit）** 的策略。以下是详细解释：
 
     }
-
-
 
     public Result<Wallet> createWallet(WalletVO walletVO) {
         Wallet wallet = null;
@@ -696,11 +768,6 @@ public class WalletService {
             return legacySignatureHash;
         }
     }
-
-
-    /**
-     * 创建输出锁定脚本
-     */
 
 
     /**

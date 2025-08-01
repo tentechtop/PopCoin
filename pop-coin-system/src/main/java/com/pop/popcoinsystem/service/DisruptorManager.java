@@ -31,6 +31,10 @@ public class DisruptorManager {
     private Disruptor<TransactionEvent> disruptor;
     private ExecutorService executor;
 
+    @Lazy
+    @Autowired
+    private BlockChainService blockChainService;
+
     public DisruptorManager() {
 
     }
@@ -40,7 +44,7 @@ public class DisruptorManager {
      */
     @PostConstruct
     public void init() {
-        // 创建线程池
+/*        // 创建线程池
         executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 
         // 创建事件工厂
@@ -56,10 +60,10 @@ public class DisruptorManager {
         );
 
         // 注册事件处理器（使用BlockChainService作为处理器）
-        //disruptor.handleEventsWith();
+        //disruptor.handleEventsWith(blockChainService);
 
         // 启动Disruptor
-        disruptor.start();
+        disruptor.start();*/
     }
 
     /**

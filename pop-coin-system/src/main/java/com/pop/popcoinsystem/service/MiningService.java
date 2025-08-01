@@ -2,13 +2,15 @@ package com.pop.popcoinsystem.service;
 
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.miner.Miner;
-import com.pop.popcoinsystem.storage.POPStorage;
+import com.pop.popcoinsystem.storage.StorageService;
 import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.DifficultyUtils;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.lang.management.ManagementFactory;
@@ -30,7 +32,12 @@ import java.util.concurrent.Future;
 @Service
 public class MiningService {
 
-    private final BlockChainService blockChainService;
+    @Autowired
+    private StorageService storageService;
+
+    @Lazy
+    @Autowired
+    private BlockChainService blockChainService;
 
     // 挖矿性能控制（0-100，默认85%）
     private volatile int miningPerformance = 30;
@@ -93,16 +100,24 @@ public class MiningService {
 
 
 
-    public MiningService (BlockChainService blockChainService) {
-        this.blockChainService = blockChainService;
+
+
+    private void initExecutor() {
+        if (executor == null || executor.isShutdown() || executor.isTerminated()) {
+            executor = Executors.newFixedThreadPool(threadCount);
+        }
     }
 
-    @PostConstruct
-    public void init() {
+    /**
+     * 启动挖矿
+     */
+    public Result<String> startMining() throws Exception {
+        if (isMining) {
+            return Result.error("ERROR: The node is already mining ! ");
+        }
         log.info("开始初始化挖矿服务...");
         int maxRetries = 3; // 最大重试次数
         int retryDelay = 1000; // 重试间隔（毫秒）
-
         for (int i = 0; i < maxRetries; i++) {
             try {
                 byte[] mainLatestBlockHash = blockChainService.getMainLatestBlockHash();
@@ -126,7 +141,6 @@ public class MiningService {
                 log.info("当前难度目标: {}", blockByHash.getDifficulty());
                 log.info("最新区块难度: {}", currentDifficulty);
                 initExecutor();
-                return; // 成功后退出方法
 
             } catch (Exception e) {
                 log.error("第{}次初始化失败：{}", i+1, e.getMessage(), e);
@@ -135,7 +149,6 @@ public class MiningService {
                         Thread.sleep(retryDelay);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        return;
                     }
                 }
             }
@@ -145,32 +158,9 @@ public class MiningService {
         log.error("达到最大重试次数，初始化难度失败，使用默认难度值: 1");
         currentDifficulty = 1; // 兜底默认值
         initExecutor();
-    }
 
-    /**
-     * stop
-     */
-
-
-
-
-    private void initExecutor() {
-        if (executor == null || executor.isShutdown() || executor.isTerminated()) {
-            executor = Executors.newFixedThreadPool(threadCount);
-        }
-    }
-
-    /**
-     * 启动挖矿
-     */
-    public Result<String> startMining() throws Exception {
-        if (isMining) {
-            return Result.error("ERROR: The node is already mining ! ");
-        }
         //获取矿工信息
-        miner = POPStorage.getInstance().getMiner();
-
-
+        miner = storageService.getMiner();
         if (miner == null) {
             //挖矿前请设置本节点的矿工信息
             return Result.error("ERROR: Please set the miner information first ! ");
@@ -777,8 +767,8 @@ public class MiningService {
      */
     public Result<String> setMiningInfo(Miner miner){
         try {
-            POPStorage instance = POPStorage.getInstance();
-            instance.addOrUpdateMiner(miner);
+
+            storageService.addOrUpdateMiner(miner);
             return Result.ok();
         }catch (Exception e){
             return Result.error(e.getMessage());

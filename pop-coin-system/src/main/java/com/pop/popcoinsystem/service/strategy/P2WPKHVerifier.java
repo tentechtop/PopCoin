@@ -12,6 +12,7 @@ import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.SegWitUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -20,7 +21,7 @@ import java.util.stream.IntStream;
 @Slf4j
 @Service
 public class P2WPKHVerifier implements ScriptVerificationStrategy{
-
+    @Lazy
     @Autowired
     private BlockChainService blockChainService;
 

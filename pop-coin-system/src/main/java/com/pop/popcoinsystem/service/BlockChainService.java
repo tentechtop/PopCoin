@@ -1,5 +1,6 @@
 package com.pop.popcoinsystem.service;
 
+import com.lmax.disruptor.EventHandler;
 import com.pop.popcoinsystem.application.service.wallet.Wallet;
 import com.pop.popcoinsystem.application.service.wallet.WalletStorage;
 import com.pop.popcoinsystem.data.block.Block;
@@ -9,9 +10,10 @@ import com.pop.popcoinsystem.data.enums.SigHashType;
 import com.pop.popcoinsystem.data.miner.Miner;
 import com.pop.popcoinsystem.data.script.*;
 import com.pop.popcoinsystem.exception.UnsupportedAddressException;
+import com.pop.popcoinsystem.network.protocol.messageHandler.TransactionEvent;
 import com.pop.popcoinsystem.service.strategy.ScriptVerificationStrategy;
 import com.pop.popcoinsystem.service.strategy.ScriptVerifierFactory;
-import com.pop.popcoinsystem.storage.POPStorage;
+import com.pop.popcoinsystem.storage.StorageService;
 import com.pop.popcoinsystem.storage.UTXOSearch;
 import com.pop.popcoinsystem.data.transaction.*;
 import com.pop.popcoinsystem.data.transaction.dto.TXInputDTO;
@@ -42,26 +44,22 @@ import java.util.stream.IntStream;
 
 import static com.pop.popcoinsystem.data.transaction.constant.VERSION_1;
 import static com.pop.popcoinsystem.service.BlockChainConstants.*;
-import static com.pop.popcoinsystem.storage.POPStorage.getUTXOKey;
+import static com.pop.popcoinsystem.storage.StorageService.getUTXOKey;
 import static com.pop.popcoinsystem.data.transaction.Transaction.calculateBlockReward;
 import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
 
 @Slf4j
 @Service
 public class BlockChainService {
-    // 在 BlockChainService 中注入
     @Autowired
-    private POPStorage popStorage;
+    private StorageService popStorage;
+    @Autowired
     private MiningService miningService;
+    @Autowired
     private KademliaNodeServer kademliaNodeServer;
 
     @PostConstruct
     private void initBlockChain() throws Exception {
-        startNetwork();
-        miningService = new MiningService(this);
-
-        log.info("初始化区块链服务...");
-        // 检查是否已存在创世区块  不存在就创建
         Block genesisBlock = getBlockByHash(GENESIS_BLOCK_HASH);
         if (getBlockByHash(GENESIS_BLOCK_HASH) == null) {
             log.info("创世区块是空的");
@@ -77,96 +75,9 @@ public class BlockChainService {
             popStorage.addMainHeightToBlockIndex(genesisBlock.getHeight(), GENESIS_BLOCK_HASH);
             log.info("创世区块高度:"+genesisBlock.getHeight());
         }
-        WalletStorage walletStorage = WalletStorage.getInstance();
-        Wallet walleta = walletStorage.getWallet("btcminer");
-        if (walleta == null){
-            KeyPair keyPairA = CryptoUtil.ECDSASigner.generateKeyPair();
-            PublicKey publicKey = keyPairA.getPublic();
-            PrivateKey privateKey = keyPairA.getPrivate();
-
-            KeyPair keyPairA1 = CryptoUtil.ECDSASigner.generateKeyPair();
-            PublicKey publicKey1 = keyPairA1.getPublic();
-            PrivateKey privateKey1 = keyPairA1.getPrivate();
-
-            KeyPair keyPairA2 = CryptoUtil.ECDSASigner.generateKeyPair();
-            PublicKey publicKey2 = keyPairA2.getPublic();
-            PrivateKey privateKey2 = keyPairA2.getPrivate();
-
-            walleta = new Wallet();
-            walleta.setName("btcminer");
-            walleta.setPublicKeyHex(CryptoUtil.bytesToHex(publicKey.getEncoded()));
-            walleta.setPrivateKeyHex(CryptoUtil.bytesToHex(privateKey.getEncoded()));
-
-            walleta.setPublicKeyHex1(CryptoUtil.bytesToHex(publicKey1.getEncoded()));
-            walleta.setPrivateKeyHex1(CryptoUtil.bytesToHex(privateKey1.getEncoded()));
-
-            walleta.setPublicKeyHex2(CryptoUtil.bytesToHex(publicKey2.getEncoded()));
-            walleta.setPrivateKeyHex2(CryptoUtil.bytesToHex(privateKey2.getEncoded()));
-
-            walletStorage.addWallet(walleta);
-        }
-        byte[] bytesMiner = CryptoUtil.hexToBytes(walleta.getPublicKeyHex());
-        String p2PKHAddressMiner = CryptoUtil.ECDSASigner.createP2PKHAddressByPK(bytesMiner);
-        String p2WPKHAddressMiner = CryptoUtil.ECDSASigner.createP2WPKHAddressByPK(bytesMiner);
-        log.info("矿工钱包地址P2PKH：{}",p2PKHAddressMiner);
-        log.info("矿工钱包地址P2WPKH：{}",p2WPKHAddressMiner);
-
-        /*新增测试钱包*/
-        Wallet wallettest = walletStorage.getWallet("wallettest");
-        log.info("wallettest: "+wallettest);
-        if (wallettest == null){
-            KeyPair keyPairA = CryptoUtil.ECDSASigner.generateKeyPair();
-            PublicKey publicKey = keyPairA.getPublic();
-            PrivateKey privateKey = keyPairA.getPrivate();
-
-            KeyPair keyPairA1 = CryptoUtil.ECDSASigner.generateKeyPair();
-            PublicKey publicKey1 = keyPairA1.getPublic();
-            PrivateKey privateKey1 = keyPairA1.getPrivate();
-
-            KeyPair keyPairA2 = CryptoUtil.ECDSASigner.generateKeyPair();
-            PublicKey publicKey2 = keyPairA2.getPublic();
-            PrivateKey privateKey2 = keyPairA2.getPrivate();
-
-            wallettest = new Wallet();
-            wallettest.setName("wallettest");
-            wallettest.setPublicKeyHex(CryptoUtil.bytesToHex(publicKey.getEncoded()));
-            wallettest.setPrivateKeyHex(CryptoUtil.bytesToHex(privateKey.getEncoded()));
-
-            wallettest.setPublicKeyHex1(CryptoUtil.bytesToHex(publicKey1.getEncoded()));
-            wallettest.setPrivateKeyHex1(CryptoUtil.bytesToHex(privateKey1.getEncoded()));
-
-            wallettest.setPublicKeyHex2(CryptoUtil.bytesToHex(publicKey2.getEncoded()));
-            wallettest.setPrivateKeyHex2(CryptoUtil.bytesToHex(privateKey2.getEncoded()));
-
-            walletStorage.addWallet(wallettest);
-        }
-        String publicKeyHexTest = wallettest.getPublicKeyHex();
-        byte[] bytesTest = CryptoUtil.hexToBytes(publicKeyHexTest);
-        String p2PKHAddressByPK = CryptoUtil.ECDSASigner.createP2PKHAddressByPK(bytesTest);
-        String p2WPKHAddressByPK = CryptoUtil.ECDSASigner.createP2WPKHAddressByPK(bytesTest);
-        log.info("p2PKH Test 测试钱包地址: {}", p2PKHAddressByPK);
-        log.info("p2WPKH Test 测试钱包地址: {}", p2WPKHAddressByPK);
-
-
-        Miner miner = new Miner();
-        miner.setAddress(p2PKHAddressMiner);
-        miner.setName("btcminer");
-        miningService.setMiningInfo(miner);
-
-        //延迟5秒后开始挖矿
-        Thread.sleep(5000);
-        miningService.startMining();
     }
 
-
-
-
-
-
-    /**
-     * 启动网络节点
-     */
-    public void startNetwork() {
+    public void startNerWork(){
         new Thread(() -> {
             try {
                 int tcpPort = 8334;
@@ -218,7 +129,7 @@ public class BlockChainService {
                 log.info("节点信息:{}", nodeSetting);
                 kademliaNodeServer = new KademliaNodeServer(nodeSetting.getId(), localIp, udpPort, tcpPort);
                 kademliaNodeServer.start();
-                kademliaNodeServer.setBlockChainService(this);
+
 
                 NodeInfo nodeInfo = new NodeInfo();
                 nodeInfo.setId(BigInteger.ONE);
@@ -232,9 +143,12 @@ public class BlockChainService {
                 e.printStackTrace();
             }
         }).start();
+
     }
 
-
+    public void startMining() throws Exception {
+        miningService.startMining();
+    }
 
     /**
      * 验证交易
@@ -309,146 +223,9 @@ public class BlockChainService {
             return false;
         }
         return true;
-
-
-/*        log.info("解锁脚本类型:{}", type);
-        // 区分SegWit脚本类型（以OP_0开头的通常为P2WPKH或P2WSH）
-        if (type == ScriptType.P2WPKH.getValue()) {
-            return verifyP2WPKH(tx, input, inputIndex, utxo);
-        } else if (type == ScriptType.P2WSH.getValue()) {
-            return verifyP2WSH(tx, input, inputIndex, utxo);
-        }else if (type == ScriptType.P2PKH.getValue()) {
-            return verifyP2PKH(tx, input, inputIndex, utxo);
-        }else if(type == ScriptType.P2SH.getValue()){
-            return verifyP2SH(tx, input, inputIndex, utxo);
-        }else {
-            log.error("不支持的脚本类型");
-            return false;
-        }*/
     }
 
 
-    private boolean verifyP2SH(Transaction tx, TXInput input,int inputIndex,UTXO utxo) {
-        log.info("普通交易 验证P2SH");
-        ScriptSig scriptSig = input.getScriptSig();//[签名数据] [赎回脚本]
-        // 赎回脚本为多重签名脚本 [公钥1] [公钥2] [公钥3] 3 OP_CHECKMULTISIG，
-        ScriptPubKey scriptPubKey = utxo.getScriptPubKey(); //OP_HASH160 <ScriptHash> OP_EQUAL
-        //   # 从解锁脚本中提取赎回脚本
-        //   # 计算赎回脚本的哈希值
-
-        return false;
-    }
-
-    private boolean verifyP2PKH(Transaction tx, TXInput input,int inputIndex,UTXO utxo) {
-        byte[] serialize = SerializeUtils.serialize(tx);
-        log.info("验证时交易序列化数据: {}",CryptoUtil.bytesToHex(CryptoUtil.applySHA256(serialize)) );
-
-
-        ScriptPubKey scriptPubKey = utxo.getScriptPubKey();
-        log.info("验证P2PKH{}",scriptPubKey.toScripString());
-        //从中获取 签名和公钥 witness  第一个数据是签名 第二个是公钥
-        ScriptSig scriptSig = input.getScriptSig();//解锁脚本中有 签名和公钥  签名
-        List<Script.ScriptElement> elements = scriptSig.getElements();
-        byte[] signature = elements.get(0).getData();
-        byte[] publicKey = elements.get(1).getData();
-
-        SigHashType sigHashType = SegWitUtils.extractSigHashType(signature);//获取签名的SIGHASH类型
-        log.info("签名SIGHASH类型:{}", sigHashType);
-        byte[] realSignature = SegWitUtils.extractOriginalSignature(signature);
-        log.info("原始签名数据:{}", CryptoUtil.bytesToHex(realSignature));
-        //这里应该根据签名类型 构建对应的 交易签名数据
-
-        byte[] txHash = createLegacySignatureHash(
-                tx,
-                inputIndex,
-                utxo,
-                sigHashType
-        );
-        log.info("验证时需要签名的交易数据:{}", CryptoUtil.bytesToHex(txHash));
-
-        ScriptSig  realScriptSig = new ScriptSig(realSignature, publicKey);
-        boolean verify = scriptPubKey.verify(realScriptSig, txHash, 0, false);
-        if (!verify) {
-            log.error("P2PKH输入的签名无效");
-            return false;
-        }
-        return true;
-    }
-
-    private boolean verifyP2WSH(Transaction tx, TXInput input,int inputIndex,UTXO utxo) {
-        log.info("验证P2WSH");
-
-        return false;
-    }
-
-    private boolean verifyP2WPKH(Transaction tx, TXInput input,int inputIndex,UTXO utxo) {
-        // 1. 验证见证数据结构：P2WPKH见证应包含2个元素（签名 + 公钥）
-        List<TXInput> inputs = tx.getInputs();//顺序不变获取 隔离见证输入
-        List<Witness> witnesses = tx.getWitnesses();
-        List<TXInput> segWitInputs = inputs.stream()
-                .filter(data -> data.getScriptSig() == null)  // 核心条件：scriptSig 为空
-                .toList();
-
-        int realIndex = IntStream.range(0, segWitInputs.size())
-                .filter(index -> {
-                    TXInput current = segWitInputs.get(index);
-                    // 比较txId和vout（假设TXInput有getTxId()和getVout()方法）
-                    return current.getTxId().equals(input.getTxId())
-                            && current.getVout() == input.getVout();
-                })
-                .findFirst() // 找到第一个匹配的索引（唯一，因为输入唯一）
-                .orElse(-1);// 未找到返回-1（理论上不会出现，因为input来自segWitInputs的源列表）
-
-        log.info("真实见证位置:{}", realIndex);
-
-        Witness witness = witnesses.get(realIndex);
-        if (witness.getSize() != 2) {
-            log.error("P2WPKH见证数据元素数量错误，预期2个，实际{}个", witness.getSize());
-            return false;
-        }
-        // 2. 提取见证数据中的签名和公钥
-        byte[] signature = witness.getItem(0); // 第一个元素为签名（包含SIGHASH类型）
-        byte[] publicKey = witness.getItem(1); // 第二个元素为公钥Hash
-
-        SigHashType sigHashType = SegWitUtils.extractSigHashType(signature);//获取签名的SIGHASH类型
-        log.info("P2WPKH签名SIGHASH类型:{}", sigHashType);
-        byte[] realSignature = SegWitUtils.extractOriginalSignature(signature);
-        log.info("P2WPKH签名数据:{}", CryptoUtil.bytesToHex(realSignature));
-        //这里应该根据签名类型 构建对应的 交易签名数据
-        byte[] txHash = createWitnessSignatureHash(
-                tx,
-                inputIndex,
-                utxo.getValue(),
-                sigHashType
-        );
-        log.info("P2WPKH验证时需要签名的交易数据:{}", CryptoUtil.bytesToHex(txHash));
-
-
-        if (signature.length == 0) {
-            log.error("P2WPKH签名数据为空");
-            return false;
-        }
-        if (publicKey == null || publicKey.length == 0) {
-            log.error("P2WPKH公钥数据为空");
-            return false;
-        }
-        ScriptPubKey scriptPubKey = utxo.getScriptPubKey();
-
-        // 3. 解析P2WPKH锁定脚本：格式为 [OP_0 (0x00) + 20字节公钥哈希]
-        byte[] scriptBytes = scriptPubKey.getScriptBytes();
-        if (scriptBytes.length != 22) { // 1字节OP_0 + 20字节哈希 + 1字节结尾？需根据实际脚本结构调整
-            log.error("P2WPKH锁定脚本长度错误，预期22字节，实际{}字节", scriptBytes.length);
-            throw new IllegalArgumentException("P2WPKH脚本长度必须为22字节，实际为" + scriptBytes.length);
-        }
-        ScriptSig scriptSig = new ScriptSig(signature, publicKey);
-        boolean verify = scriptPubKey.verify(scriptSig, txHash, input.getVout(), false);
-        if (!verify) {
-            log.error("P2WPKH输入的签名无效");
-            return false;
-        }
-        log.info("P2WPKH脚本验证成功");
-        return true;
-    }
 
 
 
@@ -558,12 +335,6 @@ public class BlockChainService {
         return true;
     }
 
-
-
-
-
-
-
     /**
      * 创建创世区块（区块链的第一个区块）
      * 创世区块特殊性：
@@ -629,11 +400,13 @@ public class BlockChainService {
             miningService.addTransaction(transaction);
             //广播交易
             new Thread(() -> {
-                log.info("交易验证成功,广播交易");
-                TransactionMessage transactionKademliaMessage = new TransactionMessage();
-                transactionKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());
-                transactionKademliaMessage.setData(transaction);
-                kademliaNodeServer.broadcastMessage(transactionKademliaMessage);
+                if (kademliaNodeServer.isRunning()){
+                    log.info("交易验证成功,广播交易");
+                    TransactionMessage transactionKademliaMessage = new TransactionMessage();
+                    transactionKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());
+                    transactionKademliaMessage.setData(transaction);
+                    kademliaNodeServer.broadcastMessage(transactionKademliaMessage);
+                }
             }).start();
         }
         return true;
@@ -676,11 +449,13 @@ public class BlockChainService {
         processValidBlock(block);
         //广播区块
         new Thread(() -> {
-            log.info("区块验证成功,广播区块");
-            BlockMessage blockMessage = new BlockMessage();
-            blockMessage.setSender(kademliaNodeServer.getNodeInfo());
-            blockMessage.setData(block);
-            kademliaNodeServer.broadcastMessage(blockMessage);
+            if (kademliaNodeServer.isRunning()){
+                log.info("区块验证成功,广播区块");
+                BlockMessage blockMessage = new BlockMessage();
+                blockMessage.setSender(kademliaNodeServer.getNodeInfo());
+                blockMessage.setData(block);
+                kademliaNodeServer.broadcastMessage(blockMessage);
+            }
         }).start();
         return true;
     }

@@ -14,6 +14,8 @@ import com.pop.popcoinsystem.util.CryptoUtil;
 import jakarta.annotation.Resource;
 import jakarta.websocket.server.PathParam;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.web.bind.annotation.*;
 
 
@@ -24,7 +26,8 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/blockchain")
 public class BlockChainController {
-    @Resource
+    @Lazy
+    @Autowired
     private BlockChainService blockChainService;
 
 

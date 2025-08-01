@@ -26,7 +26,7 @@ import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
 
 
 @Slf4j
-public class POPStorage {
+public class StorageService {
     // 数据库存储路径
     private static final String DB_PATH = "rocksDb/popCoin.db/blockChain" + POP_NET_VERSION + ".db/";
     //这些KEY都保存在BLOCK_CHAIN 中 因为他们单独特殊
@@ -1048,13 +1048,13 @@ public class POPStorage {
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final RocksDB db;
     private static class InstanceHolder {
-        private static final POPStorage INSTANCE = new POPStorage();
+        private static final StorageService INSTANCE = new StorageService();
     }
-    public static POPStorage getInstance() {
-        return POPStorage.InstanceHolder.INSTANCE;
+    public static StorageService getInstance() {
+        return StorageService.InstanceHolder.INSTANCE;
     }
 
-    private POPStorage() {
+    private StorageService() {
         try {
             this.db = openRocksDBWithColumnFamilies();
             registerShutdownHook();

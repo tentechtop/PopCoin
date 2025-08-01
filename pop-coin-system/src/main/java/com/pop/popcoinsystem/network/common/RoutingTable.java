@@ -1,7 +1,7 @@
 package com.pop.popcoinsystem.network.common;
 
 import com.pop.popcoinsystem.exception.FullBucketException;
-import com.pop.popcoinsystem.storage.POPStorage;
+import com.pop.popcoinsystem.storage.StorageService;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -47,7 +47,7 @@ public class RoutingTable {
      * 更新路由表 添加或移动节点到适当的K桶
      */
     public boolean update(ExternalNodeInfo node) throws FullBucketException {
-        POPStorage instance = POPStorage.getInstance();
+        StorageService instance = StorageService.getInstance();
         lock.writeLock().lock();
         try {
             node.setLastSeen(new Date());
@@ -75,7 +75,7 @@ public class RoutingTable {
      * 强制将节点添加到路由表中。若对应K桶已满，会移除最老的节点以腾出空间。
      */
     public synchronized void forceUpdate(ExternalNodeInfo node) {
-        POPStorage instance = POPStorage.getInstance();
+        StorageService instance = StorageService.getInstance();
         try {
             this.update(node);
             //持久化
@@ -236,7 +236,7 @@ public class RoutingTable {
      * 删除节点
      */
     public void delete(ExternalNodeInfo node) {
-        POPStorage instance = POPStorage.getInstance();
+        StorageService instance = StorageService.getInstance();
         Bucket bucket = this.findBucket(node.getId());
         bucket.remove(node);
         instance.deleteRouteTableNode(node.getId());
@@ -284,7 +284,7 @@ public class RoutingTable {
     public void recoverFromNodeList() {
         log.info("开始从节点列表恢复路由表");
         // 从存储获取所有路由表节点
-        List<ExternalNodeInfo> nodeList = POPStorage.getInstance().iterateAllRouteTableNodes();
+        List<ExternalNodeInfo> nodeList = StorageService.getInstance().iterateAllRouteTableNodes();
         if (nodeList == null || nodeList.isEmpty()) {
             log.info("恢复路由表：节点列表为空，无需处理");
             return;
@@ -316,7 +316,7 @@ public class RoutingTable {
         log.info("开始将路由表节点持久化到存储系统");
 
         // 获取存储实例
-        POPStorage storage = POPStorage.getInstance();
+        StorageService storage = StorageService.getInstance();
 
         // 收集所有需要持久化的节点
         List<ExternalNodeInfo> nodesToPersist = new ArrayList<>();

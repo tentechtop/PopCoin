@@ -4,15 +4,23 @@ import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.network.KademliaNodeServer;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.TransactionMessage;
+import com.pop.popcoinsystem.service.BlockChainService;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.stereotype.Service;
 
 import java.io.Serializable;
 
 @Slf4j
+@Service
 public class TransactionMessageHandler implements MessageHandler {
 
 
+    @Lazy
+    @Autowired
+    private BlockChainService blockChainService;
 
     @Override
     public KademliaMessage<? extends Serializable> handleMesage(KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) throws InterruptedException {
@@ -28,7 +36,7 @@ public class TransactionMessageHandler implements MessageHandler {
         //接收交易消息后，通过RingBuffer发布事件到 Disruptor，触发后续处理。
         // 通过管理器发布事件，无需直接依赖BlockChainService
 
-        kademliaNodeServer.getBlockChainService().verifyAndAddTradingPool(data);
+        blockChainService.verifyAndAddTradingPool(data);
         return null;
     }
 

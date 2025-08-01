@@ -28,7 +28,11 @@ import io.netty.handler.codec.*;
 
 import jakarta.annotation.PreDestroy;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.stereotype.Service;
 
 import java.math.BigInteger;
 import java.net.InetSocketAddress;
@@ -39,6 +43,8 @@ import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
 
 @Slf4j
 @Data
+@Service
+@NoArgsConstructor
 public class KademliaNodeServer {
     //节点信息
     private NodeInfo nodeInfo;
@@ -46,7 +52,7 @@ public class KademliaNodeServer {
     //额外信息  包含了节点信息  外网ip  外网端口  内网ip  内网端口  节点状态  节点版本  节点类型  节点描述 节点分数 等待
     private ExternalNodeInfo externalNodeInfo;
 
-    private final NodeSettings nodeSettings;
+    private  NodeSettings nodeSettings;
     //路由表
     private RoutingTable routingTable;
     //节点设置
@@ -74,7 +80,6 @@ public class KademliaNodeServer {
     private ServerBootstrap tcpBootstrap;
 
     private DisruptorManager disruptorManager;
-    private BlockChainService blockChainService;
 
     // 在KademliaNodeServer的start()方法中初始化定时任务
     private ScheduledExecutorService scheduler;

@@ -13,6 +13,7 @@ import com.pop.popcoinsystem.util.SegWitUtils;
 import com.pop.popcoinsystem.util.SerializeUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -21,6 +22,7 @@ import java.util.List;
 @Service
 public class P2PKHVerifier implements ScriptVerificationStrategy{
 
+    @Lazy
     @Autowired
     private BlockChainService blockChainService;
 
