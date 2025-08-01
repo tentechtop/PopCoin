@@ -135,7 +135,7 @@ public class KademliaNodeServer {
             startTcpTransmitServer();
             running = true;
             scheduler = Executors.newSingleThreadScheduledExecutor();
-            scheduler.scheduleAtFixedRate(this::maintainNetwork, 0, 30, TimeUnit.SECONDS);//首次执行立即开始，之后每 30 秒执行一次 maintainNetwork 方法
+            scheduler.scheduleAtFixedRate(this::maintainNetwork, 0, 60 * 15, TimeUnit.SECONDS);//首次执行立即开始，之后每 30 秒执行一次 maintainNetwork 方法
         } catch (Exception e) {
             log.error("KademliaNode start error", e);
             stop();
