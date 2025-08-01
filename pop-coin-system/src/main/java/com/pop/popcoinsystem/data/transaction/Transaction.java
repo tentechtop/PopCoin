@@ -72,7 +72,7 @@ public class Transaction implements Serializable {
     /**
      * 锁定时间
      */
-    private long lockTime  = 0;
+    private long lockTime;
 
     /**
      * 交易创建时间
@@ -94,7 +94,6 @@ public class Transaction implements Serializable {
     private List<Witness> witnesses = new ArrayList<>(); // 每个输入对应一个Witness
 
 
-
     //设置交易大小
     public void setSize() {
         size = calculateBaseSize();
@@ -102,9 +101,6 @@ public class Transaction implements Serializable {
             size += calculateWitnessSize();
         }
     }
-
-
-
 
     /**
      * 计算普通交易的实际字节大小（非隔离见证交易总大小）

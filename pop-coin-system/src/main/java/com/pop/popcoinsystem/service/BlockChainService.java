@@ -1623,8 +1623,6 @@ public class BlockChainService implements EventHandler<TransactionEvent> {
         txCopy.setTime(0L);
         // 1. 仅复制计算签名哈希必需的核心字段，去除无关数据
         // 保留核心字段：版本、输入列表、输出列表、锁定时间（这些是签名哈希计算的必要项）
-        log.info("交易版本:{}",tx.getVersion());
-        log.info("复制的交易:{}",CryptoUtil.bytesToHex( CryptoUtil.applySHA256(SerializeUtils.serialize(txCopy) )));
         txCopy.setInputs(copyEssentialInputs(tx.getInputs())); // 仅复制输入的必要信息
         txCopy.setOutputs(new ArrayList<>(tx.getOutputs())); // 复制输出列表（浅拷贝足够，无需修改）
         txCopy.setLockTime(tx.getLockTime());
@@ -1634,7 +1632,6 @@ public class BlockChainService implements EventHandler<TransactionEvent> {
             log.warn("输入索引超出范围");
             throw new RuntimeException("输入索引超出范围");
         }
-
         // 4. 将当前输入对应的UTXO的scriptPubKey作为临时scriptSig（核心步骤，必须执行）
         ScriptPubKey originalScriptPubKey = utxo.getScriptPubKey();
         if (originalScriptPubKey == null) {
