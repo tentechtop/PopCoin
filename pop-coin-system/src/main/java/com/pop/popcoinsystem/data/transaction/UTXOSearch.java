@@ -1,4 +1,4 @@
-package com.pop.popcoinsystem.storage;
+package com.pop.popcoinsystem.data.transaction;
 
 import lombok.Data;
 
@@ -6,8 +6,6 @@ import java.util.Set;
 
 @Data
 public class UTXOSearch {
-
     private long total;//总额
-
     private Set<String> utxos;// utxo key集合
 }

@@ -1,9 +1,10 @@
-package com.pop.popcoinsystem.network.protocol.messageHandler;
+package com.pop.popcoinsystem.event.transaction;
 
 import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.network.KademliaNodeServer;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.TransactionMessage;
+import com.pop.popcoinsystem.network.protocol.messageHandler.MessageHandler;
 import com.pop.popcoinsystem.service.BlockChainService;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;

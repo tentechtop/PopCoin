@@ -1,8 +1,5 @@
 package com.pop.popcoinsystem.service;
 
-import com.lmax.disruptor.EventHandler;
-import com.pop.popcoinsystem.application.service.wallet.Wallet;
-import com.pop.popcoinsystem.application.service.wallet.WalletStorage;
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.blockChain.BlockChain;
@@ -10,11 +7,10 @@ import com.pop.popcoinsystem.data.enums.SigHashType;
 import com.pop.popcoinsystem.data.miner.Miner;
 import com.pop.popcoinsystem.data.script.*;
 import com.pop.popcoinsystem.exception.UnsupportedAddressException;
-import com.pop.popcoinsystem.network.protocol.messageHandler.TransactionEvent;
 import com.pop.popcoinsystem.service.strategy.ScriptVerificationStrategy;
 import com.pop.popcoinsystem.service.strategy.ScriptVerifierFactory;
 import com.pop.popcoinsystem.storage.StorageService;
-import com.pop.popcoinsystem.storage.UTXOSearch;
+import com.pop.popcoinsystem.data.transaction.UTXOSearch;
 import com.pop.popcoinsystem.data.transaction.*;
 import com.pop.popcoinsystem.data.transaction.dto.TXInputDTO;
 import com.pop.popcoinsystem.data.transaction.dto.TXOutputDTO;
@@ -40,7 +36,6 @@ import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.*;
-import java.util.stream.IntStream;
 
 import static com.pop.popcoinsystem.data.transaction.constant.VERSION_1;
 import static com.pop.popcoinsystem.service.BlockChainConstants.*;
@@ -62,18 +57,15 @@ public class BlockChainService {
     private void initBlockChain() throws Exception {
         Block genesisBlock = getBlockByHash(GENESIS_BLOCK_HASH);
         if (getBlockByHash(GENESIS_BLOCK_HASH) == null) {
-            log.info("创世区块是空的");
             genesisBlock = createGenesisBlock();
             //保存区块
             popStorage.addBlock(genesisBlock);
             //保存最新的区块hash
             popStorage.updateMainLatestBlockHash(GENESIS_BLOCK_HASH);
-            log.info("创世区块hash:"+GENESIS_BLOCK_HASH_HEX);
             //最新区块高度
             popStorage.updateMainLatestHeight(genesisBlock.getHeight());
             //保存主链中 高度高度到 hash的索引
             popStorage.addMainHeightToBlockIndex(genesisBlock.getHeight(), GENESIS_BLOCK_HASH);
-            log.info("创世区块高度:"+genesisBlock.getHeight());
         }
     }
 

@@ -5,6 +5,7 @@ import com.pop.popcoinsystem.data.miner.Miner;
 import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.data.transaction.UTXO;
+import com.pop.popcoinsystem.data.transaction.UTXOSearch;
 import com.pop.popcoinsystem.data.vo.result.PageResult;
 import com.pop.popcoinsystem.data.vo.result.RocksDbPageResult;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;

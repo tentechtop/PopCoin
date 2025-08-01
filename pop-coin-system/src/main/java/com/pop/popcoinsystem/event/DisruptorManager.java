@@ -1,13 +1,10 @@
-package com.pop.popcoinsystem.service;
+package com.pop.popcoinsystem.event;
 
 
-import com.lmax.disruptor.BlockingWaitStrategy;
 import com.lmax.disruptor.RingBuffer;
 import com.lmax.disruptor.dsl.Disruptor;
-import com.lmax.disruptor.dsl.ProducerType;
 import com.pop.popcoinsystem.data.transaction.Transaction;
-import com.pop.popcoinsystem.network.protocol.messageHandler.TransactionEvent;
-import com.pop.popcoinsystem.network.protocol.messageHandler.TransactionEventFactory;
+import com.pop.popcoinsystem.event.transaction.TransactionEvent;
 import com.pop.popcoinsystem.service.BlockChainService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -16,7 +13,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * Disruptor管理器，负责创建和管理Disruptor实例

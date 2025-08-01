@@ -1,5 +1,6 @@
 package com.pop.popcoinsystem.network;
 
+import com.pop.popcoinsystem.event.transaction.TransactionMessageHandler;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.common.NodeSettings;
@@ -8,10 +9,8 @@ import com.pop.popcoinsystem.network.protocol.MessageType;
 import com.pop.popcoinsystem.network.protocol.message.FindNodeRequestMessage;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
-import com.pop.popcoinsystem.network.protocol.message.TransactionMessage;
 import com.pop.popcoinsystem.network.protocol.messageHandler.*;
-import com.pop.popcoinsystem.service.BlockChainService;
-import com.pop.popcoinsystem.service.DisruptorManager;
+import com.pop.popcoinsystem.event.DisruptorManager;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
@@ -30,8 +29,6 @@ import jakarta.annotation.PreDestroy;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.math.BigInteger;
