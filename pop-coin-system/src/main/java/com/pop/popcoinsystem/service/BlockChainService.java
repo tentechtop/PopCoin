@@ -8,10 +8,8 @@ import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.blockChain.BlockChain;
 import com.pop.popcoinsystem.data.enums.SigHashType;
 import com.pop.popcoinsystem.data.miner.Miner;
-import com.pop.popcoinsystem.data.script.Script;
-import com.pop.popcoinsystem.data.script.ScriptPubKey;
-import com.pop.popcoinsystem.data.script.ScriptSig;
-import com.pop.popcoinsystem.data.script.ScriptType;
+import com.pop.popcoinsystem.data.script.*;
+import com.pop.popcoinsystem.exception.UnsupportedAddressException;
 import com.pop.popcoinsystem.storage.POPStorage;
 import com.pop.popcoinsystem.storage.UTXOSearch;
 import com.pop.popcoinsystem.data.transaction.*;
@@ -40,6 +38,7 @@ import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.*;
 
+import static com.pop.popcoinsystem.data.transaction.constant.VERSION_1;
 import static com.pop.popcoinsystem.storage.POPStorage.getUTXOKey;
 import static com.pop.popcoinsystem.data.transaction.Transaction.calculateBlockReward;
 import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
@@ -182,7 +181,7 @@ public class BlockChainService implements EventHandler<TransactionEvent> {
 
 
         Miner miner = new Miner();
-        miner.setAddress(p2PKHAddressMiner);
+        miner.setAddress(p2WPKHAddressMiner);
         miner.setName("btcminer");
         miningService.setMiningInfo(miner);
 
@@ -1565,5 +1564,47 @@ public class BlockChainService implements EventHandler<TransactionEvent> {
         return Result.ok(stringTransactionDTOHashMap);
     }
 
+
+
+    //创建一笔CoinBase交易
+    public static  Transaction createCoinBaseTransaction(String to, long height,long totalFee) {
+        //地址到公钥哈希
+        AddressType addressType = CryptoUtil.ECDSASigner.getAddressType(to);
+        byte[] bytes = CryptoUtil.ECDSASigner.getAddressHash(to);//地址哈希
+        //coinBase的输入的交易ID
+        byte[] zeroTxId = new byte[32]; // 32字节 = 256位
+        Arrays.fill(zeroTxId, (byte) 0);
+        TXInput input = new TXInput(zeroTxId, 0, null);
+        // 创建输出，将奖励发送到指定地址
+        ScriptPubKey scriptPubKey = createScriptPubKey(addressType, bytes);
+        TXOutput output = new TXOutput(calculateBlockReward(height)+totalFee, scriptPubKey);
+        Transaction coinbaseTx = new Transaction();
+        coinbaseTx.setVersion(VERSION_1);
+        coinbaseTx.getInputs().add(input);
+        coinbaseTx.getOutputs().add(output);
+        coinbaseTx.setTime(System.currentTimeMillis());
+        // 计算并设置交易ID
+        coinbaseTx.setTxId(Transaction.calculateTxId(coinbaseTx));
+        coinbaseTx.setSize(coinbaseTx.calculateBaseSize());
+        coinbaseTx.calculateWeight();
+        return coinbaseTx;
+    }
+
+
+
+    public static ScriptPubKey createScriptPubKey(AddressType type, byte[] addressHash) {
+        switch (type) {
+            case P2PKH:
+                return new ScriptPubKey(addressHash);
+            case P2SH:
+                return ScriptPubKey.createP2SH(addressHash);
+            case P2WPKH:
+                return ScriptPubKey.createP2WPKH(addressHash);
+            case P2WSH:
+                return ScriptPubKey.createP2WSH(addressHash);
+            default:
+                throw new UnsupportedAddressException("不支持的输出地址类型: " + type);
+        }
+    }
 
 }

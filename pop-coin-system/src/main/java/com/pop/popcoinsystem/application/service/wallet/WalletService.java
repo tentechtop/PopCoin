@@ -566,7 +566,7 @@ public class WalletService {
         // 主输出（支付给接收地址）
         TXOutput mainOutput = new TXOutput();
         mainOutput.setValue(amountToPay);
-        mainOutput.setScriptPubKey(createScriptPubKey(toAddressType, toAddressHash));
+        mainOutput.setScriptPubKey(blockChainService.createScriptPubKey(toAddressType, toAddressHash));
         txOutputs.add(mainOutput);
         // 计算手续费和找零
         calculateAndAddChange(transaction, txOutputs, totalInputAmount, amountToPay, publicKeyBytes, ScriptType.P2WSH.getValue());
@@ -697,20 +697,7 @@ public class WalletService {
     /**
      * 创建输出锁定脚本
      */
-    private ScriptPubKey createScriptPubKey(AddressType type, byte[] addressHash) {
-        switch (type) {
-            case P2PKH:
-                return new ScriptPubKey(addressHash);
-            case P2SH:
-                return ScriptPubKey.createP2SH(addressHash);
-            case P2WPKH:
-                return ScriptPubKey.createP2WPKH(addressHash);
-            case P2WSH:
-                return ScriptPubKey.createP2WSH(addressHash);
-            default:
-                throw new UnsupportedAddressException("不支持的输出地址类型: " + type);
-        }
-    }
+
 
     /**
      * 计算并添加找零输出
@@ -726,7 +713,7 @@ public class WalletService {
         byte[] changeHash = isSegWitType(scriptType) ? CryptoUtil.ECDSASigner.createP2WPKHByPK(pubKeyBytes) : CryptoUtil.ECDSASigner.createP2PKHByPK(pubKeyBytes);
         TXOutput changeOutput = new TXOutput();
         changeOutput.setValue(change);
-        changeOutput.setScriptPubKey(createScriptPubKey(changeType, changeHash));
+        changeOutput.setScriptPubKey(blockChainService.createScriptPubKey(changeType, changeHash));
         outputs.add(changeOutput);
     }
 

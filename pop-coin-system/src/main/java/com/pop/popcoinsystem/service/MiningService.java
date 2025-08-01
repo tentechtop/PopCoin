@@ -154,7 +154,7 @@ public class MiningService {
                     totalFee += blockChainService.getFee(transaction);
                 }
                 //创建CoinBase交易 放在第一位
-                Transaction coinBaseTransaction = Transaction.createCoinBaseTransaction(miner.getAddress(), blockHeight+1, totalFee);
+                Transaction coinBaseTransaction = blockChainService.createCoinBaseTransaction(miner.getAddress(), blockHeight+1, totalFee);
 
                 blockTransactions.add(coinBaseTransaction);
                 blockTransactions.addAll(transactions);

@@ -1,6 +1,7 @@
 package com.pop.popcoinsystem.data.transaction;
 
 import com.pop.popcoinsystem.data.enums.SigHashType;
+import com.pop.popcoinsystem.data.script.AddressType;
 import com.pop.popcoinsystem.data.script.Script;
 import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.data.script.ScriptSig;
@@ -154,27 +155,6 @@ public class Transaction implements Serializable {
     }
 
 
-    //创建一笔CoinBase交易
-    public static  Transaction createCoinBaseTransaction(String to, long height,long totalFee) {
-        //地址到公钥哈希
-        byte[] bytes = CryptoUtil.ECDSASigner.addressToP2PKH(to);
-        //coinBase的输入的交易ID
-        byte[] zeroTxId = new byte[32]; // 32字节 = 256位
-        Arrays.fill(zeroTxId, (byte) 0);
-        TXInput input = new TXInput(zeroTxId, 0, null);
-        // 创建输出，将奖励发送到指定地址
-        TXOutput output = new TXOutput(calculateBlockReward(height)+totalFee, new ScriptPubKey(bytes));
-        Transaction coinbaseTx = new Transaction();
-        coinbaseTx.setVersion(VERSION_1);
-        coinbaseTx.getInputs().add(input);
-        coinbaseTx.getOutputs().add(output);
-        coinbaseTx.setTime(System.currentTimeMillis());
-        // 计算并设置交易ID
-        coinbaseTx.setTxId(Transaction.calculateTxId(coinbaseTx));
-        coinbaseTx.setSize(coinbaseTx.calculateBaseSize());
-        coinbaseTx.calculateWeight();
-        return coinbaseTx;
-    }
 
 
 
