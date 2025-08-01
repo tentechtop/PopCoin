@@ -9,14 +9,15 @@ import lombok.Setter;
 import lombok.ToString;
 
 import java.io.Serializable;
+import java.util.Random;
 import java.util.UUID;
 
 @Getter
 @Setter
 @ToString
 public abstract class KademliaMessage<D extends Serializable> {
-    // 消息唯一标识（用于去重）
-    private String messageId = generateMessageId();
+    // 消息唯一标识（用于去重）序列化后仅占8 字节（二进制）
+    private long messageId = generateMessageId();
     private int type;
     private NodeInfo sender;//消息发送者
     private NodeInfo receiver;//消息接收者
@@ -64,8 +65,9 @@ public abstract class KademliaMessage<D extends Serializable> {
 
 
     // 生成唯一消息ID（可通过UUID实现）
-    private String generateMessageId() {
-        return UUID.randomUUID().toString();
+    private long generateMessageId() {
+        // 64位随机数，十六进制表示（16个字符）
+        return new Random().nextLong();
     }
 
     @Override

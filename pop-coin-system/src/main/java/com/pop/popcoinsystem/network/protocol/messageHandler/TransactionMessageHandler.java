@@ -1,4 +1,4 @@
-package com.pop.popcoinsystem.event.transaction;
+package com.pop.popcoinsystem.network.protocol.messageHandler;
 
 import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.network.KademliaNodeServer;
@@ -19,9 +19,7 @@ import java.io.Serializable;
 public class TransactionMessageHandler implements MessageHandler {
 
 
-    @Lazy
-    @Autowired
-    private BlockChainService blockChainService;
+
 
     @Override
     public KademliaMessage<? extends Serializable> handleMesage(KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) throws InterruptedException {
@@ -36,8 +34,7 @@ public class TransactionMessageHandler implements MessageHandler {
         //事件生产者
         //接收交易消息后，通过RingBuffer发布事件到 Disruptor，触发后续处理。
         // 通过管理器发布事件，无需直接依赖BlockChainService
-
-        blockChainService.verifyAndAddTradingPool(data);
+        kademliaNodeServer.getBlockChainService().verifyAndAddTradingPool(data);
         return null;
     }
 

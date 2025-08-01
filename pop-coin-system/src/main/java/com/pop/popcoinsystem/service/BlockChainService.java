@@ -67,76 +67,10 @@ public class BlockChainService {
             //保存主链中 高度高度到 hash的索引
             popStorage.addMainHeightToBlockIndex(genesisBlock.getHeight(), GENESIS_BLOCK_HASH);
         }
-    }
-
-    public void startNerWork(){
-        new Thread(() -> {
-            try {
-                int tcpPort = 8334;
-                int udpPort = 8333;
-                Map<String, Object> config = YamlReaderUtils.loadYaml("application.yml");
-                if (config != null) {
-                    tcpPort = (int) YamlReaderUtils.getNestedValue(config, "popcoin.tcpPort");
-                    udpPort = (int) YamlReaderUtils.getNestedValue(config, "popcoin.udpPort");
-                }
-                String localIp = NetworkUtil.getLocalIp();// 获取本机IP
-                log.info("本机IP:{}", localIp);
-                //获取节点信息 先从数据库中获取 如果没有则创建一份
-
-                NodeSettings nodeSetting = popStorage.getNodeSetting();
-                KeyPair keyPair = CryptoUtil.ECDSASigner.generateKeyPair();
-                PrivateKey privateKey = keyPair.getPrivate();
-                PublicKey publicKey = keyPair.getPublic();
-                if (nodeSetting == null){
-                    NodeSettings build = NodeSettings.Default.build();
-                    nodeSetting = BeanCopyUtils.copyObject(build, NodeSettings.class);
-                    //生成这个节点的公钥和私钥并保存到文件夹
-                    nodeSetting.setPrivateKeyHex(CryptoUtil.bytesToHex(privateKey.getEncoded()));
-                    nodeSetting.setPublicKeyHex(CryptoUtil.bytesToHex(publicKey.getEncoded()));
-                    byte[] bytes = CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(publicKey.getEncoded()));
-                    if (bytes.length != 20) {
-                        throw new IllegalArgumentException("RIPEMD-160 输出必须是 20 字节");
-                    }
-                    BigInteger bigInteger = new BigInteger(1, bytes);
-                    //生成节点ID
-                    nodeSetting.setId(bigInteger);
-                    nodeSetting.setNodeType(NodeType.FULL.getValue());//默认是全节点
-                }else {
-                    if (nodeSetting.getPublicKeyHex().isEmpty() || nodeSetting.getPrivateKeyHex().isEmpty()){
-                        nodeSetting.setPrivateKeyHex(CryptoUtil.bytesToHex(privateKey.getEncoded()));
-                        nodeSetting.setPublicKeyHex(CryptoUtil.bytesToHex(publicKey.getEncoded()));
-                    }
-                }
-                nodeSetting.setIpv4(localIp);
-                if (nodeSetting.getId() == null){
-                    byte[] bytes = CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(CryptoUtil.hexToBytes(nodeSetting.getPublicKeyHex())));
-                    if (bytes.length != 20) {
-                        throw new IllegalArgumentException("RIPEMD-160 输出必须是 20 字节");
-                    }
-                    BigInteger bigInteger = new BigInteger(1, bytes);
-                    //生成节点ID
-                    nodeSetting.setId(bigInteger);
-                }
-                popStorage.addOrUpdateNodeSetting(nodeSetting);
-                log.info("节点信息:{}", nodeSetting);
-                kademliaNodeServer = new KademliaNodeServer(nodeSetting.getId(), localIp, udpPort, tcpPort);
-                kademliaNodeServer.start();
-
-
-                NodeInfo nodeInfo = new NodeInfo();
-                nodeInfo.setId(BigInteger.ONE);
-                nodeInfo.setIpv4("192.168.137.102");
-                nodeInfo.setTcpPort(8334);
-                nodeInfo.setUdpPort(8333);
-                kademliaNodeServer.connectToBootstrapNodes(nodeInfo);
-
-                //加入到引导节点
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }).start();
 
     }
+
+
 
     public void startMining() throws Exception {
         miningService.startMining();

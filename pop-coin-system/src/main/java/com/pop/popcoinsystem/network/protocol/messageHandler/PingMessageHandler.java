@@ -38,7 +38,6 @@ public class PingMessageHandler implements MessageHandler {
             }
         }
         PongKademliaMessage pongKademliaMessage = new PongKademliaMessage();
-        pongKademliaMessage.setMessageId(UUID.randomUUID().toString());
         pongKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());
         pongKademliaMessage.setReceiver(message.getSender());
         kademliaNodeServer.getUdpClient().sendMessage(pongKademliaMessage);

@@ -1,6 +1,6 @@
 package com.pop.popcoinsystem.network;
 
-import com.pop.popcoinsystem.event.transaction.TransactionMessageHandler;
+import com.pop.popcoinsystem.network.protocol.messageHandler.TransactionMessageHandler;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.common.NodeSettings;
@@ -11,6 +11,7 @@ import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
 import com.pop.popcoinsystem.network.protocol.messageHandler.*;
 import com.pop.popcoinsystem.event.DisruptorManager;
+import com.pop.popcoinsystem.service.BlockChainService;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
@@ -29,6 +30,10 @@ import jakarta.annotation.PreDestroy;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.checkerframework.checker.units.qual.A;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Service;
 
 import java.math.BigInteger;
@@ -42,9 +47,14 @@ import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
 @Data
 @Service
 @NoArgsConstructor
+@Scope("singleton") // 显式指定单例
 public class KademliaNodeServer {
     //节点信息
     private NodeInfo nodeInfo;
+
+    @Lazy
+    @Autowired
+    private BlockChainService blockChainService;
 
     //额外信息  包含了节点信息  外网ip  外网端口  内网ip  内网端口  节点状态  节点版本  节点类型  节点描述 节点分数 等待
     private ExternalNodeInfo externalNodeInfo;
@@ -102,7 +112,7 @@ public class KademliaNodeServer {
         init();
     }
 
-    private void init() {
+    public void init() {
         routingTable = new RoutingTable(nodeInfo.getId(), nodeSettings);
         routingTable.recoverFromNodeList();
 
@@ -125,7 +135,6 @@ public class KademliaNodeServer {
     public void registerMessageHandler(int type, MessageHandler messageHandler) {
         KademliaMessageHandler.put(type, messageHandler);
     }
-
 
 
     public synchronized void start() throws Exception {

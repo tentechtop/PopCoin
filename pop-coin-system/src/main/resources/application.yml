@@ -22,6 +22,22 @@ popcoin:
   udpPort: 8338
 
 
+kademlia:
+  node:
+    tcpPort: 8334
+    udpPort: 8333
+  #配置引导节点
+  bootstrap:
+    - ip: 192.168.137.102
+      tcpPort: 8334
+      udpPort: 8333
+      nodeId: 0
+
+
+
+
+
+
 logging:
   level:
     root: INFO  # 全局日志级别设为ERROR
