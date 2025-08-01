@@ -31,10 +31,6 @@ public class DisruptorManager {
     private Disruptor<TransactionEvent> disruptor;
     private ExecutorService executor;
 
-    // 注入事件处理器（BlockChainService实现了EventHandler接口）
-
-    private  BlockChainService blockChainService;
-
     public DisruptorManager() {
 
     }
@@ -60,7 +56,7 @@ public class DisruptorManager {
         );
 
         // 注册事件处理器（使用BlockChainService作为处理器）
-        disruptor.handleEventsWith(blockChainService);
+        //disruptor.handleEventsWith();
 
         // 启动Disruptor
         disruptor.start();

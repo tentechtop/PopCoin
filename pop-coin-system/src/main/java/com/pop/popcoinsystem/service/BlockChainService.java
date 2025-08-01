@@ -1,6 +1,5 @@
 package com.pop.popcoinsystem.service;
 
-import com.lmax.disruptor.EventHandler;
 import com.pop.popcoinsystem.application.service.wallet.Wallet;
 import com.pop.popcoinsystem.application.service.wallet.WalletStorage;
 import com.pop.popcoinsystem.data.block.Block;
@@ -10,6 +9,8 @@ import com.pop.popcoinsystem.data.enums.SigHashType;
 import com.pop.popcoinsystem.data.miner.Miner;
 import com.pop.popcoinsystem.data.script.*;
 import com.pop.popcoinsystem.exception.UnsupportedAddressException;
+import com.pop.popcoinsystem.service.strategy.ScriptVerificationStrategy;
+import com.pop.popcoinsystem.service.strategy.ScriptVerifierFactory;
 import com.pop.popcoinsystem.storage.POPStorage;
 import com.pop.popcoinsystem.storage.UTXOSearch;
 import com.pop.popcoinsystem.data.transaction.*;
@@ -26,10 +27,10 @@ import com.pop.popcoinsystem.network.common.NodeSettings;
 import com.pop.popcoinsystem.network.enums.NodeType;
 import com.pop.popcoinsystem.network.protocol.message.BlockMessage;
 import com.pop.popcoinsystem.network.protocol.message.TransactionMessage;
-import com.pop.popcoinsystem.network.protocol.messageHandler.TransactionEvent;
 import com.pop.popcoinsystem.util.*;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigInteger;
@@ -37,63 +38,28 @@ import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.*;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static com.pop.popcoinsystem.data.transaction.constant.VERSION_1;
+import static com.pop.popcoinsystem.service.BlockChainConstants.*;
 import static com.pop.popcoinsystem.storage.POPStorage.getUTXOKey;
 import static com.pop.popcoinsystem.data.transaction.Transaction.calculateBlockReward;
 import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
 
 @Slf4j
 @Service
-public class BlockChainService implements EventHandler<TransactionEvent> {
-    // 最低交易输出金额（防止粉尘交易，参考比特币粉尘限制）
-    private static final long MIN_TRANSACTION_OUTPUT_AMOUNT = 10000;
-    //MAX_BLOCK_WEIGHT
-    private static final int MAX_BLOCK_WEIGHT = 4000000;
-
-    private static final int COINBASE_MATURITY = 100;// CoinBase交易成熟度要求
-
-    private static final int CONFIRMATIONS = 6;// 转账交易成熟度要求
-
-    public static final String GENESIS_BLOCK_HASH_HEX = "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f";
-    private static final byte[] GENESIS_BLOCK_HASH = CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX);
+public class BlockChainService {
+    // 在 BlockChainService 中注入
+    @Autowired
     private POPStorage popStorage;
     private MiningService miningService;
-
     private KademliaNodeServer kademliaNodeServer;
-
-
-
-
-
-
-    @Override
-    public void onEvent(TransactionEvent event, long sequence, boolean endOfBatch) {
-        Transaction transaction = event.getTransaction();
-        log.info("Disruptor处理交易事件，sequence: {}, 交易ID: {}", sequence, CryptoUtil.bytesToHex(transaction.getTxId()));
-        try {
-            // 处理交易（验证并添加到交易池）
-            verifyAndAddTradingPool(transaction);
-        } catch (Exception e) {
-            log.error("交易事件处理失败", e);
-        }
-    }
-
-
-
-
-
-
-
-
 
     @PostConstruct
     private void initBlockChain() throws Exception {
         startNetwork();
         miningService = new MiningService(this);
-        popStorage = POPStorage.getInstance();
+
         log.info("初始化区块链服务...");
         // 检查是否已存在创世区块  不存在就创建
         Block genesisBlock = getBlockByHash(GENESIS_BLOCK_HASH);
@@ -213,8 +179,8 @@ public class BlockChainService implements EventHandler<TransactionEvent> {
                 String localIp = NetworkUtil.getLocalIp();// 获取本机IP
                 log.info("本机IP:{}", localIp);
                 //获取节点信息 先从数据库中获取 如果没有则创建一份
-                POPStorage instance = POPStorage.getInstance();
-                NodeSettings nodeSetting = instance.getNodeSetting();
+
+                NodeSettings nodeSetting = popStorage.getNodeSetting();
                 KeyPair keyPair = CryptoUtil.ECDSASigner.generateKeyPair();
                 PrivateKey privateKey = keyPair.getPrivate();
                 PublicKey publicKey = keyPair.getPublic();
@@ -248,7 +214,7 @@ public class BlockChainService implements EventHandler<TransactionEvent> {
                     //生成节点ID
                     nodeSetting.setId(bigInteger);
                 }
-                instance.addOrUpdateNodeSetting(nodeSetting);
+                popStorage.addOrUpdateNodeSetting(nodeSetting);
                 log.info("节点信息:{}", nodeSetting);
                 kademliaNodeServer = new KademliaNodeServer(nodeSetting.getId(), localIp, udpPort, tcpPort);
                 kademliaNodeServer.start();
@@ -335,7 +301,17 @@ public class BlockChainService implements EventHandler<TransactionEvent> {
     private boolean verifyScriptPubKey(Transaction tx, TXInput input,int inputIndex,UTXO utxo) {
         ScriptPubKey scriptPubKey = utxo.getScriptPubKey();
         int type = scriptPubKey.getType();//解锁脚本的类型
-        log.info("解锁脚本类型:{}", type);
+        // 1. 通过工厂获取对应脚本类型的验证策略
+        ScriptVerificationStrategy verifier = ScriptVerifierFactory.getVerifier(ScriptType.valueOf(type));
+        boolean verify = verifier.verify(tx, input, inputIndex, utxo);
+        if (!verify) {
+            log.error("解锁脚本验证失败");
+            return false;
+        }
+        return true;
+
+
+/*        log.info("解锁脚本类型:{}", type);
         // 区分SegWit脚本类型（以OP_0开头的通常为P2WPKH或P2WSH）
         if (type == ScriptType.P2WPKH.getValue()) {
             return verifyP2WPKH(tx, input, inputIndex, utxo);
@@ -348,7 +324,7 @@ public class BlockChainService implements EventHandler<TransactionEvent> {
         }else {
             log.error("不支持的脚本类型");
             return false;
-        }
+        }*/
     }
 
 
@@ -462,7 +438,7 @@ public class BlockChainService implements EventHandler<TransactionEvent> {
         byte[] scriptBytes = scriptPubKey.getScriptBytes();
         if (scriptBytes.length != 22) { // 1字节OP_0 + 20字节哈希 + 1字节结尾？需根据实际脚本结构调整
             log.error("P2WPKH锁定脚本长度错误，预期22字节，实际{}字节", scriptBytes.length);
-            return false;
+            throw new IllegalArgumentException("P2WPKH脚本长度必须为22字节，实际为" + scriptBytes.length);
         }
         ScriptSig scriptSig = new ScriptSig(signature, publicKey);
         boolean verify = scriptPubKey.verify(scriptSig, txHash, input.getVout(), false);
