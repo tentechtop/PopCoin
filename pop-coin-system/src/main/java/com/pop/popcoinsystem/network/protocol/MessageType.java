@@ -61,6 +61,16 @@ public enum MessageType {
     FEE(53, "手续费"),
 
 
+    //查询分叉点请求
+    GET_FORK_POINT_REQ(60, "查询分叉点请求"),
+    GET_FORK_POINT_RES(61, "查询分叉点响应"),
+
+
+    //根据区块高度查询区块
+    GET_BLOCK_BY_HEIGHT_REQ(70, "根据区块高度查询区块请求"),
+    GET_BLOCK_BY_HEIGHT_RES(71, "根据区块高度查询区块响应"),
+
+
 
 
     ;

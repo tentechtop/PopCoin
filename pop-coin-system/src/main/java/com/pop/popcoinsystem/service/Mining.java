@@ -141,7 +141,6 @@ public class Mining {
                 }
                 //创建CoinBase交易 放在第一位
                 Transaction coinBaseTransaction = blockChainService.createCoinBaseTransaction(miner.getAddress(), blockHeight+1, totalFee);
-
                 blockTransactions.add(coinBaseTransaction);
                 blockTransactions.addAll(transactions);
                 newBlock.setTransactions(blockTransactions);
@@ -161,6 +160,11 @@ public class Mining {
 
                 newBlock.calculateAndSetSize();
                 newBlock.calculateAndSetWeight();
+                newBlock.setTxCount(blockTransactions.size());
+
+                //隔离见证数据大小
+                newBlock.setWitnessSize(0);
+
 
                 //挖矿奖励：通过 coinbase 交易嵌入区块体
                 //每个区块的第一笔交易是coinbase 交易（特殊交易，无输入），其输出部分直接包含矿工的挖矿奖励。例如：
@@ -172,6 +176,9 @@ public class Mining {
 
                 log.info("\n开始挖矿新区块 #" + newBlock.getHeight() +
                         " (难度: " + newBlock.getDifficulty() + ", 交易数: " + transactions.size() + ", 手续费: "+ totalFee+  ")");
+
+
+
 
                 MiningResult result = mineBlock(newBlock);
                 if (result != null && result.found) {

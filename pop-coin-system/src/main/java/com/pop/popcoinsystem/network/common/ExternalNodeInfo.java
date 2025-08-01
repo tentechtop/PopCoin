@@ -37,6 +37,8 @@ public class ExternalNodeInfo implements Comparable<Object>, Serializable {
     private boolean isSeedNode;               // 是否为种子节点
     private NodeStatus nodeStatus;//节点状态
     protected BigInteger distance;//与当前节点的距离
+    //节点公钥
+    private byte[] publicKey; //公钥byte[]
 
 
     public ExternalNodeInfo(BigInteger id, String ipv4, String ipv6, int udpPort, int tcpPort,boolean isSeedNode) {

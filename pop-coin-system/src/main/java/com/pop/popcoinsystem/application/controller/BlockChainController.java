@@ -84,27 +84,11 @@ public class BlockChainController {
 
 
     /**
-     * 查询最新的区块 最多100个
-     */
-    @PostMapping("/getLatest100Blocks")
-    public String getLatest100Blocks() {
-        return "";
-    }
-
-    /**
-     * 查询当前区块的前100个区块
-     */
-    @PostMapping("/getPrevious100Blocks")
-    public String getPrevious100Blocks() {
-        return "";
-    }
-
-    /**
      * 根据范围查询区块
      */
-    @PostMapping("/getBlockByRange")
-    public String getBlockByRange() {
-        return "";
+    @GetMapping("/getBlockByRange/{start}/{end}")
+    public Result getBlockByRange(@PathVariable("start") Long start , @PathVariable("end") Long end) {
+        return blockChainService.getBlockByRange(start, end);
     }
 
 

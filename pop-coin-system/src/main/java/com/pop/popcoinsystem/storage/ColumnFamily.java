@@ -11,15 +11,15 @@ public enum ColumnFamily {
     BLOCK("CF_BLOCK", "block",new ColumnFamilyOptions()),
     //hash - >区块体
     BLOCK_BODY("CF_BLOCK_BODY", "blockBody",new ColumnFamilyOptions()),
+    //hash -> 区块高度
+    BLOCK_HASH_HEIGHT("CF_BLOCK_HASH_HEIGHT", "blockHashHeight",new ColumnFamilyOptions()),
 
     //交易到区块的索引 Map<String, byte[]>   一笔交易只可能存在于一个区块
     TRANSACTION_INDEX("CF_TRANSACTION_INDEX", "transactionIndex", new ColumnFamilyOptions()),
-
-    //主链索引 高度到区块哈希 Map<Long, byte[]>  height -> hash
+    //主链索引 高度到区块哈希
     MAIN_BLOCK_CHAIN_INDEX("CF_MAIN_BLOCK_CHAIN_INDEX", "mainBlockChainIndex",new ColumnFamilyOptions()),
     // 备选链存储，用于处理分叉 Map<Long, Set<byte[]>>  高度到 多个区块hash
     ALT_BLOCK_CHAIN_INDEX("CF_ALT_BLOCK_CHAIN_INDEX", "altBlockChainIndex",new ColumnFamilyOptions()),
-
 
 
     //区块链信息  存储一切和区块链有关的信息

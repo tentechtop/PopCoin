@@ -9,6 +9,8 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.Serializable;
+
 import static com.pop.popcoinsystem.network.KademliaNodeServer.KademliaMessageHandler;
 import static com.pop.popcoinsystem.network.KademliaNodeServer.MESSAGE_EXPIRATION_TIME;
 
@@ -28,13 +30,16 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, KademliaMessage message) throws Exception {
         long messageId = message.getMessageId();
         if (nodeServer.getBroadcastMessages().getIfPresent(messageId) != null) {
-            log.info("接收已处理的广播消息 {}，丢弃", messageId);
+            log.info("TCP接收已处理的消息 {}，丢弃", messageId);
             return;
         }
         // 记录：标记为已处理
         nodeServer.getBroadcastMessages().put(messageId, Boolean.TRUE);
         MessageHandler messageHandler = KademliaMessageHandler.get(message.getType());
-        messageHandler.handleMesage(nodeServer, message);
+        KademliaMessage<? extends Serializable> kademliaMessage = messageHandler.handleMesage(nodeServer, message);
+        if (kademliaMessage != null){
+            ChannelFuture channelFuture = channelHandlerContext.writeAndFlush(kademliaMessage);
+        }
     }
 
 

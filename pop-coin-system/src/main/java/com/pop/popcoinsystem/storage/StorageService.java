@@ -1,16 +1,19 @@
 package com.pop.popcoinsystem.storage;
 
 import com.pop.popcoinsystem.data.block.Block;
+import com.pop.popcoinsystem.data.block.BlockBody;
+import com.pop.popcoinsystem.data.block.BlockHeader;
 import com.pop.popcoinsystem.data.miner.Miner;
 import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.data.transaction.UTXO;
 import com.pop.popcoinsystem.data.transaction.UTXOSearch;
-import com.pop.popcoinsystem.data.vo.result.PageResult;
-import com.pop.popcoinsystem.data.vo.result.RocksDbPageResult;
+import com.pop.popcoinsystem.data.vo.result.AnyResult;
+import com.pop.popcoinsystem.data.vo.result.Result;
+import com.pop.popcoinsystem.data.vo.result.TPageResult;
+import com.pop.popcoinsystem.data.vo.result.ListPageResult;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeSettings;
-import com.pop.popcoinsystem.network.enums.NETVersion;
 import com.pop.popcoinsystem.util.ByteUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.SerializeUtils;
@@ -37,10 +40,12 @@ public class StorageService {
     private static final byte[] KEY_GENESIS_BLOCK_HASH = "key_genesis_block_hash".getBytes();//创世区块hash
     private static final byte[] KEY_MAIN_LATEST_HEIGHT = "key_main_latest_height".getBytes();//主链当前高度 最新高度
     private static final byte[] KEY_MAIN_LATEST_BLOCK_HASH = "key_main_latest_block_hash".getBytes();
-
-
     private static final byte[] KEY_NODE_SETTING = "key_node_setting".getBytes();
     private static final byte[] KEY_MINER = "key_miner".getBytes();
+
+
+
+
 
     /*更新主链当前高度*/
     public void updateMainLatestHeight(long height) {
@@ -192,8 +197,23 @@ public class StorageService {
         try {
             byte[] blockHash = block.getHash();
             byte[] blockData = SerializeUtils.serialize(block);
-            // 直接写入区块列族（键：区块哈希，值：序列化区块）
-            db.put(ColumnFamily.BLOCK.getHandle(), blockHash, blockData);
+/*            // 直接写入区块列族（键：区块哈希，值：序列化区块）
+            db.put(ColumnFamily.BLOCK.getHandle(), blockHash, blockData);*/
+
+            // 1. 拆分区块为头和体
+            BlockHeader header = block.extractHeader();
+            BlockBody body = block.extractBody();
+            // 2. 存储区块头（到原BLOCK列族）
+            byte[] headerData = SerializeUtils.serialize(header);
+            db.put(ColumnFamily.BLOCK.getHandle(), blockHash, headerData);
+
+            // 3. 存储区块体（到新增BLOCK_BODY列族）
+            byte[] bodyData = SerializeUtils.serialize(body);
+            db.put(ColumnFamily.BLOCK_BODY.getHandle(), blockHash, bodyData);
+
+            // 4. 存储哈希-高度映射（到新增BLOCK_HASH_HEIGHT列族）
+            byte[] heightBytes = ByteUtils.toBytes(block.getHeight());
+            db.put(ColumnFamily.BLOCK_HASH_HEIGHT.getHandle(), blockHash, heightBytes);
 
             //添加交易到区块的索引
             for (int i = 0; i < block.getTransactions().size(); i++) {
@@ -205,6 +225,8 @@ public class StorageService {
             throw new RuntimeException("保存区块失败", e);
         }
     }
+
+
     //批量保存区块
     public void addBlockBatch(List<Block> blocks) {
         rwLock.writeLock().lock();
@@ -214,8 +236,19 @@ public class StorageService {
             WriteOptions writeOptions = new WriteOptions();
             for (Block block : blocks) {
                 byte[] blockHash = block.getHash();
-                byte[] blockData = SerializeUtils.serialize(block);
-                writeBatch.put(ColumnFamily.BLOCK.getHandle(), blockHash, blockData);
+                if (blockHash == null) {
+                    continue; // 跳过无效区块
+                }
+
+                // 拆分区块
+                BlockHeader header = block.extractHeader();
+                BlockBody body = block.extractBody();
+
+                // 批量写入区块头、区块体、哈希-高度映射
+                writeBatch.put(ColumnFamily.BLOCK.getHandle(), blockHash, SerializeUtils.serialize(header));
+                writeBatch.put(ColumnFamily.BLOCK_BODY.getHandle(), blockHash, SerializeUtils.serialize(body));
+                writeBatch.put(ColumnFamily.BLOCK_HASH_HEIGHT.getHandle(), blockHash, ByteUtils.toBytes(block.getHeight()));
+
                 //交易id到区块hash的索引
                 for (int i = 0; i < block.getTransactions().size(); i++) {
                     writeBatch.put(ColumnFamily.TRANSACTION_INDEX.getHandle(), block.getTransactions().get(i).getTxId(), blockHash);
@@ -238,56 +271,89 @@ public class StorageService {
         try {
             //先获取这个区块
             Block block = getBlockByHash(hash);
-            if (block != null){
-                for (int i = 0; i < block.getTransactions().size(); i++) {
-                    db.delete(ColumnFamily.TRANSACTION_INDEX.getHandle(), block.getTransactions().get(i).getTxId());
-                }
-                db.delete(ColumnFamily.BLOCK.getHandle(), hash);
+            if (block == null) {
+                return; // 区块不存在，直接返回
             }
+            // 2. 删除交易索引
+            for (Transaction tx : block.getTransactions()) {
+                db.delete(ColumnFamily.TRANSACTION_INDEX.getHandle(), tx.getTxId());
+            }
+            // 3. 删除区块头、区块体、哈希-高度映射
+            db.delete(ColumnFamily.BLOCK.getHandle(), hash);
+            db.delete(ColumnFamily.BLOCK_BODY.getHandle(), hash);
+            db.delete(ColumnFamily.BLOCK_HASH_HEIGHT.getHandle(), hash);
+
         } catch (RocksDBException e) {
             log.error("删除区块失败: blockHash={}", hash, e);
             throw new RuntimeException("删除区块失败", e);
         }
     }
     //批量删除区块
+    /**
+     * 批量删除区块（同步删除区块头、区块体、哈希-高度映射和交易索引）
+     */
     public void deleteBlockBatch(List<byte[]> hashes) {
         rwLock.writeLock().lock();
         WriteBatch writeBatch = null;
+        WriteOptions writeOptions = null;
         try {
             writeBatch = new WriteBatch();
-            WriteOptions writeOptions = new WriteOptions();
+            writeOptions = new WriteOptions();
             for (byte[] hash : hashes) {
-                //先获取这些区块
-                Block block = getBlockByHash(hash);
-                if (block != null){
-                    for (int i = 0; i < block.getTransactions().size(); i++) {
-                        writeBatch.delete(ColumnFamily.TRANSACTION_INDEX.getHandle(), block.getTransactions().get(i).getTxId());
-                    }
+                if (hash == null) {
+                    continue; // 跳过空哈希
                 }
+                // 1. 获取完整区块（用于删除交易索引）
+                Block block = getBlockByHash(hash);
+                if (block == null) {
+                    continue; // 区块不存在，跳过
+                }
+                // 2. 批量删除该区块的所有交易索引
+                for (Transaction tx : block.getTransactions()) {
+                    writeBatch.delete(ColumnFamily.TRANSACTION_INDEX.getHandle(), tx.getTxId());
+                }
+                // 3. 批量删除区块头、区块体、哈希-高度映射
                 writeBatch.delete(ColumnFamily.BLOCK.getHandle(), hash);
+                writeBatch.delete(ColumnFamily.BLOCK_BODY.getHandle(), hash);
+                writeBatch.delete(ColumnFamily.BLOCK_HASH_HEIGHT.getHandle(), hash);
             }
+            // 执行批量删除（原子操作）
             db.write(writeOptions, writeBatch);
-        }catch (RocksDBException e) {
-            log.error("批量删除UTXO信息失败", e);
-            throw new RuntimeException("批量删除UTXO信息失败", e);
+        } catch (RocksDBException e) {
+            log.error("批量删除区块失败", e);
+            throw new RuntimeException("批量删除区块失败", e);
         } finally {
-            // 确保资源释放
+            // 释放资源
             if (writeBatch != null) {
                 writeBatch.close();
             }
+            if (writeOptions != null) {
+                writeOptions.close();
+            }
+            rwLock.writeLock().unlock();
         }
     }
+
     //根据hash获取区块
     public Block getBlockByHash(byte[] hash) {
         if (hash == null){
             return null;
         }
         try {
-            byte[] blockData = db.get(ColumnFamily.BLOCK.getHandle(), hash);
-            if (blockData == null) {
-                return null;
+            // 1. 获取区块头
+            byte[] headerData = db.get(ColumnFamily.BLOCK.getHandle(), hash);
+            if (headerData == null) {
+                return null; // 区块头不存在，返回空
             }
-            return (Block)SerializeUtils.deSerialize(blockData);
+            BlockHeader header = (BlockHeader) SerializeUtils.deSerialize(headerData);
+            // 2. 获取区块体
+            byte[] bodyData = db.get(ColumnFamily.BLOCK_BODY.getHandle(), hash);
+            if (bodyData == null) {
+                return null; // 区块体不存在，返回空（数据不完整）
+            }
+            BlockBody body = (BlockBody) SerializeUtils.deSerialize(bodyData);
+            // 3. 合并为完整区块
+            return Block.merge(header, body);
         } catch (RocksDBException e) {
             log.error("获取区块失败: blockHash={}", hash, e);
             throw new RuntimeException("获取区块失败", e);
@@ -312,12 +378,229 @@ public class StorageService {
         }
         return getBlockByHash(blockHash);
     }
+    /**
+     * 通过区块哈希快速获取高度（无需加载完整区块）
+     */
+    public long getBlockHeightByHash(byte[] blockHash) {
+        try {
+            byte[] heightBytes = db.get(ColumnFamily.BLOCK_HASH_HEIGHT.getHandle(), blockHash);
+            if (heightBytes == null) {
+                return -1; // 哈希不存在
+            }
+            return ByteUtils.bytesToLong(heightBytes);
+        } catch (RocksDBException e) {
+            log.error("通过哈希获取高度失败: blockHash={}", blockHash, e);
+            throw new RuntimeException("通过哈希获取高度失败", e);
+        }
+    }
 
 
+    /**
+     * 根据高度范围迭代查询主链区块
+     * @param startHeight 起始高度（包含）
+     * @param pageSize 每页数量（1-500）
+     * @return 分页结果，包含区块列表、最后查询的高度、是否为最后一页
+     */
+    public AnyResult<Block,Long> queryBlocksByHeight(long startHeight, int pageSize) {
+        // 参数校验
+        if (startHeight < 0) {
+            throw new IllegalArgumentException("起始高度不能为负数: " + startHeight);
+        }
+        if (pageSize <= 0 || pageSize > 500) {
+            throw new IllegalArgumentException("每页数量必须在1-500之间: " + pageSize);
+        }
+        rwLock.readLock().lock();
+        try {
+            List<Block> blockList = new ArrayList<>(pageSize);
+            long latestHeight = getMainLatestHeight(); // 获取主链最新高度
+            long currentHeight = startHeight;
+            int collected = 0;
+            // 循环收集区块，直到达到页大小或超过最新高度
+            while (collected < pageSize && currentHeight <= latestHeight) {
+                // 获取当前高度对应的区块哈希
+                byte[] blockHash = getMainBlockHashByHeight(currentHeight);
+                if (blockHash != null) {
+                    // 通过哈希获取完整区块
+                    Block block = getBlockByHash(blockHash);
+                    if (block != null) {
+                        blockList.add(block);
+                        collected++;
+                    } else {
+                        log.warn("区块哈希存在但区块数据缺失，高度: {}", currentHeight);
+                    }
+                } else {
+                    log.debug("主链中不存在该高度的区块，高度: {}", currentHeight);
+                }
+                currentHeight++;
+            }
+            // 判断是否还有更多区块
+            boolean hasMore = currentHeight <= latestHeight;
+            // 计算最后查询的高度（若未查询到数据则为起始高度）
+            long lastQueryHeight = collected > 0 ? (currentHeight - 1) : startHeight;
+            return new AnyResult(blockList,lastQueryHeight,hasMore);
+        } catch (Exception e) {
+            log.error("根据高度查询区块失败，起始高度: {}, 页大小: {}", startHeight, pageSize, e);
+            throw new RuntimeException("区块查询失败", e);
+        } finally {
+            rwLock.readLock().unlock();
+        }
+    }
 
 
+    /**
+     * 根据高度范围查询主链区块
+     * @param start 起始高度（包含）
+     * @param end 结束高度（包含）
+     * @return 范围内的所有区块列表（按高度升序排列）
+     */
+    public List<Block> getBlockByRange(long start, long end) {
+        // 参数校验
+        if (start < 0 || end < 0) {
+            throw new IllegalArgumentException("高度不能为负数: start=" + start + ", end=" + end);
+        }
+        if (start > end) {
+            throw new IllegalArgumentException("起始高度不能大于结束高度: start=" + start + ", end=" + end);
+        }
+
+        rwLock.readLock().lock();
+        try {
+            List<Block> blockList = new ArrayList<>();
+            long latestHeight = getMainLatestHeight(); // 获取主链最新高度
+
+            // 修正结束高度，不能超过最新高度
+            long actualEnd = Math.min(end, latestHeight);
+
+            // 如果起始范围无效（起始起始已超过最新高度），返回空列表
+            if (start > actualEnd) {
+                log.warn("查询范围超出主链最新高度，当前最新高度: {}", latestHeight);
+                return blockList;
+            }
+
+            // 遍历范围内的每个高度，获取对应的区块
+            for (long height = start; height <= actualEnd; height++) {
+                byte[] blockHash = getMainBlockHashByHeight(height);
+                if (blockHash != null) {
+                    Block block = getBlockByHash(blockHash);
+                    if (block != null) {
+                        blockList.add(block);
+                    } else {
+                        log.warn("区块哈希存在但区块数据缺失，高度: {}", height);
+                    }
+                } else {
+                    log.debug("主链中不存在该高度的区块，高度: {}", height);
+                }
+            }
+
+            return blockList;
+        } catch (Exception e) {
+            log.error("根据高度范围查询区块失败，start: {}, end: {}", start, end, e);
+            throw new RuntimeException("区块范围查询失败", e);
+        } finally {
+            rwLock.readLock().unlock();
+        }
+    }
 
 
+    /**
+     * 根据起始区块哈希和结束区块哈希，查询两者之间的所有主链区块（包含两端）
+     * 注：仅支持主链上的连续区块查询，若区块不在主链或不连续则返回空列表
+     * @param startHash 起始区块哈希
+     * @param endHash 结束区块哈希
+     * @return 两个区块之间的所有主链区块（按区块链顺序排列），若不符合条件则返回空列表
+     */
+    public List<Block> getBlockByStartHashAndEndHash(byte[] startHash, byte[] endHash) {
+        // 1. 校验输入哈希非空
+        if (startHash == null || endHash == null) {
+            log.warn("起始或结束区块哈希不能为空");
+            return Collections.emptyList();
+        }
+
+        // 2. 获取起始和结束区块
+        Block startBlock = getBlockByHash(startHash);
+        Block endBlock = getBlockByHash(endHash);
+
+        // 3. 检查区块是否存在
+        if (startBlock == null) {
+            log.warn("起始区块不存在，哈希: {}", CryptoUtil.bytesToHex(startHash));
+            return Collections.emptyList();
+        }
+        if (endBlock == null) {
+            log.warn("结束区块不存在，哈希: {}", CryptoUtil.bytesToHex(endHash));
+            return Collections.emptyList();
+        }
+
+        // 4. 检查区块是否在主链上（主链上每个高度对应唯一哈希）
+        long startHeight = startBlock.getHeight();
+        byte[] mainChainStartHash = getMainBlockHashByHeight(startHeight);
+        if (!Arrays.equals(mainChainStartHash, startBlock.getHash())) {
+            log.warn("起始区块不在主链上，哈希: {}", CryptoUtil.bytesToHex(startHash));
+            return Collections.emptyList();
+        }
+
+        long endHeight = endBlock.getHeight();
+        byte[] mainChainEndHash = getMainBlockHashByHeight(endHeight);
+        if (!Arrays.equals(mainChainEndHash, endBlock.getHash())) {
+            log.warn("结束区块不在主链上，哈希: {}", CryptoUtil.bytesToHex(endHash));
+            return Collections.emptyList();
+        }
+
+        // 5. 检查区块是否在同一条链上（通过前驱哈希追溯验证连续性）
+        if (!isBlocksInSameChain(startBlock, endBlock)) {
+            log.warn("起始区块与结束区块不在同一条连续链上，无法查询范围");
+            return Collections.emptyList();
+        }
+
+        // 6. 确定高度范围（支持起始高度大于结束高度的反向查询）
+        long minHeight = Math.min(startHeight, endHeight);
+        long maxHeight = Math.max(startHeight, endHeight);
+
+        // 7. 获取范围内的所有主链区块（按高度升序）
+        List<Block> blocksInRange = getBlockByRange(minHeight, maxHeight);
+
+        // 8. 调整顺序：若起始高度大于结束高度，反转列表以保持区块链顺序（从start到end）
+        if (startHeight > endHeight) {
+            Collections.reverse(blocksInRange);
+        }
+
+        return blocksInRange;
+    }
+
+    /**
+     * 验证两个区块是否在同一条连续链上（通过前驱哈希追溯）
+     * @param start 起始区块
+     * @param end 结束区块
+     * @return 若在同一条连续链上则返回true，否则返回false
+     */
+    private boolean isBlocksInSameChain(Block start, Block end) {
+        long startHeight = start.getHeight();
+        long endHeight = end.getHeight();
+
+        // 情况1：起始区块高度 <= 结束区块高度 → 验证end是否能追溯到start
+        if (startHeight <= endHeight) {
+            Block current = end;
+            while (current.getHeight() > startHeight) {
+                current = getBlockByHash(current.getPreviousHash());
+                if (current == null) { // 前驱区块不存在，链断裂
+                    return false;
+                }
+            }
+            // 最终应追溯到起始区块
+            return Arrays.equals(current.getHash(), start.getHash());
+        }
+
+        // 情况2：起始区块高度 > 结束区块高度 → 验证start是否能追溯到end
+        else {
+            Block current = start;
+            while (current.getHeight() > endHeight) {
+                current = getBlockByHash(current.getPreviousHash());
+                if (current == null) { // 前驱区块不存在，链断裂
+                    return false;
+                }
+            }
+            // 最终应追溯到结束区块
+            return Arrays.equals(current.getHash(), end.getHash());
+        }
+    }
 
 
 
@@ -530,7 +813,7 @@ public class StorageService {
      * @return 分页结果（包含当前页 UTXO 列表和当前页最后一个键）
      * lastKey 为第一次 会包含在查询结果里面
      */
-    public RocksDbPageResult<UTXO> queryUTXOPage(int pageSize, String lastKey) {
+    public ListPageResult<UTXO> queryUTXOPage(int pageSize, String lastKey) {
         // 校验 pageSize 范围
         if (pageSize <= 0 || pageSize > 5000) {
             throw new IllegalArgumentException("每页数量必须在 1-5000 之间");
@@ -565,7 +848,7 @@ public class StorageService {
                 iterator.next();
                 count++;
             }
-            return new RocksDbPageResult<>(utxoList, currentLastKey, count < pageSize); // 最后一页的标志：实际数量 < pageSize
+            return new ListPageResult<>(utxoList, currentLastKey, count < pageSize); // 最后一页的标志：实际数量 < pageSize
         } catch (Exception e) {
             log.error("UTXO 分页查询失败", e);
             throw new RuntimeException("UTXO 分页查询失败", e);
@@ -587,7 +870,7 @@ public class StorageService {
      * @param lastUtxoKey 上一页最后一个UTXO键(首次查询传null)
      * @return 分页结果(包含金额列表、最后一个UTXO键、是否为最后一页)
      */
-    public RocksDbPageResult<Long> queryUtxoAmountsByScriptHash(byte[] scriptHash, int pageSize, String lastUtxoKey) {
+    public ListPageResult<Long> queryUtxoAmountsByScriptHash(byte[] scriptHash, int pageSize, String lastUtxoKey) {
         if (scriptHash == null || scriptHash.length != 20) {
             throw new IllegalArgumentException("脚本哈希必须为20字节");
         }
@@ -647,7 +930,7 @@ public class StorageService {
 
             // 判断是否为最后一页
             boolean isLastPage = count < pageSize;
-            return new RocksDbPageResult<>(amounts, currentLastUtxoKey, isLastPage);
+            return new ListPageResult<>(amounts, currentLastUtxoKey, isLastPage);
 
         } catch (Exception e) {
             log.error("分页查询脚本哈希UTXO金额失败", e);
@@ -660,7 +943,7 @@ public class StorageService {
     }
 
 
-    public PageResult<UTXOSearch> selectUtxoAmountsByScriptHash(byte[] scriptHash, int pageSize, String lastUtxoKey) {
+    public TPageResult<UTXOSearch> selectUtxoAmountsByScriptHash(byte[] scriptHash, int pageSize, String lastUtxoKey) {
         if (scriptHash == null || scriptHash.length != 20) {
             throw new IllegalArgumentException("脚本哈希必须为20字节");
         }
@@ -728,7 +1011,7 @@ public class StorageService {
             UTXOSearch utxoSearch = new UTXOSearch();
             utxoSearch.setTotal(total);
             utxoSearch.setUtxos(utxoKeySet);
-            return new PageResult<>(utxoSearch, currentLastUtxoKey, isLastPage)  ;
+            return new TPageResult<>(utxoSearch, currentLastUtxoKey, isLastPage)  ;
         } catch (Exception e) {
             log.error("分页查询脚本哈希UTXO金额失败", e);
             throw new RuntimeException("分页查询失败", e);
@@ -1050,6 +1333,9 @@ public class StorageService {
     //..................................................................................................................
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final RocksDB db;
+
+
+
     private static class InstanceHolder {
         private static final StorageService INSTANCE = new StorageService();
     }

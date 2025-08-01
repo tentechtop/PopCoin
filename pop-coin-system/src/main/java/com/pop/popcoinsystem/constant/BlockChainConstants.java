@@ -63,6 +63,8 @@ public class BlockChainConstants {
     //交易池  最大300M
     public static final long MAX_SIZE_BYTES = 300 * 1024 * 1024;
 
+    //共识版本
+    public static final int CONSENSUS_VERSION = 1;
 
 
 }

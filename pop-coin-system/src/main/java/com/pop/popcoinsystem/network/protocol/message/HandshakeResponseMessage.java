@@ -2,21 +2,22 @@ package com.pop.popcoinsystem.network.protocol.message;
 
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.protocol.MessageType;
+import com.pop.popcoinsystem.network.protocol.message.content.Handshake;
 import com.pop.popcoinsystem.util.SerializeUtils;
 import lombok.Builder;
 import lombok.ToString;
 
 
 @ToString(callSuper = true)
-public class HandshakeResponseMessage extends KademliaMessage<ExternalNodeInfo>{
+public class HandshakeResponseMessage extends KademliaMessage<Handshake>{
 
     // 添加无参构造函数
     public HandshakeResponseMessage() {
         super(MessageType.HANDSHAKE_RES.getCode());
     }
-    public HandshakeResponseMessage(ExternalNodeInfo  node) {
+    public HandshakeResponseMessage(Handshake  handshake) {
         super(MessageType.HANDSHAKE_RES.getCode());
-        setData(node);
+        setData(handshake);
     }
 
 

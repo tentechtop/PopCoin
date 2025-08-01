@@ -9,13 +9,12 @@ import com.pop.popcoinsystem.data.script.*;
 import com.pop.popcoinsystem.data.transaction.UTXOSearch;
 import com.pop.popcoinsystem.data.transaction.*;
 import com.pop.popcoinsystem.data.transaction.dto.TransactionDTO;
-import com.pop.popcoinsystem.data.vo.result.PageResult;
+import com.pop.popcoinsystem.data.vo.result.TPageResult;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.exception.InsufficientFundsException;
 import com.pop.popcoinsystem.exception.UnsupportedAddressException;
 import com.pop.popcoinsystem.service.BlockChainService;
 import com.pop.popcoinsystem.util.*;
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
@@ -349,7 +348,7 @@ public class WalletService {
         int totalFetched = 0;
 
         while (hasMore) {
-            PageResult<UTXOSearch> pageResult = null;
+            TPageResult<UTXOSearch> pageResult = null;
             // 带重试的分页查询
             for (int i = 0; i < retryCount; i++) {
                 try {

@@ -4,7 +4,6 @@ import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.blockChain.BlockChain;
 import com.pop.popcoinsystem.data.enums.SigHashType;
-import com.pop.popcoinsystem.data.miner.Miner;
 import com.pop.popcoinsystem.data.script.*;
 import com.pop.popcoinsystem.exception.UnsupportedAddressException;
 import com.pop.popcoinsystem.service.strategy.ScriptVerificationStrategy;
@@ -16,9 +15,9 @@ import com.pop.popcoinsystem.data.transaction.dto.TXInputDTO;
 import com.pop.popcoinsystem.data.transaction.dto.TXOutputDTO;
 import com.pop.popcoinsystem.data.transaction.dto.TransactionDTO;
 import com.pop.popcoinsystem.data.transaction.dto.WitnessDTO;
-import com.pop.popcoinsystem.data.vo.result.PageResult;
+import com.pop.popcoinsystem.data.vo.result.TPageResult;
 import com.pop.popcoinsystem.data.vo.result.Result;
-import com.pop.popcoinsystem.data.vo.result.RocksDbPageResult;
+import com.pop.popcoinsystem.data.vo.result.ListPageResult;
 import com.pop.popcoinsystem.network.KademliaNodeServer;
 import com.pop.popcoinsystem.network.protocol.message.BlockMessage;
 import com.pop.popcoinsystem.network.protocol.message.TransactionMessage;
@@ -347,6 +346,11 @@ public class BlockChainService {
             log.warn("区块中的交易验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
             return false;
         }
+        if (!validateBlockPoW(block)){
+            log.warn("区块 PoW 验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
+            return false;
+        }
+
         // 处理区块（保存、更新UTXO等）  只要区块通过验证就 保存区块 保存区块产生的UTXO
         processValidBlock(block);
         //广播区块
@@ -1172,13 +1176,13 @@ public class BlockChainService {
         return Result.ok(transactionDTO);
     }
 
-    public RocksDbPageResult<UTXO> queryUTXOPage(int i, String cursor) {
+    public ListPageResult<UTXO> queryUTXOPage(int i, String cursor) {
         return popStorage.queryUTXOPage(i, cursor);
     }
 
 
 
-    public PageResult<UTXOSearch>  selectUtxoAmountsByScriptHash(byte[] scriptHash, int pageSize, String lastUtxoKey) {
+    public TPageResult<UTXOSearch> selectUtxoAmountsByScriptHash(byte[] scriptHash, int pageSize, String lastUtxoKey) {
         return popStorage.selectUtxoAmountsByScriptHash(scriptHash, pageSize, lastUtxoKey);
     }
 
@@ -1311,5 +1315,92 @@ public class BlockChainService {
             copiedInputs.add(inputCopy);
         }
         return copiedInputs;
+    }
+
+    public Result getBlockByRange(long start, long end) {
+        List<Block> blocks = popStorage.getBlockByRange(start, end);
+        List<BlockDTO> blockDTOS = BeanCopyUtils.copyList(blocks, BlockDTO.class);
+        for (int i = 0; i < blockDTOS.size(); i++) {
+            Block block = blocks.get(i);
+            BlockDTO blockDTO = blockDTOS.get(i);
+            ArrayList<TransactionDTO> transactionDTOS = new ArrayList<>();
+            List<Transaction> transactions = block.getTransactions();
+            for (Transaction transaction : transactions){
+                TransactionDTO transactionDTO = convertTransactionDTO(transaction);
+                transactionDTOS.add(transactionDTO);
+            }
+            blockDTO.setTransactions(transactionDTOS);
+        }
+        return Result.OK(blockDTOS);
+    }
+
+    public List<Block> getBlockByStartHashAndEndHash(byte[] start, byte[] end) {
+        return popStorage.getBlockByStartHashAndEndHash(start, end);
+    }
+
+    public List<Block> getBlockByStartHashAndEndHashByHeight(byte[] start, byte[] end) {
+        long startHeight = popStorage.getBlockHeightByHash(start);
+        long endHeight = popStorage.getBlockHeightByHash(end);
+        return popStorage.getBlockByRange(startHeight, endHeight);
+    }
+
+
+    /**
+     * 验证区块的工作量证明（PoW）是否符合难度要求
+     * 工作量证明验证核心：区块哈希必须小于等于难度目标值
+     * @param block 待验证的区块
+     * @return 验证结果：true-符合PoW要求，false-不符合
+     */
+    public boolean validateBlockPoW(Block block) {
+        // 1. 验证区块对象有效性
+        if (block == null) {
+            log.error("待验证区块为null");
+            return false;
+        }
+
+        // 2. 验证区块哈希有效性（必须为32字节，符合SHA-256哈希长度）
+        byte[] blockHash = block.getHash();
+        if (blockHash == null || blockHash.length != 32) {
+            log.error("区块哈希无效，必须为32字节");
+            return false;
+        }
+
+        // 3. 验证难度目标有效性（必须为4字节压缩格式）
+        byte[] difficultyTarget = block.getDifficultyTarget();
+        if (difficultyTarget == null || difficultyTarget.length != 4) {
+            log.error("难度目标无效，必须为4字节压缩格式");
+            return false;
+        }
+
+        try {
+            // 4. 将4字节压缩难度目标转换为256位目标值（BigInteger）
+            BigInteger target = DifficultyUtils.compactToTarget(difficultyTarget);
+            if (target.equals(BigInteger.ZERO)) {
+                log.error("难度目标转换后为0，无效");
+                return false;
+            }
+
+            // 5. 将区块哈希转换为BigInteger（注意：使用1作为符号位参数，确保哈希值被解析为正数）
+            BigInteger hashValue = new BigInteger(1, blockHash);
+
+            // 6. 核心验证：区块哈希值必须小于等于难度目标值
+            boolean isValid = hashValue.compareTo(target) <= 0;
+            if (!isValid) {
+                log.error("区块PoW验证失败，哈希值({})大于目标值({})",
+                        hashValue.toString(16), target.toString(16));
+            }
+            return isValid;
+        } catch (ArithmeticException e) {
+            log.error("PoW验证时发生数值计算异常", e);
+            return false;
+        }
+    }
+
+    public void addBlockToMainChain(Block validBlock) {
+        verifyBlock(validBlock);
+    }
+
+    public void addBlockToAltChain(Block validBlock) {
+        verifyBlock(validBlock);
     }
 }

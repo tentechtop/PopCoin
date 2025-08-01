@@ -6,6 +6,9 @@ import com.esotericsoftware.kryo.io.Output;
 import com.esotericsoftware.kryo.pool.KryoFactory;
 import com.esotericsoftware.kryo.pool.KryoPool;
 import com.pop.popcoinsystem.application.service.wallet.Wallet;
+import com.pop.popcoinsystem.data.block.Block;
+import com.pop.popcoinsystem.data.block.BlockBody;
+import com.pop.popcoinsystem.data.block.BlockHeader;
 import com.pop.popcoinsystem.data.script.Script;
 import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.data.script.ScriptSig;
@@ -41,6 +44,9 @@ public class SerializeUtils {
         kryo.register(PrivateKey.class);
         kryo.register(PublicKey.class);
 
+        kryo.register(Block.class);
+        kryo.register(BlockBody.class);
+        kryo.register(BlockHeader.class);
 
         kryo.register(ExternalNodeInfo.class);
 

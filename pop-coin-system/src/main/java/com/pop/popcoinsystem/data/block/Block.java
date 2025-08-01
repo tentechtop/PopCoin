@@ -343,6 +343,62 @@ public class Block implements Serializable {
     }
 
 
+    public BlockHeader extractHeader() {
+        BlockHeader header = new BlockHeader();
+        // 复制区块头核心字段（根据你的BlockHeader定义补充）
+        header.setVersion(this.version);
+        header.setPreviousHash(this.previousHash);
+        header.setMerkleRoot(this.merkleRoot);
+        header.setTime(this.time);
+        header.setDifficultyTarget(this.difficultyTarget);
+        header.setNonce(this.nonce);
+        // 补充扩展头字段（高度、哈希等）
+        header.setHash(this.hash);
+        header.setHeight(this.height); // 假设BlockHeader新增height字段（原Block的height）
+        header.setMedianTime(this.medianTime);
+        header.setChainWork(this.chainWork);
+        header.setDifficulty(this.difficulty);
+        header.setWitnessSize(this.witnessSize);
+        header.setSize(this.size);
+        header.setWeight(this.weight);
+        return header;
+    }
+
+    /**
+     * 从当前区块拆分出区块体
+     */
+    public BlockBody extractBody() {
+        BlockBody body = new BlockBody();
+        body.setTransactions(this.transactions); // 交易列表
+        body.setTxCount(this.txCount); // 交易数量
+        return body;
+    }
+
+    /**
+     * 从区块头和区块体合并为完整区块
+     */
+    public static Block merge(BlockHeader header, BlockBody body) {
+        Block block = new Block();
+        // 复制头字段
+        block.setVersion(header.getVersion());
+        block.setPreviousHash(header.getPreviousHash());
+        block.setMerkleRoot(header.getMerkleRoot());
+        block.setTime(header.getTime());
+        block.setDifficultyTarget(header.getDifficultyTarget());
+        block.setNonce(header.getNonce());
+        block.setHash(header.getHash());
+        block.setHeight(header.getHeight());
+        block.setMedianTime(header.getMedianTime());
+        block.setChainWork(header.getChainWork());
+        block.setDifficulty(header.getDifficulty());
+        block.setWitnessSize(header.getWitnessSize());
+        block.setSize(header.getSize());
+        block.setWeight(header.getWeight());
+        // 复制体字段
+        block.setTransactions(body.getTransactions());
+        block.setTxCount(body.getTxCount());
+        return block;
+    }
 
 
 }

@@ -19,9 +19,6 @@ import java.io.Serializable;
 @Service
 public class TransactionMessageHandler implements MessageHandler {
 
-
-
-
     @Override
     public KademliaMessage<? extends Serializable> handleMesage(KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) throws InterruptedException {
         return doHandle(kademliaNodeServer, (TransactionMessage) message);

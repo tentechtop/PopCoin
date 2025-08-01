@@ -139,9 +139,20 @@ public class KademliaNodeServer {
         this.registerMessageHandler(MessageType.BLOCK.getCode(), new BlockMessageHandler());
         this.registerMessageHandler(MessageType.SHUTDOWN.getCode(), new ShutdownMessageHandler());
 
+        this.registerMessageHandler(MessageType.GET_BLOCK_HEADERS_RES.getCode(), new GetHeadersResponseMessageHandle());
+        this.registerMessageHandler(MessageType.GET_BLOCK_HEADERS_REQ.getCode(), new GetHeadersRequestMessageHandle());
+
+
+        this.registerMessageHandler(MessageType.GET_FORK_POINT_REQ.getCode(), new FindForkPointRequestMessageHandle());
+        this.registerMessageHandler(MessageType.GET_FORK_POINT_RES.getCode(), new FindForkPointResponseMessageHandle());
+
+
+
+
+
         //初始化UDP客户端
         this.udpClient = new UDPClient();
-        this.tcpClient = new TCPClient();
+        this.tcpClient = new TCPClient(this);
     }
     public void registerMessageHandler(int type, MessageHandler messageHandler) {
         KademliaMessageHandler.put(type, messageHandler);
@@ -475,7 +486,6 @@ public class KademliaNodeServer {
             list.add(new io.netty.channel.socket.DatagramPacket(buf, inetSocketAddress));
         }
     }
-
 
 
     public static class UDPKademliaMessageDecoder extends MessageToMessageDecoder<DatagramPacket> {

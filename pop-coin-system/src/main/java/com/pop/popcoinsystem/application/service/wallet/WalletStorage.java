@@ -1,7 +1,7 @@
 package com.pop.popcoinsystem.application.service.wallet;
 
 import com.pop.popcoinsystem.data.transaction.UTXO;
-import com.pop.popcoinsystem.data.vo.result.RocksDbPageResult;
+import com.pop.popcoinsystem.data.vo.result.ListPageResult;
 import com.pop.popcoinsystem.util.SerializeUtils;
 import lombok.Getter;
 import lombok.Setter;
@@ -14,7 +14,6 @@ import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import static com.pop.popcoinsystem.constant.BlockChainConstants.NET_VERSION;
 import static com.pop.popcoinsystem.constant.BlockChainConstants.STORAGE_PATH;
 
 
@@ -301,7 +300,7 @@ public class WalletStorage {
      * @param lastUtxoKey 上一页的最后一个UTXO键，首次查询传入 null
      * @return 包含UTXO集合和分页信息的结果对象
      */
-    public RocksDbPageResult<UTXO> getWalletUTXOsPaginated(String walletName, int pageSize, String lastUtxoKey) {
+    public ListPageResult<UTXO> getWalletUTXOsPaginated(String walletName, int pageSize, String lastUtxoKey) {
         // 校验 pageSize 范围
         if (pageSize <= 0 || pageSize > 5000) {
             throw new IllegalArgumentException("每页数量必须在 1-5000 之间");
@@ -346,7 +345,7 @@ public class WalletStorage {
             }
             // 判断是否为最后一页：如果实际获取数量小于请求数量，说明没有更多数据
             boolean isLastPage = count < pageSize;
-            return new RocksDbPageResult<>(utxoList, currentLastKey, isLastPage);
+            return new ListPageResult<>(utxoList, currentLastKey, isLastPage);
         } catch (Exception e) {
             log.error("分页获取钱包 UTXO 失败", e);
             throw new RuntimeException("分页获取钱包 UTXO 失败", e);
@@ -539,9 +538,5 @@ public class WalletStorage {
             log.error("数据库关闭失败", e);
         }
     }
-
-
-
-
 
 }

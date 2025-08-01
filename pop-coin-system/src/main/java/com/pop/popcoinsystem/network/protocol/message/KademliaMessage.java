@@ -24,7 +24,7 @@ public abstract class KademliaMessage<D extends Serializable> {
     private long timestamp = System.currentTimeMillis(); // 时间戳 发送时间
     private D data;//消息数据
 
-
+    private boolean isResponse = false; // 标记是否为响应消息
     /**
      * 构造消息
      */
@@ -36,6 +36,18 @@ public abstract class KademliaMessage<D extends Serializable> {
         this.data = data;
         this.timestamp = System.currentTimeMillis();
     }
+
+
+    //是否是响应消息
+    public boolean isResponse() {
+        return isResponse;
+    }
+
+    //设置消息响应
+    public void setResponse(boolean response) {
+        isResponse = response;
+    }
+
 
 
     /**
