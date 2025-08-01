@@ -16,15 +16,16 @@ import org.jetbrains.annotations.NotNull;
 import java.io.Serializable;
 import java.net.ConnectException;
 import java.util.Arrays;
+import java.util.concurrent.ExecutionException;
 
 @Slf4j
 public class FindForkPointRequestMessageHandle implements MessageHandler{
     @Override
-    public KademliaMessage<? extends Serializable> handleMesage(KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) throws InterruptedException, FullBucketException, ConnectException, UnsupportedChainException {
+    public KademliaMessage<? extends Serializable> handleMesage(KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) throws InterruptedException, FullBucketException, ConnectException, UnsupportedChainException, ExecutionException {
         return doHandle(kademliaNodeServer, (FindForkPointRequestMessage) message);
     }
 
-    protected FindForkPointRequestMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull FindForkPointRequestMessage message) throws InterruptedException, ConnectException {
+    protected FindForkPointRequestMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull FindForkPointRequestMessage message) throws InterruptedException, ConnectException, ExecutionException {
         log.info("收到分叉点查询请求，开始查找共同区块");
         NodeInfo sender = message.getSender();
         NodeInfo me = kademliaNodeServer.getNodeInfo();
@@ -38,7 +39,7 @@ public class FindForkPointRequestMessageHandle implements MessageHandler{
         return null;
     }
 
-    private Block findForkPoint(KademliaNodeServer kademliaNodeServer,FindForkPointRequestMessage message,BlockChainService chainService, byte[] startHash, byte[] endHash, NodeInfo remoteNode, KademliaNodeServer server) throws InterruptedException, ConnectException {
+    private Block findForkPoint(KademliaNodeServer kademliaNodeServer,FindForkPointRequestMessage message,BlockChainService chainService, byte[] startHash, byte[] endHash, NodeInfo remoteNode, KademliaNodeServer server) throws InterruptedException, ConnectException, ExecutionException {
         NodeInfo me = kademliaNodeServer.getNodeInfo();
         NodeInfo sender = message.getSender();
 
@@ -64,7 +65,9 @@ public class FindForkPointRequestMessageHandle implements MessageHandler{
             request.setResponse(true);
             GetBlockHashByHeightResponse response = null;
             Promise<KademliaMessage> kademliaMessagePromise = server.getTcpClient().sendMessageWithResponse(request);
+            KademliaMessage kademliaMessage = kademliaMessagePromise.get();
 
+            log.info("向节点{}查询高度{}的区块哈希", sender, mid);
 
 /*            if (response != null && Arrays.equals(response.getBlockHash(), midHash)) {
                 // 中间区块相同，向更高处查找

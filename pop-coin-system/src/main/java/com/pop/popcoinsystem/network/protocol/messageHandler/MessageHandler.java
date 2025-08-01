@@ -7,10 +7,11 @@ import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 
 import java.io.Serializable;
 import java.net.ConnectException;
+import java.util.concurrent.ExecutionException;
 
 public interface MessageHandler {
 
-    KademliaMessage<? extends Serializable> handleMesage (KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) throws InterruptedException, FullBucketException, ConnectException, UnsupportedChainException;
+    KademliaMessage<? extends Serializable> handleMesage (KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) throws InterruptedException, FullBucketException, ConnectException, UnsupportedChainException, ExecutionException;
 
 
 
