@@ -27,44 +27,20 @@ public class HandshakeResponseMessageHandle implements MessageHandler{
 
     protected EmptyKademliaMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull HandshakeResponseMessage message) throws InterruptedException, ConnectException {
         log.info("收到握手响应--握手成功");
-        RoutingTable routingTable = kademliaNodeServer.getRoutingTable();
         NodeInfo sender = message.getSender();//消息来源
         ExternalNodeInfo data = message.getData();
-
         //再请求对方已经知道的节点信息
         FindNodeRequestMessage findNodeRequestMessage = new FindNodeRequestMessage();
         findNodeRequestMessage.setSender(kademliaNodeServer.getNodeInfo());
         findNodeRequestMessage.setReceiver(sender);
         findNodeRequestMessage.setData(kademliaNodeServer.getNodeInfo().getId());
         kademliaNodeServer.getTcpClient().sendMessage(findNodeRequestMessage);
-
-        BigInteger id = kademliaNodeServer.getNodeInfo().getId();
         try {
             log.info("成功更新节点 {} 到路由表", sender.getId());
             //ping消息应该携带 节点基本消息外的额外消息如
             kademliaNodeServer.getRoutingTable().update(data);
         }catch (FullBucketException e){
-            Bucket bucket = routingTable.findBucket(id);
-            // 为每个节点创建超时任务：若超时未收到Pong，则标记为不活跃 清楚掉节点
-            ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-            for (BigInteger nodeId : bucket.getNodeIds()) {
-                ExternalNodeInfo oldNode = bucket.getNode(nodeId);
-                PingKademliaMessage pingKademliaMessage = new PingKademliaMessage();
-                pingKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());
-                pingKademliaMessage.setReceiver(message.getSender());
-                kademliaNodeServer.getTcpClient().sendMessage(pingKademliaMessage);
-                // 超时任务：5秒未收到Pong，则认为不活跃，从桶中移除
-                scheduler.schedule(() -> {
-                    Date now = new Date();
-                    // 计算时间差（毫秒）
-                    long timeDiff = now.getTime() - oldNode.getLastSeen().getTime();
-                    // 若最后活跃时间超过阈值（如5秒），则判定为不活跃
-                    if (timeDiff > 5000) {
-                        log.info("节点 {} 不活跃，从路由表移除", oldNode.getId());
-                        bucket.remove(oldNode.getId()); // 从桶中移除
-                    }
-                }, 5, TimeUnit.SECONDS); // 超时时间设为3秒（可调整）
-            }
+            kademliaNodeServer.getRoutingTable().forceUpdate(data);
         }
         return new EmptyKademliaMessage();
     }

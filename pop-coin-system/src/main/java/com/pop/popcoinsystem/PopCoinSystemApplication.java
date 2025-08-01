@@ -58,5 +58,29 @@ public class PopCoinSystemApplication {
     //  config: classpath:logback-spring.xml  # 引用自定义的logback配置文件
 
 
+    //          Bucket bucket = routingTable.findBucket(id);
+    //            // 为每个节点创建超时任务：若超时未收到Pong，则标记为不活跃 清楚掉节点
+    //            ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    //            for (BigInteger nodeId : bucket.getNodeIds()) {
+    //                ExternalNodeInfo oldNode = bucket.getNode(nodeId);
+    //                PingKademliaMessage pingKademliaMessage = new PingKademliaMessage();
+    //                pingKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());
+    //                pingKademliaMessage.setReceiver(message.getSender());
+    //                kademliaNodeServer.getTcpClient().sendMessage(pingKademliaMessage);
+    //                // 超时任务：5秒未收到Pong，则认为不活跃，从桶中移除
+    //                scheduler.schedule(() -> {
+    //                    Date now = new Date();
+    //                    // 计算时间差（毫秒）
+    //                    long timeDiff = now.getTime() - oldNode.getLastSeen().getTime();
+    //                    // 若最后活跃时间超过阈值（如5秒），则判定为不活跃
+    //                    if (timeDiff > 5000) {
+    //                        log.info("节点 {} 不活跃，从路由表移除", oldNode.getId());
+    //                        bucket.remove(oldNode.getId()); // 从桶中移除
+    //                    }
+    //                }, 5, TimeUnit.SECONDS); // 超时时间设为3秒（可调整）
+    //            }
+
+
+
 
 }
