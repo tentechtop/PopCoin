@@ -142,6 +142,32 @@ public class mtTx {
 
 
 
+        //       // 验证成功，将交易添加到交易池
+        //
+        //            //广播交易
+        //            new Thread(() -> {
+        //                miningService.addTransaction(transaction);
+        //                if (kademliaNodeServer.isRunning()){
+        //                    log.info("交易验证成功,广播交易");
+        //                    TransactionMessage transactionKademliaMessage = new TransactionMessage();
+        //                    transactionKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());
+        //                    transactionKademliaMessage.setData(transaction);
+        //                    kademliaNodeServer.broadcastMessage(transactionKademliaMessage);
+        //                }
+        //            }).start();
+
+
+
+        //    public Result getTransactionPool() {
+        //        HashMap<String, TransactionDTO> stringTransactionDTOHashMap = new HashMap<>();
+        //        Map<byte[], Transaction> transactionPool = miningService.getTransactionPool();
+        //        for (Map.Entry<byte[], Transaction> entry : transactionPool.entrySet()){
+        //            TransactionDTO transactionDTO = convertTransactionDTO(entry.getValue());
+        //            stringTransactionDTOHashMap.put(CryptoUtil.bytesToHex(entry.getKey()), transactionDTO);
+        //        }
+        //        return Result.ok(stringTransactionDTOHashMap);
+        //    }
+
 
 
     }

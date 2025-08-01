@@ -37,6 +37,8 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
+import static com.pop.popcoinsystem.constant.BlockChainConstants.NET_VERSION;
+
 
 /**
  * 加密工具类 - 提供哈希、签名和密钥管理功能
@@ -44,18 +46,11 @@ import java.util.Map;
 @Slf4j
 
 public class CryptoUtil {
-
-
-    //节点版本
-    public static int POP_NET_VERSION = 1; //默认主网
     public static byte PRE_P2PKH = 0x00;
     public static byte PRE_P2SH = 0x05;
-    public static void setNetVersion(int netVersion) {
-        POP_NET_VERSION = netVersion;
-        // 根据网络版本更新地址前缀
-        PRE_P2PKH = NETVersion.getP2PKHPreAddress(POP_NET_VERSION);
-        PRE_P2SH = NETVersion.getP2SHPreAddress(POP_NET_VERSION);
-        log.info("CryptoUtil初始化网络版本: {}", POP_NET_VERSION);
+    static {
+        PRE_P2PKH = NETVersion.getP2PKHPreAddress(NET_VERSION);
+        PRE_P2SH = NETVersion.getP2SHPreAddress(NET_VERSION);
     }
 
     // secp256k1曲线参数（比特币/以太坊使用）

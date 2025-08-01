@@ -23,7 +23,6 @@ import java.util.List;
 
 
 import static com.pop.popcoinsystem.constant.BlockChainConstants.*;
-import static com.pop.popcoinsystem.service.MiningService.*;
 
 /**
  * 交易信息

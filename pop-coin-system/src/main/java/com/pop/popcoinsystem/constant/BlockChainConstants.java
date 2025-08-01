@@ -3,6 +3,19 @@ package com.pop.popcoinsystem.constant;
 import com.pop.popcoinsystem.util.CryptoUtil;
 
 public class BlockChainConstants {
+
+    public static int NET_VERSION = 1;
+    public static void setNetVersion(int netVersion) {
+        NET_VERSION = netVersion;
+    }
+
+    //存储路径
+    public static String STORAGE_PATH = "db/";
+    public static void setStoragePath(String storagePath) {
+        STORAGE_PATH = storagePath;
+    }
+
+
     // 交易版本 1基础交易版本
     public static final int TRANSACTION_VERSION_1 = 1;
 
@@ -30,7 +43,7 @@ public class BlockChainConstants {
     public static final long BLOCK_REWARD_UNIT = 100000000;
 
     //难度调整周期的区块数量
-    public static final int DIFFICULTY_ADJUSTMENT_INTERVAL = 20;
+    public static final int DIFFICULTY_ADJUSTMENT_INTERVAL = 200;
 
     //货币总供应量
     public static final long MONEY_SUPPLY = 2100000000;

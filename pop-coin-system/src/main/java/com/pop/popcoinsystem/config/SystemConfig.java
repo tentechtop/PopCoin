@@ -1,6 +1,7 @@
 package com.pop.popcoinsystem.config;
 
 
+import com.pop.popcoinsystem.constant.BlockChainConstants;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import jakarta.annotation.PostConstruct;
 import lombok.Data;
@@ -20,11 +21,15 @@ public class SystemConfig {
 
     private int netVersion;
 
+    private String storagePath;
+
     @PostConstruct
     public void init(){
         log.info("网络版本:{}", netVersion);
         log.info("公钥{}", publicKey);
+        log.info("存储路径:{}", storagePath);
         // 关键：初始化时将网络版本传递给CryptoUtil
-        CryptoUtil.setNetVersion(netVersion);
+        BlockChainConstants.setNetVersion(netVersion);
+        BlockChainConstants.setStoragePath(storagePath);
     }
 }

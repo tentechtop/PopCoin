@@ -11,13 +11,14 @@ logging:
     root: INFO
 
 system:
+  #存储路径
+  storagePath: /data/storage
   # 网络版本 决定这个服务能否参与网络共识
   netVersion: 1
   # 公钥 持有公钥的人能够控制这个节点
   publicKey:
     - 1321313132
     - 1321313132
-    - 3123131324
 
 kademlia:
   nodeType: 1

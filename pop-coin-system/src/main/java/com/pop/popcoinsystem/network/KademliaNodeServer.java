@@ -41,7 +41,8 @@ import java.net.InetSocketAddress;
 import java.util.*;
 import java.util.concurrent.*;
 
-import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
+import static com.pop.popcoinsystem.constant.BlockChainConstants.NET_VERSION;
+
 
 @Slf4j
 @Data
@@ -436,7 +437,7 @@ public class KademliaNodeServer {
             ByteBuf buf = Unpooled.buffer(data.length + 12); // 4(类型) + 4(网络版本) + 4(内容长)
             buf.writeInt(kademliaMessage.getType());  // 写入消息类型 4
             //写入网络版本
-            buf.writeInt(POP_NET_VERSION);//4
+            buf.writeInt(NET_VERSION);//4
             //写入内容长度
             buf.writeInt(data.length);//4
             //写入内容
@@ -468,7 +469,7 @@ public class KademliaNodeServer {
             int netVersion = byteBuf.readInt();
             log.info("网络版本:{}", netVersion);
             //是否和我的网络版本一致
-            if (netVersion != POP_NET_VERSION) {
+            if (netVersion != NET_VERSION) {
                 log.warn("网络版本不一致");
                 return;
             }
@@ -509,7 +510,7 @@ public class KademliaNodeServer {
                 // 2. 写入消息类型（4字节整数）
                 byteBuf.writeInt(kademliaMessage.getType());  //4
                 //写入网络版本
-                byteBuf.writeInt(POP_NET_VERSION);//4
+                byteBuf.writeInt(NET_VERSION);//4
                 //写入内容长度
                 byteBuf.writeInt(data.length);//4  //32 位（4 字节）的整数
                 //写入类容
@@ -541,12 +542,10 @@ public class KademliaNodeServer {
             int netVersion = byteBuf.readInt();
             log.info("网络版本:{}", netVersion);
             //是否和我的网络版本一致
-            if (netVersion != POP_NET_VERSION) {
+            if (netVersion != NET_VERSION) {
                 log.warn("网络版本不一致");
                 return;
             }
-
-
 
             // 读取内容长度
             int contentLength = byteBuf.readInt();
@@ -567,20 +566,4 @@ public class KademliaNodeServer {
             list.add(message);
         }
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 }

@@ -1,4 +1,4 @@
-package com.pop.popcoinsystem.service;
+package com.pop.popcoinsystem.storage;
 
 import com.pop.popcoinsystem.storage.StorageService;
 import org.springframework.context.annotation.Bean;

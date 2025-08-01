@@ -10,6 +10,7 @@ import com.pop.popcoinsystem.data.vo.result.PageResult;
 import com.pop.popcoinsystem.data.vo.result.RocksDbPageResult;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeSettings;
+import com.pop.popcoinsystem.network.enums.NETVersion;
 import com.pop.popcoinsystem.util.ByteUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.SerializeUtils;
@@ -23,13 +24,14 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 
-import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
-
+import static com.pop.popcoinsystem.constant.BlockChainConstants.NET_VERSION;
+import static com.pop.popcoinsystem.constant.BlockChainConstants.STORAGE_PATH;
 
 @Slf4j
 public class StorageService {
     // 数据库存储路径
-    private static final String DB_PATH = "rocksDb/popCoin.db/blockChain" + POP_NET_VERSION + ".db/";
+    private static final String DB_PATH = STORAGE_PATH+"/network" + NET_VERSION + ".db/";
+
     //这些KEY都保存在BLOCK_CHAIN 中 因为他们单独特殊
     private static final byte[] KEY_UTXO_COUNT = "key_utxo_count".getBytes();//UTXO总数
     private static final byte[] KEY_GENESIS_BLOCK_HASH = "key_genesis_block_hash".getBytes();//创世区块hash

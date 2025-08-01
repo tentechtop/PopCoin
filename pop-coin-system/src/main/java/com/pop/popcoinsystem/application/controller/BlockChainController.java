@@ -150,21 +150,9 @@ public class BlockChainController {
         return "";
     }
 
-    /**
-     * 设置该节点的挖矿信息
-     */
-    @PostMapping("/setMiner")
-    public Result<String> setMiner(@RequestBody Miner miner){
-        return blockChainService.setMiningInfo(miner);
-    }
 
-    /**
-     * 获取交易池中的交易
-     */
-    @PostMapping("/getTransactionPool")
-    public Result getTransactionPool(){
-        return blockChainService.getTransactionPool();
-    }
+
+
 
 
 

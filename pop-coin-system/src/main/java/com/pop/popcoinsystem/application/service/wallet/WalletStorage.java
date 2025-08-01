@@ -14,17 +14,17 @@ import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
+import static com.pop.popcoinsystem.constant.BlockChainConstants.NET_VERSION;
+import static com.pop.popcoinsystem.constant.BlockChainConstants.STORAGE_PATH;
 
 
 @Slf4j
 public class WalletStorage {
     // 数据库存储路径
-    private static final String DB_PATH = "rocksDb/popCoin.db/wallet/blockChain" + POP_NET_VERSION + ".db";
+    private static final String DB_PATH = STORAGE_PATH+"/wallet"+ ".db/";
     private static final String LOG_PATH = DB_PATH + "rocksdb_logs/"; // 单独目录存放 RocksDB 日志
     // UTXO键前缀分隔符
     private static final String UTXO_KEY_SEPARATOR = "_UTXO_";
-
     // ------------------------------ 数据操作 ------------------------------
     /**
      * 添加钱包

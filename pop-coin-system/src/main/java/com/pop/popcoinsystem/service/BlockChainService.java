@@ -35,7 +35,7 @@ import static com.pop.popcoinsystem.constant.BlockChainConstants.TRANSACTION_VER
 import static com.pop.popcoinsystem.constant.BlockChainConstants.*;
 import static com.pop.popcoinsystem.storage.StorageService.getUTXOKey;
 import static com.pop.popcoinsystem.data.transaction.Transaction.calculateBlockReward;
-import static com.pop.popcoinsystem.util.CryptoUtil.POP_NET_VERSION;
+
 
 @Slf4j
 @Service
@@ -43,9 +43,9 @@ public class BlockChainService {
     @Autowired
     private StorageService popStorage;
     @Autowired
-    private MiningService miningService;
-    @Autowired
     private KademliaNodeServer kademliaNodeServer;
+    @Autowired
+    private Mining mining;
 
     @PostConstruct
     private void initBlockChain() throws Exception {
@@ -61,14 +61,8 @@ public class BlockChainService {
             //保存主链中 高度高度到 hash的索引
             popStorage.addMainHeightToBlockIndex(genesisBlock.getHeight(), GENESIS_BLOCK_HASH);
         }
-
     }
 
-
-
-    public void startMining() throws Exception {
-        miningService.startMining();
-    }
 
     /**
      * 验证交易
@@ -131,7 +125,6 @@ public class BlockChainService {
         return true;
     }
 
-
     private boolean verifyScriptPubKey(Transaction tx, TXInput input,int inputIndex,UTXO utxo) {
         ScriptPubKey scriptPubKey = utxo.getScriptPubKey();
         int type = scriptPubKey.getType();//解锁脚本的类型
@@ -144,10 +137,6 @@ public class BlockChainService {
         }
         return true;
     }
-
-
-
-
 
     /**
      * 验证交易基础格式
@@ -165,18 +154,14 @@ public class BlockChainService {
      */
     private boolean validateTransactionAmounts(Transaction transaction) {
         boolean isCoinBase = isCoinBaseTransaction(transaction);
-
         long inputSum = calculateInputSum(transaction);
         long outputSum = calculateOutputSum(transaction);
-
         log.info("交易输入金额:{}", inputSum);
         log.info("交易输出金额:{}", outputSum);
-
         if (inputSum < outputSum) {
             log.error("交易输出金额大于输入金额");
             return false;
         }
-
         // 非CoinBase交易检查最低输出金额
         if (!isCoinBase) {
             for (TXOutput output : transaction.getOutputs()) {
@@ -316,10 +301,9 @@ public class BlockChainService {
     public boolean verifyAndAddTradingPool(Transaction transaction) {
         log.info("您的交易已提交,正在验证交易...");
         if (verifyTransaction(transaction)) {
-            // 验证成功，将交易添加到交易池
-            miningService.addTransaction(transaction);
             //广播交易
             new Thread(() -> {
+                mining.addTransaction(transaction);
                 if (kademliaNodeServer.isRunning()){
                     log.info("交易验证成功,广播交易");
                     TransactionMessage transactionKademliaMessage = new TransactionMessage();
@@ -331,8 +315,6 @@ public class BlockChainService {
         }
         return true;
     }
-
-
 
     /**
      * 验证区块
@@ -379,8 +361,6 @@ public class BlockChainService {
         }).start();
         return true;
     }
-
-
 
     /**
      * 创建隔离见证交易的签名哈希
@@ -540,10 +520,6 @@ public class BlockChainService {
                 && Arrays.equals(input.getTxId(), new byte[32])  // txId为全零
                 && (input.getVout() == -1 || input.getVout() == 0);  // 匹配协议定义的特殊值
     }
-
-
-
-
 
 
     /**
@@ -979,7 +955,7 @@ public class BlockChainService {
         BlockChain blockChain = new BlockChain();
         Block mainLatestBlock = getMainLatestBlock();
         long mainLatestHeight = getMainLatestHeight();
-        blockChain.setChain(POP_NET_VERSION);
+        blockChain.setChain(NET_VERSION);
         blockChain.setChainLength(mainLatestHeight);
         blockChain.setKnownHeaderCount(mainLatestHeight);
         blockChain.setLatestBlockHash(CryptoUtil.bytesToHex(mainLatestBlock.getHash()));
@@ -1252,22 +1228,6 @@ public class BlockChainService {
         }
         return transactionDTO;
     }
-
-    public Result<String> setMiningInfo(Miner miner) {
-        miningService.setMiningInfo( miner);
-        return Result.ok();
-    }
-
-    public Result getTransactionPool() {
-        HashMap<String, TransactionDTO> stringTransactionDTOHashMap = new HashMap<>();
-        Map<byte[], Transaction> transactionPool = miningService.getTransactionPool();
-        for (Map.Entry<byte[], Transaction> entry : transactionPool.entrySet()){
-            TransactionDTO transactionDTO = convertTransactionDTO(entry.getValue());
-            stringTransactionDTOHashMap.put(CryptoUtil.bytesToHex(entry.getKey()), transactionDTO);
-        }
-        return Result.ok(stringTransactionDTOHashMap);
-    }
-
 
 
     //创建一笔CoinBase交易
