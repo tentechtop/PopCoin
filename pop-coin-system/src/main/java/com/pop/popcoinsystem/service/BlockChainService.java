@@ -181,7 +181,7 @@ public class BlockChainService implements EventHandler<TransactionEvent> {
 
 
         Miner miner = new Miner();
-        miner.setAddress(p2WPKHAddressMiner);
+        miner.setAddress(p2PKHAddressMiner);
         miner.setName("btcminer");
         miningService.setMiningInfo(miner);
 
@@ -362,8 +362,12 @@ public class BlockChainService implements EventHandler<TransactionEvent> {
     }
 
     private boolean verifyP2PKH(Transaction tx, TXInput input,int inputIndex,UTXO utxo) {
+        byte[] serialize = SerializeUtils.serialize(tx);
+        log.info("验证时交易序列化数据: {}",CryptoUtil.bytesToHex(CryptoUtil.applySHA256(serialize)) );
+
+
         ScriptPubKey scriptPubKey = utxo.getScriptPubKey();
-        log.info("验证P2PKH");
+        log.info("验证P2PKH{}",scriptPubKey.toScripString());
         //从中获取 签名和公钥 witness  第一个数据是签名 第二个是公钥
         ScriptSig scriptSig = input.getScriptSig();//解锁脚本中有 签名和公钥  签名
         List<Script.ScriptElement> elements = scriptSig.getElements();
@@ -373,14 +377,17 @@ public class BlockChainService implements EventHandler<TransactionEvent> {
         SigHashType sigHashType = SegWitUtils.extractSigHashType(signature);//获取签名的SIGHASH类型
         log.info("签名SIGHASH类型:{}", sigHashType);
         byte[] realSignature = SegWitUtils.extractOriginalSignature(signature);
-        log.info("签名数据:{}", CryptoUtil.bytesToHex(realSignature));
+        log.info("原始签名数据:{}", CryptoUtil.bytesToHex(realSignature));
         //这里应该根据签名类型 构建对应的 交易签名数据
-        byte[] txHash = createWitnessSignatureHash(
+
+        byte[] txHash = createLegacySignatureHash(
                 tx,
                 inputIndex,
-                utxo.getValue(),
+                utxo,
                 sigHashType
         );
+        log.info("验证时需要签名的交易数据:{}", CryptoUtil.bytesToHex(txHash));
+
         ScriptSig  realScriptSig = new ScriptSig(realSignature, publicKey);
         boolean verify = scriptPubKey.verify(realScriptSig, txHash, 0, false);
         if (!verify) {
@@ -419,6 +426,9 @@ public class BlockChainService implements EventHandler<TransactionEvent> {
                 utxo.getValue(),
                 sigHashType
         );
+        log.info("P2WPKH验证时需要签名的交易数据:{}", CryptoUtil.bytesToHex(txHash));
+
+
         if (signature.length == 0) {
             log.error("P2WPKH签名数据为空");
             return false;
@@ -696,7 +706,6 @@ public class BlockChainService implements EventHandler<TransactionEvent> {
         for (TXInput input : txCopy.getInputs()) {
             input.setScriptSig(null);
         }
-
 
         // 获取当前处理的输入
         TXInput currentInput = txCopy.getInputs().get(inputIndex);
@@ -1607,4 +1616,48 @@ public class BlockChainService implements EventHandler<TransactionEvent> {
         }
     }
 
+    public byte[] createLegacySignatureHash(Transaction tx, int inputIndex, UTXO utxo, SigHashType sigHashType) {
+        //打印所有的参数
+        // 1. 复制交易对象，避免修改原交易
+        Transaction txCopy  = new Transaction();
+        txCopy.setTime(0L);
+        // 1. 仅复制计算签名哈希必需的核心字段，去除无关数据
+        // 保留核心字段：版本、输入列表、输出列表、锁定时间（这些是签名哈希计算的必要项）
+        log.info("交易版本:{}",tx.getVersion());
+        log.info("复制的交易:{}",CryptoUtil.bytesToHex( CryptoUtil.applySHA256(SerializeUtils.serialize(txCopy) )));
+        txCopy.setInputs(copyEssentialInputs(tx.getInputs())); // 仅复制输入的必要信息
+        txCopy.setOutputs(new ArrayList<>(tx.getOutputs())); // 复制输出列表（浅拷贝足够，无需修改）
+        txCopy.setLockTime(tx.getLockTime());
+        // 3. 获取当前输入并验证
+        TXInput currentInput = txCopy.getInputs().get(inputIndex);
+        if (currentInput == null) {
+            log.warn("输入索引超出范围");
+            throw new RuntimeException("输入索引超出范围");
+        }
+
+        // 4. 将当前输入对应的UTXO的scriptPubKey作为临时scriptSig（核心步骤，必须执行）
+        ScriptPubKey originalScriptPubKey = utxo.getScriptPubKey();
+        if (originalScriptPubKey == null) {
+            log.warn("UTXO的scriptPubKey为空");
+            throw new IllegalArgumentException("UTXO的scriptPubKey不能为空");
+        }
+        ScriptSig tempScriptSig = new ScriptSig(originalScriptPubKey.getScriptBytes());
+        currentInput.setScriptSig(tempScriptSig);
+
+        // 5. 计算签名哈希
+        return txCopy.calculateLegacySignatureHash(inputIndex, sigHashType);
+    }
+
+    private List<TXInput> copyEssentialInputs(List<TXInput> inputs) {
+        List<TXInput> copiedInputs = new ArrayList<>();
+        for (TXInput input : inputs) {
+            TXInput inputCopy = new TXInput();
+            // 仅复制输入的必要信息
+            inputCopy.setTxId(Arrays.copyOf(input.getTxId(), input.getTxId().length));
+            inputCopy.setVout(input.getVout());
+            inputCopy.setSequence(input.getSequence());
+            copiedInputs.add(inputCopy);
+        }
+        return copiedInputs;
+    }
 }

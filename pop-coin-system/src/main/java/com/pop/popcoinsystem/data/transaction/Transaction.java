@@ -57,7 +57,7 @@ public class Transaction implements Serializable {
     /**
      * 交易版本
      */
-    private int version = 1;
+    private int version;
 
     /**
      * 交易数据大小
@@ -723,5 +723,114 @@ public class Transaction implements Serializable {
     }
 
 
+    // 新增普通交易的哈希计算实现
+    public byte[] calculateLegacySignatureHash(int inputIndex, SigHashType sigHashType) {
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        java.io.DataOutputStream dos = new java.io.DataOutputStream(baos);
+        try {
+            // 1. 写入版本号
+            //dos.writeInt(this.getVersion());
 
+            // 2. 处理输入（根据ANYONECANPAY标志）
+            boolean anyoneCanPay = (sigHashType.getValue() & 0x80) != 0;
+
+            // 2.1 写入输入数量
+            if (anyoneCanPay) {
+                dos.writeLong(1); // 仅包含当前输入
+            } else {
+                dos.writeLong(this.getInputs().size());
+            }
+
+            // 2.2 写入输入内容
+            for (int i = 0; i < this.getInputs().size(); i++) {
+                TXInput input = this.getInputs().get(i);
+
+                // ANYONECANPAY标志：跳过非当前输入
+                if (anyoneCanPay && i != inputIndex) {
+                    continue;
+                }
+
+                // 写入前序交易ID和输出索引
+                dos.write(input.getTxId());
+                dos.writeInt(input.getVout());
+
+                // 写入scriptSig（仅当前输入保留临时脚本，其他输入为空）
+                if (i == inputIndex) {
+                    byte[] scriptBytes = input.getScriptSig() != null ? input.getScriptSig().getScriptBytes() : new byte[0];
+                    dos.writeLong(scriptBytes.length);
+                    dos.write(scriptBytes);
+                } else {
+                    dos.writeLong(0); // 非当前输入的scriptSig为空
+                }
+
+                // 写入sequence（根据哈希类型处理）
+                dos.writeLong(input.getSequence());
+            }
+
+            // 3. 处理输出（根据哈希类型：ALL/NONE/SINGLE）
+            byte baseType = (byte) (sigHashType.getValue() & 0x7F);
+
+            if (baseType == SigHashType.NONE.getValue()) {
+                // NONE：不包含任何输出
+                dos.writeLong(0);
+
+                // 非当前输入的sequence设为0
+                if (!anyoneCanPay) {
+                    for (int i = 0; i < this.getInputs().size(); i++) {
+                        if (i != inputIndex) {
+                            dos.writeLong(0);
+                        }
+                    }
+                }
+            } else if (baseType == SigHashType.SINGLE.getValue()) {
+                // SINGLE：仅包含与输入索引相同的输出
+                if (inputIndex >= this.getOutputs().size()) {
+                    return new byte[32]; // 索引无效，返回全0哈希
+                }
+                dos.writeLong(inputIndex + 1); // 输出数量为输入索引+1
+                for (int i = 0; i < inputIndex; i++) {
+                    dos.writeLong(-1); // 前序输出金额设为-1
+                    dos.writeLong(0);  // 前序输出脚本长度为0
+                }
+                // 写入当前索引的输出
+                TXOutput output = this.getOutputs().get(inputIndex);
+                dos.writeLong(output.getValue());
+                byte[] scriptBytes = output.getScriptPubKey().getScriptBytes();
+                dos.writeLong(scriptBytes.length);
+                dos.write(scriptBytes);
+
+                // 非当前输入的sequence设为0
+                if (!anyoneCanPay) {
+                    for (int i = 0; i < this.getInputs().size(); i++) {
+                        if (i != inputIndex) {
+                            dos.writeLong(0);
+                        }
+                    }
+                }
+            } else {
+                // ALL：包含所有输出
+                dos.writeLong(this.getOutputs().size());
+                for (TXOutput output : this.getOutputs()) {
+                    dos.writeLong(output.getValue());
+                    byte[] scriptBytes = output.getScriptPubKey().getScriptBytes();
+                    dos.writeLong(scriptBytes.length);
+                    dos.write(scriptBytes);
+                }
+            }
+
+            // 4. 写入锁定时间
+            dos.writeLong(this.getLockTime());
+
+            // 5. 写入哈希类型（4字节）
+            dos.writeInt(sigHashType.getValue());
+
+            // 6. 双重SHA256哈希（比特币标准）
+            byte[] serialized = baos.toByteArray();
+            byte[] hash1 = CryptoUtil.applySHA256(serialized);
+            return CryptoUtil.applySHA256(hash1);
+
+        } catch (IOException e) {
+            throw new RuntimeException("计算普通交易签名哈希失败", e);
+        }
+    }
 }

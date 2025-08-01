@@ -512,7 +512,6 @@ public class WalletService {
         // 交易基础信息
         Transaction transaction = new Transaction();
         List<TXInput> txInputs = new ArrayList<>();
-        List<Witness> witnesses = new ArrayList<>(); // 隔离见证数据列表
         //缓存UTXO
         HashMap<String, UTXO> UTXOHashMap = new HashMap<>();
         HashSet<String> usedUTXOs = new HashSet<>();
@@ -561,6 +560,9 @@ public class WalletService {
         transaction.setInputs(txInputs);
         log.info("交易输入构建完毕: {}", txInputs);
 
+        // 初始化时用空见证填充，大小与输入列表一致
+        List<Witness> witnesses = new ArrayList<>(Collections.nCopies(txInputs.size(), new Witness()));
+
         // 构建交易输出
         List<TXOutput> txOutputs = new ArrayList<>();
         // 主输出（支付给接收地址）
@@ -583,14 +585,13 @@ public class WalletService {
             ScriptPubKey scriptPubKey = utxo.getScriptPubKey();
             int scriptType = scriptPubKey.getType();
             byte[] sigHash = generateSigHash(transaction, i, utxo, scriptType);
-            log.info("生成需要签名数据: {}", CryptoUtil.bytesToHex(sigHash));
+            //对数据签名
             byte[] originalSignature = CryptoUtil.ECDSASigner.applySignature(privateKey, sigHash);
             byte[] signature = SegWitUtils.createSigHashType(originalSignature, SigHashType.ALL);
             if (isSegWitType(scriptType)) {
-                log.info("UTXO是隔离见证交易发行的 构建隔离见证数据: {}", CryptoUtil.bytesToHex(signature));
                 // 隔离见证类型：构建见证数据
                 Witness witness = createWitness(scriptType, signature, publicKeyBytes, scriptPubKey,null,null);
-                witnesses.add(i,witness);
+                witnesses.set(i, witness); // 直接替换第i个位置的元素，而非插入
                 txInput.setScriptSig(null); // 隔离见证输入的scriptSig为空
             }else {
                 //普通交易发行的UTXO
@@ -685,12 +686,16 @@ public class WalletService {
      * 生成签名哈希
      */
     private byte[] generateSigHash(Transaction tx, int inputIndex, UTXO utxo, int scriptType) {
-        return blockChainService.createWitnessSignatureHash(tx, inputIndex, utxo.getValue(), SigHashType.ALL);
-/*        if (isSegWitType(scriptType)) {
-            return blockChainService.createWitnessSignatureHash(tx, inputIndex, utxo.getValue(), SigHashType.ALL);
+        if (isSegWitType(scriptType)) {
+            byte[] witnessSignatureHash = blockChainService.createWitnessSignatureHash(tx, inputIndex, utxo.getValue(), SigHashType.ALL);
+            log.info("创建时隔离见证需要的签名: {}", CryptoUtil.bytesToHex(witnessSignatureHash));
+            return witnessSignatureHash;
         } else {
-            return CryptoUtil.applySHA256(SerializeUtils.serialize(utxo));
-        }*/
+            // 普通交易逻辑（新增）
+            byte[] legacySignatureHash = blockChainService.createLegacySignatureHash(tx, inputIndex, utxo, SigHashType.ALL);
+            log.info("创建时普通交易需要的签名: {}",CryptoUtil.bytesToHex(CryptoUtil.applySHA256(legacySignatureHash)) );
+            return legacySignatureHash;
+        }
     }
 
 
