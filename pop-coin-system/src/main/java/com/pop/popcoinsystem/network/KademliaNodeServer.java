@@ -142,10 +142,11 @@ public class KademliaNodeServer {
         this.registerMessageHandler(MessageType.GET_BLOCK_HEADERS_RES.getCode(), new GetHeadersResponseMessageHandle());
         this.registerMessageHandler(MessageType.GET_BLOCK_HEADERS_REQ.getCode(), new GetHeadersRequestMessageHandle());
 
-
         this.registerMessageHandler(MessageType.GET_FORK_POINT_REQ.getCode(), new FindForkPointRequestMessageHandle());
         this.registerMessageHandler(MessageType.GET_FORK_POINT_RES.getCode(), new FindForkPointResponseMessageHandle());
 
+        this.registerMessageHandler(MessageType.GET_BLOCK_BY_HEIGHT_REQ.getCode(), new GetBlockHashByHeightRequestMessageHandle());
+        this.registerMessageHandler(MessageType.GET_BLOCK_BY_HEIGHT_RES.getCode(), new GetBlockHashByHeightResponseMessageHandle());
 
 
 

@@ -7,14 +7,14 @@ import lombok.ToString;
 
 @Builder
 @ToString(callSuper = true)
-public class GetBlockHashByHeightResponse extends KademliaMessage<Block>{
+public class GetBlockHashByHeightResponseMessage extends KademliaMessage<Block>{
 
     // 添加无参构造函数
-    public GetBlockHashByHeightResponse() {
+    public GetBlockHashByHeightResponseMessage() {
         super(MessageType.GET_BLOCK_BY_HEIGHT_RES.getCode());
     }
 
-    public GetBlockHashByHeightResponse(Block data) {
+    public GetBlockHashByHeightResponseMessage(Block data) {
         super(MessageType.GET_BLOCK_BY_HEIGHT_RES.getCode());
         setData(data);
     }

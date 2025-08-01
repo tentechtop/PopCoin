@@ -4,18 +4,15 @@ import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.exception.FullBucketException;
 import com.pop.popcoinsystem.exception.UnsupportedChainException;
 import com.pop.popcoinsystem.network.KademliaNodeServer;
-import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.*;
 import com.pop.popcoinsystem.service.BlockChainService;
-import com.pop.popcoinsystem.util.BeanCopyUtils;
 import io.netty.util.concurrent.Promise;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.Serializable;
 import java.net.ConnectException;
-import java.util.Arrays;
 import java.util.concurrent.ExecutionException;
 
 @Slf4j
@@ -59,11 +56,11 @@ public class FindForkPointRequestMessageHandle implements MessageHandler{
                 continue;
             }
             // 向远程节点查询该高度的区块哈希，判断是否相同
-            GetBlockHashByHeightRequest request = new GetBlockHashByHeightRequest(mid);
+            GetBlockHashByHeightRequestMessage request = new GetBlockHashByHeightRequestMessage(mid);
             request.setSender(me);
             request.setReceiver(sender);
             request.setResponse(true);
-            GetBlockHashByHeightResponse response = null;
+            GetBlockHashByHeightResponseMessageHandle response = null;
             Promise<KademliaMessage> kademliaMessagePromise = server.getTcpClient().sendMessageWithResponse(request);
             KademliaMessage kademliaMessage = kademliaMessagePromise.get();
 
