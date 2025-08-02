@@ -1,15 +1,18 @@
 package com.pop.popcoinsystem.constant;
 
 import com.pop.popcoinsystem.util.CryptoUtil;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.atomic.AtomicLong;
 
+@Slf4j
 public class BlockChainConstants {
     // 改为静态变量，所有实例共享一个计数器
     public static final AtomicLong messageIdGenerator = new AtomicLong(0);
     public static int NET_VERSION = 1;
     public static void setNetVersion(int netVersion) {
         NET_VERSION = netVersion;
+        log.info("设置网络版本为：{}", netVersion);
     }
 
     //存储路径

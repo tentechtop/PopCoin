@@ -21,6 +21,7 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 
 import java.math.BigInteger;
 import java.security.KeyPair;
@@ -44,6 +45,11 @@ public class KademliaServiceStart {
 
     // 引导节点列表（从配置文件读取）
     private List<BootstrapNode> bootstrap;
+
+    // 1. 注入Spring管理的KademliaNodeServer实例
+    @Lazy
+    @Autowired
+    private KademliaNodeServer kademliaNodeServer;
 
     // 定义单例Bean，Spring会确保仅创建一次
     @Bean
@@ -117,9 +123,7 @@ public class KademliaServiceStart {
     public void startNetwork() {
         new Thread(() -> {
             try {
-                // 获取Kademlia节点服务器实例
-                KademliaNodeServer server = kademliaNodeServer();
-                server.start();  // 启动服务器
+                kademliaNodeServer.start();  // 启动服务器
                 // 连接所有引导节点（从配置文件读取）
                 log.info("正在连接引导节点......:{}",bootstrap);
                 if (bootstrap != null && !bootstrap.isEmpty()) {
@@ -130,7 +134,7 @@ public class KademliaServiceStart {
                                 .tcpPort(bootstrapNode.getTcpPort())
                                 .udpPort(bootstrapNode.getUdpPort())
                                 .build();
-                        server.connectToBootstrapNodes(nodeInfo); // 假设存在单个节点连接方法
+                        kademliaNodeServer.connectToBootstrapNodes(nodeInfo); // 假设存在单个节点连接方法
                         log.info("已连接引导节点: {}", bootstrapNode.getIp());
                     }
                 } else {

@@ -153,6 +153,9 @@ public class KademliaNodeServer {
         this.registerMessageHandler(MessageType.GET_BLOCK_BY_HEIGHT_REQ.getCode(), new GetBlockHashByHeightRequestMessageHandle());
         this.registerMessageHandler(MessageType.GET_BLOCK_BY_HEIGHT_RES.getCode(), new GetBlockHashByHeightResponseMessageHandle());
 
+        this.registerMessageHandler(MessageType.RPC_REQUEST.getCode(), new RpcRequestMessageHandler());
+        this.registerMessageHandler(MessageType.RPC_RESPONSE.getCode(), new RpcResponseMessageHandler());
+
 
 
 
