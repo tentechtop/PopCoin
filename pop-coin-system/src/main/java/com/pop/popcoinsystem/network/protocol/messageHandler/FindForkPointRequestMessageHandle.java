@@ -4,7 +4,7 @@ import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.network.KademliaNodeServer;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.*;
-import com.pop.popcoinsystem.service.impl.BlockChainServiceImpl;
+import com.pop.popcoinsystem.service.blockChain.BlockChainServiceImpl;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 

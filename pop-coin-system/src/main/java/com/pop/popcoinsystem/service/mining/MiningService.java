@@ -1,4 +1,4 @@
-package com.pop.popcoinsystem.service;
+package com.pop.popcoinsystem.service.mining;
 
 import com.pop.popcoinsystem.application.service.wallet.Wallet;
 import com.pop.popcoinsystem.application.service.wallet.WalletStorage;
@@ -114,8 +114,8 @@ public class MiningService implements ApplicationRunner {
         setMinerInfo(miner);
 
         //if (miner == null) return;
-        // 等 Spring 容器完全初始化后再启动挖矿
-    /*    miningService.startMining();*/
+        //等 Spring 容器完全初始化后再启动挖矿
+        miningService.startMining();
     }
 
     public Result<String> startMining(Miner miner) throws Exception {

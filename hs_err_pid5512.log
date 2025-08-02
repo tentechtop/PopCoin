@@ -36,8 +36,8 @@ j  org.rocksdb.RocksDB.get(J[BIIJ)[B+0
 j  org.rocksdb.RocksDB.get(Lorg/rocksdb/ColumnFamilyHandle;[B)[B+13
 j  com.pop.popcoinsystem.storage.StorageService.getMainLatestBlockHash()[B+13
 j  com.pop.popcoinsystem.service.impl.BlockChainServiceImpl.getMainLatestBlockHash()[B+4
-j  com.pop.popcoinsystem.service.Mining.lambda$startMining$0()V+42
-j  com.pop.popcoinsystem.service.Mining$$Lambda+0x00000130815d0000.run()V+4
+j  com.pop.popcoinsystem.service.mining.Mining.lambda$startMining$0()V+42
+j  com.pop.popcoinsystem.service.mining.Mining$$Lambda+0x00000130815d0000.run()V+4
 j  java.lang.Thread.runWith(Ljava/lang/Object;Ljava/lang/Runnable;)V+5 java.base@21.0.1
 j  java.lang.Thread.run()V+19 java.base@21.0.1
 v  ~StubRoutines::call_stub 0x00000130cd0f100d

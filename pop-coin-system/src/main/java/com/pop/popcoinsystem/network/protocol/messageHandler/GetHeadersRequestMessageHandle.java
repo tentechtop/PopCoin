@@ -8,7 +8,7 @@ import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.*;
 import com.pop.popcoinsystem.network.protocol.messageData.BlockHeadersRes;
 import com.pop.popcoinsystem.network.protocol.messageData.HeadersRequestParam;
-import com.pop.popcoinsystem.service.impl.BlockChainServiceImpl;
+import com.pop.popcoinsystem.service.blockChain.BlockChainServiceImpl;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
@@ -42,8 +42,6 @@ public class GetHeadersRequestMessageHandle implements MessageHandler{
         } else {
             log.info("查询到 {} 个区块，准备返回", blocksInRange.size());
         }
-
-
         // 2. 封装响应（包含区块头列表、起始/结束哈希）
         BlockHeadersRes blockHeadersRes = new BlockHeadersRes(start, end, blocksInRange);
         //返回响应

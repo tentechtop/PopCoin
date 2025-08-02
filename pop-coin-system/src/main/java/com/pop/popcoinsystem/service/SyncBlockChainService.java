@@ -2,6 +2,7 @@ package com.pop.popcoinsystem.service;
 
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.network.KademliaNodeServer;
+import com.pop.popcoinsystem.network.RpcProxyFactory;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.FindNodeResult;
 import com.pop.popcoinsystem.network.common.NodeInfo;
@@ -10,6 +11,7 @@ import com.pop.popcoinsystem.network.protocol.message.FindNodeResponseMessage;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.RpcRequestMessage;
 import com.pop.popcoinsystem.network.protocol.messageData.RpcRequestData;
+import com.pop.popcoinsystem.service.transaction.TransactionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
@@ -30,26 +32,22 @@ public class SyncBlockChainService {
 
     public Result sendTextMessage(String message) throws Exception {
         RpcRequestData rpcRequestData = new RpcRequestData();
-        rpcRequestData.setServiceName("TransactionService");
-        rpcRequestData.setMethodName("sayHello");
-        rpcRequestData.setParameters(new Object[]{message});
-        rpcRequestData.setParamTypes(new Class[]{String.class});
 
-        RpcRequestMessage rpcRequestMessage = new RpcRequestMessage();
-        rpcRequestMessage.setData(rpcRequestData);
-        rpcRequestMessage.setSender(kademliaNodeServer.getNodeInfo());
-        rpcRequestMessage.setReqResId();
-        rpcRequestMessage.setResponse(false);//请求消息
-
+        // 1. 准备目标服务节点信息
         NodeInfo nodeInfo = new NodeInfo();
         nodeInfo.setId(BigInteger.ONE);
         nodeInfo.setIpv4("192.168.137.102");
         nodeInfo.setTcpPort(8334);
         nodeInfo.setUdpPort(8333);
-        rpcRequestMessage.setReceiver(nodeInfo);
 
-        KademliaMessage kademliaMessage = kademliaNodeServer.getTcpClient().sendMessageWithResponse(rpcRequestMessage);
-        return Result.ok(kademliaMessage);
+        // 2. 创建代理工厂
+        RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, nodeInfo);
+        // 3. 获取服务代理对象
+        TransactionService transactionService = proxyFactory.createProxy(TransactionService.class);
+        // 4. 像调用本地方法一样调用远程服务
+        String result = transactionService.sayHello("Hello World"); // 底层自动完成远程调用
+
+        return Result.ok(result);
     }
 
 

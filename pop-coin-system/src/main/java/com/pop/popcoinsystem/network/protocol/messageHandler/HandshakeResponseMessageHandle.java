@@ -8,7 +8,7 @@ import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.exception.FullBucketException;
 import com.pop.popcoinsystem.network.protocol.message.*;
 import com.pop.popcoinsystem.network.protocol.messageData.Handshake;
-import com.pop.popcoinsystem.service.impl.BlockChainServiceImpl;
+import com.pop.popcoinsystem.service.blockChain.BlockChainServiceImpl;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;

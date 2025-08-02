@@ -1,4 +1,4 @@
-package com.pop.popcoinsystem.service.impl;
+package com.pop.popcoinsystem.service.blockChain;
 
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockDTO;
@@ -10,9 +10,9 @@ import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.FindForkPointRequestMessage;
 import com.pop.popcoinsystem.network.protocol.message.GetHeadersRequestMessage;
 import com.pop.popcoinsystem.network.protocol.messageData.HeadersRequestParam;
-import com.pop.popcoinsystem.service.Mining;
-import com.pop.popcoinsystem.service.strategy.ScriptVerificationStrategy;
-import com.pop.popcoinsystem.service.strategy.ScriptVerifierFactory;
+import com.pop.popcoinsystem.service.mining.Mining;
+import com.pop.popcoinsystem.service.blockChain.strategy.ScriptVerificationStrategy;
+import com.pop.popcoinsystem.service.blockChain.strategy.ScriptVerifierFactory;
 import com.pop.popcoinsystem.storage.StorageService;
 import com.pop.popcoinsystem.data.transaction.UTXOSearch;
 import com.pop.popcoinsystem.data.transaction.*;
@@ -44,7 +44,7 @@ import static com.pop.popcoinsystem.data.transaction.Transaction.calculateBlockR
 
 @Slf4j
 @Service
-public class BlockChainServiceImpl {
+public class BlockChainServiceImpl implements BlockChainService {
     @Autowired
     private StorageService popStorage;
     @Autowired

@@ -1,9 +1,8 @@
-package com.pop.popcoinsystem.service.strategy;
+package com.pop.popcoinsystem.service.blockChain.strategy;
 
 import com.pop.popcoinsystem.data.script.ScriptType;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;

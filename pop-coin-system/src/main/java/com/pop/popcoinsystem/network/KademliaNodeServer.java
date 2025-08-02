@@ -17,7 +17,7 @@ import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
 import com.pop.popcoinsystem.network.protocol.messageHandler.*;
 import com.pop.popcoinsystem.event.DisruptorManager;
 import com.pop.popcoinsystem.network.service.RpcServiceRegistry;
-import com.pop.popcoinsystem.service.impl.BlockChainServiceImpl;
+import com.pop.popcoinsystem.service.blockChain.BlockChainServiceImpl;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import io.netty.bootstrap.Bootstrap;
