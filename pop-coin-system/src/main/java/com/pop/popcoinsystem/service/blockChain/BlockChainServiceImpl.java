@@ -355,7 +355,7 @@ public class BlockChainServiceImpl implements BlockChainService {
         if (parentBlock == null) {
             log.warn("父区块不存在，触发同步，哈希：{}", CryptoUtil.bytesToHex(block.getPreviousHash()));
             // 同步父区块（递归处理所有缺失的祖先）
-            boolean parentSynced = syncMissingParentBlocks(block.getPreviousHash(), 0);
+            boolean parentSynced = syncMissingParentBlocks(block.getPreviousHash(), 99);
             if (!parentSynced) {
                 log.error("父区块同步失败，无法验证当前区块，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
                 return false;
