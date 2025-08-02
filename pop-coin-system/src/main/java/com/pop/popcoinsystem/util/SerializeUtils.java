@@ -12,16 +12,22 @@ import com.pop.popcoinsystem.data.block.BlockHeader;
 import com.pop.popcoinsystem.data.script.Script;
 import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.data.script.ScriptSig;
-import com.pop.popcoinsystem.data.transaction.UTXO;
+import com.pop.popcoinsystem.data.transaction.*;
+import com.pop.popcoinsystem.data.transaction.dto.WitnessDTO;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.*;
 import com.pop.popcoinsystem.network.protocol.messageData.Handshake;
 import com.pop.popcoinsystem.network.protocol.messageData.HeadersRequestParam;
-
+import org.objenesis.ObjenesisStd;
 import java.math.BigInteger;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.UUID;
+
+import org.objenesis.strategy.StdInstantiatorStrategy;
 
 /**
  * 序列化工具类
@@ -30,81 +36,108 @@ public class SerializeUtils {
     // 创建 Kryo 工厂
     private static final KryoFactory factory = () -> {
         Kryo kryo = new Kryo();
-        // 注册常用类
-        kryo.register(KademliaMessage.class);
-        kryo.register(PingKademliaMessage.class);
-        kryo.register(PongKademliaMessage.class);
+        // 关键配置：允许循环引用（解决复杂对象引用问题）
+        // 非必须注册所有类（但建议显式注册以提高性能）
+        kryo.setRegistrationRequired(false);
 
-        kryo.register(HandshakeRequestMessage.class);
-        kryo.register(HandshakeResponseMessage.class);
+        // 关键配置：使用Objenesis解决无参构造函数问题
+        kryo.setInstantiatorStrategy(new StdInstantiatorStrategy());
+        kryo.setReferences(true);
 
-        kryo.register(TransactionMessage.class);
-
-
-        kryo.register(java.util.Date.class);
-        kryo.register(java.util.UUID.class);
-
+        // 注册基础类型和常用类
+        kryo.register(Date.class);
+        kryo.register(UUID.class);
+        kryo.register(BigInteger.class);
+        kryo.register(byte[].class);
+        kryo.register(List.class);
+        kryo.register(ArrayList.class); // 具体集合类型需要注册
+        // 注册加密相关类
         kryo.register(PrivateKey.class);
         kryo.register(PublicKey.class);
 
+        // 注册网络协议相关类
+        kryo.register(KademliaMessage.class);
+        kryo.register(PingKademliaMessage.class);
+        kryo.register(PongKademliaMessage.class);
+        kryo.register(HandshakeRequestMessage.class);
+        kryo.register(HandshakeResponseMessage.class);
+        kryo.register(TransactionMessage.class);
+        kryo.register(RpcRequestMessage.class);
+        kryo.register(RpcResponseMessage.class);
+        kryo.register(HeadersRequestParam.class);
+        kryo.register(Handshake.class);
+        kryo.register(ExternalNodeInfo.class);
+
+        // 注册区块和交易相关类
         kryo.register(Block.class);
         kryo.register(BlockBody.class);
         kryo.register(BlockHeader.class);
+        kryo.register(Transaction.class);
+        kryo.register(TXInput.class);
+        kryo.register(TXOutput.class);
+        kryo.register(UTXO.class);
+        kryo.register(Witness.class);
+        kryo.register(WitnessDTO.class);
+        kryo.register(Wallet.class);
 
-        kryo.register(ExternalNodeInfo.class);
 
-        kryo.register(RpcRequestMessage.class);
-        kryo.register(RpcResponseMessage.class);
-
-        kryo.register(HeadersRequestParam.class);
-
-        kryo.register(Handshake.class);
-
-        kryo.register(List.class);
-
+        // 注册脚本相关类（关键：补充内部类注册）
         kryo.register(Script.class);
+        kryo.register(Script.ScriptElement.class);
         kryo.register(ScriptPubKey.class);
         kryo.register(ScriptSig.class);
 
-        kryo.register(UTXO.class);
-
-        kryo.register(BigInteger.class);  // 假设包含 BigInteger 等基础类型外的类
-        kryo.register(byte[].class);  // 若有字节数组也需注册
-
-        kryo.register(Wallet.class);
-
-        // 配置Kryo（根据需要调整）
-        kryo.setRegistrationRequired(false);
-        kryo.setReferences(true);
         return kryo;
     };
     // 创建线程安全的 Kryo 池
-    private static final KryoPool pool = new KryoPool.Builder(factory).build();
+    // 创建线程安全的Kryo池（多线程环境必须使用池化）
+    private static final KryoPool pool = new KryoPool.Builder(factory)
+            .softReferences() // 允许GC回收闲置实例，避免内存泄漏
+            .build();
+
 
     /**
-     * 反序列化
-     *
-     * @param bytes 对象对应的字节数组
-     * @return
+     * 反序列化（从字节数组恢复对象）
      */
     public static Object deSerialize(byte[] bytes) {
-        Input input = new Input(bytes);
-        Object obj = new Kryo().readClassAndObject(input);
-        input.close();
-        return obj;
+        if (bytes == null || bytes.length == 0) {
+            return null;
+        }
+        // 从池获取Kryo实例（关键：复用配置好的实例）
+        Kryo kryo = pool.borrow();
+        Input input = null;
+        try {
+            input = new Input(bytes);
+            return kryo.readClassAndObject(input);
+        } finally {
+            if (input != null) {
+                input.close();
+            }
+            // 归还实例到池
+            pool.release(kryo);
+        }
     }
 
     /**
-     * 序列化
-     *
-     * @param object 需要序列化的对象
-     * @return
+     * 序列化（将对象转为字节数组）
      */
     public static byte[] serialize(Object object) {
-        Output output = new Output(4096, -1);
-        new Kryo().writeClassAndObject(output, object);
-        byte[] bytes = output.toBytes();
-        output.close();
-        return bytes;
+        if (object == null) {
+            return new byte[0];
+        }
+        // 从池获取Kryo实例
+        Kryo kryo = pool.borrow();
+        Output output = null;
+        try {
+            output = new Output(4096, -1); // 初始容量4096，可自动扩容
+            kryo.writeClassAndObject(output, object);
+            return output.toBytes();
+        } finally {
+            if (output != null) {
+                output.close();
+            }
+            // 归还实例到池
+            pool.release(kryo);
+        }
     }
 }

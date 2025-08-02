@@ -62,7 +62,6 @@ public class RpcProxyFactory {
     }
 
 
-
     private class RpcInvocationHandler implements InvocationHandler {
         private final Class<?> serviceInterface;
         private final NodeInfo targetNode;
