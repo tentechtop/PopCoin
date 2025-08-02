@@ -276,6 +276,9 @@ public class TCPClient {
         log.info("Trying to connect to {}:{} (node {})", ipv4, tcpPort, nodeId);
         ChannelFuture connectFuture = bootstrap.connect(address);
 
+
+
+
         Integer connectTimeout = (Integer) bootstrap.config().options().get(ChannelOption.CONNECT_TIMEOUT_MILLIS);
         int timeoutMillis = (connectTimeout != null) ? connectTimeout : DEFAULT_CONNECT_TIMEOUT;
         // 等待连接完成，受CONNECT_TIMEOUT_MILLIS限制
@@ -291,6 +294,14 @@ public class TCPClient {
         Channel channel = connectFuture.channel();
         // 存储节点ID与通道的关联，用于后续清理
         channel.attr(NODE_ID_KEY).set(nodeId);
+
+        // 关键：主动连接成功后，立即初始化RequestResponseManager
+        channelToResponseManager.computeIfAbsent(
+                channel,
+                k -> new RequestResponseManager(channel)
+        );
+        log.info("成功连接到节点[{}]，已初始化RequestResponseManager", nodeId);
+
         log.info("Successfully connected to {}:{} (node {})", ipv4, tcpPort, nodeId);
         // 非阻塞监听通道关闭事件
         channel.closeFuture().addListener(future -> {
