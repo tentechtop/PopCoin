@@ -93,6 +93,9 @@ public enum MessageType {
 
     public static String getDescriptionByCode(int code){
         MessageType type = codeMap.get(code);
+        if (type == null) {
+            return "未知消息类型";
+        }
         return type != null ? type.getDescription() : "未知消息类型"; // 处理不存在的code
     }
 
