@@ -1,23 +1,42 @@
 package com.pop.popcoinsystem.network.rpc;
 
+import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
+import com.pop.popcoinsystem.network.common.RoutingTable;
 import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.RpcRequestMessage;
 import com.pop.popcoinsystem.network.protocol.messageData.RpcRequestData;
 import com.pop.popcoinsystem.network.protocol.messageData.RpcResponseData;
+import com.pop.popcoinsystem.util.BeanCopyUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.List;
+
 
 public class RpcProxyFactory {
-    private final KademliaNodeServer kademliaNodeServer;
-    private final NodeInfo targetNode; // 目标服务节点信息
+
+    private  KademliaNodeServer kademliaNodeServer;
+    private  NodeInfo targetNode; // 目标服务节点信息
 
     public RpcProxyFactory(KademliaNodeServer server, NodeInfo targetNode) {
         this.kademliaNodeServer = server;
         this.targetNode = targetNode;
+    }
+
+    public RpcProxyFactory(KademliaNodeServer server) {
+        this.kademliaNodeServer = server;
+        if (targetNode == null){
+            RoutingTable routingTable = server.getRoutingTable();
+            //TODO 未来实现查找全节点
+            List<ExternalNodeInfo> closest = routingTable.findClosest(server.getNodeInfo().getId());
+            ExternalNodeInfo externalNodeInfo = closest.get(0);
+            this.targetNode = BeanCopyUtils.copyObject(externalNodeInfo, NodeInfo.class);
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -46,6 +65,7 @@ public class RpcProxyFactory {
             requestData.setMethodName(method.getName());
             requestData.setParameters(args);
             requestData.setParamTypes(method.getParameterTypes());
+
 
             // 2. 构建请求消息
             RpcRequestMessage requestMessage = new RpcRequestMessage();

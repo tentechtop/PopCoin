@@ -39,12 +39,11 @@ public class SyncBlockChainService {
         nodeInfo.setUdpPort(8333);
 
         // 2. 创建代理工厂
-        RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, nodeInfo);
+        RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer);
         // 3. 获取服务代理对象
         TransactionService transactionService = proxyFactory.createProxy(TransactionService.class);
         // 4. 像调用本地方法一样调用远程服务
         String result = transactionService.sayHello("Hello World"); // 底层自动完成远程调用
-
         return Result.ok(result);
     }
 
