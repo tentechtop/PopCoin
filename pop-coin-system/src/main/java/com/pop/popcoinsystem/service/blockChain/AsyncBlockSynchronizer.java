@@ -9,6 +9,7 @@ import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.DifficultyUtils;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
 
 import java.math.BigInteger;
 import java.net.ConnectException;
@@ -20,20 +21,21 @@ import java.util.concurrent.*;
 import static com.pop.popcoinsystem.constant.BlockChainConstants.GENESIS_BLOCK_HASH_HEX;
 
 @Slf4j
+@Component
 public class AsyncBlockSynchronizer {
     // 新增：分批获取区块的大小（可配置）
-    private static final int BATCH_SIZE = 100;
+    public static final int BATCH_SIZE = 100;
     // 新增：网络请求超时时间（毫秒）
-    private static final int RPC_TIMEOUT = 5000;
+    public static final int RPC_TIMEOUT = 5000;
     // 新增：最大重试次数
-    private static final int MAX_RETRY = 3;
+    public static final int MAX_RETRY = 3;
     // 新增：记录同步进度（key：远程节点ID，value：最近同步到的区块哈希）
-    private final ConcurrentHashMap<BigInteger, String> syncProgress = new ConcurrentHashMap<>();
+    public final ConcurrentHashMap<BigInteger, String> syncProgress = new ConcurrentHashMap<>();
 
 
     // 线程池用于执行异步任务
     // 线程池优化：限制最大线程数，避免资源耗尽
-    private final ExecutorService syncExecutor = new ThreadPoolExecutor(
+    public final ExecutorService syncExecutor = new ThreadPoolExecutor(
             5, // 核心线程数
             20, // 最大线程数
             60L, TimeUnit.SECONDS,

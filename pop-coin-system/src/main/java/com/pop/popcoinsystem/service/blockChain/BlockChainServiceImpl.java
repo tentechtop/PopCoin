@@ -6,6 +6,7 @@ import com.pop.popcoinsystem.data.blockChain.BlockChain;
 import com.pop.popcoinsystem.data.enums.SigHashType;
 import com.pop.popcoinsystem.data.script.*;
 import com.pop.popcoinsystem.exception.UnsupportedAddressException;
+import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.FindForkPointRequestMessage;
 import com.pop.popcoinsystem.network.protocol.message.GetHeadersRequestMessage;
@@ -36,9 +37,13 @@ import org.springframework.stereotype.Service;
 import java.math.BigInteger;
 import java.net.ConnectException;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static com.pop.popcoinsystem.constant.BlockChainConstants.TRANSACTION_VERSION_1;
 import static com.pop.popcoinsystem.constant.BlockChainConstants.*;
+import static com.pop.popcoinsystem.service.blockChain.AsyncBlockSynchronizer.RPC_TIMEOUT;
 import static com.pop.popcoinsystem.storage.StorageService.getUTXOKey;
 import static com.pop.popcoinsystem.data.transaction.Transaction.calculateBlockReward;
 
@@ -46,12 +51,20 @@ import static com.pop.popcoinsystem.data.transaction.Transaction.calculateBlockR
 @Slf4j
 @Service
 public class BlockChainServiceImpl implements BlockChainService {
+    // 新增：父区块同步超时时间（毫秒）
+    private static final int PARENT_BLOCK_SYNC_TIMEOUT = 30000; // 30秒
+    // 新增：最大同步深度（防止无限递归）
+    private static final int MAX_SYNC_DEPTH = 100;
+
     @Autowired
     private StorageService popStorage;
     @Autowired
     private KademliaNodeServer kademliaNodeServer;
     @Autowired
     private Mining mining;
+
+    @Autowired
+    private AsyncBlockSynchronizer blockSynchronizer; // 复用异步同步器
 
     @PostConstruct
     private void initBlockChain() throws Exception {
@@ -337,13 +350,23 @@ public class BlockChainServiceImpl implements BlockChainService {
             log.info("区块已存在，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
             return true;
         }
-        // 检查区块的父区块是否存在
-        if (getBlockByHash(block.getPreviousHash()) == null) {
-            log.warn("父区块不存在，哈希：{}", CryptoUtil.bytesToHex(block.getPreviousHash()));
-            return false;
-        }
-        // 获取父区块高度 新区块与父区块高度是否连续
+
         Block parentBlock = getBlockByHash(block.getPreviousHash());
+        if (parentBlock == null) {
+            log.warn("父区块不存在，触发同步，哈希：{}", CryptoUtil.bytesToHex(block.getPreviousHash()));
+            // 同步父区块（递归处理所有缺失的祖先）
+            boolean parentSynced = syncMissingParentBlocks(block.getPreviousHash(), 0);
+            if (!parentSynced) {
+                log.error("父区块同步失败，无法验证当前区块，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
+                return false;
+            }
+            // 同步成功后重新获取父区块
+            parentBlock = getBlockByHash(block.getPreviousHash());
+            if (parentBlock == null) {
+                log.error("同步后父区块仍不存在，验证失败");
+                return false;
+            }
+        }
         if (parentBlock.getHeight() + 1 != block.getHeight()) {
             log.warn("区块高度不连续，父区块高度：{}，当前区块高度：{}", parentBlock.getHeight(), block.getHeight());
             return false;
@@ -372,6 +395,98 @@ public class BlockChainServiceImpl implements BlockChainService {
         }).start();
         return true;
     }
+
+
+    /**
+     * 递归同步缺失的父区块（包括所有祖先区块）
+     * @param parentHash 待同步的父区块哈希
+     * @param depth 当前同步深度（防止无限递归）
+     * @return 同步是否成功
+     */
+    private boolean syncMissingParentBlocks(byte[] parentHash, int depth) {
+        // 检查同步深度，防止恶意区块导致无限递归
+        if (depth >= MAX_SYNC_DEPTH) {
+            log.error("同步深度超过限制（{}），可能存在循环依赖", MAX_SYNC_DEPTH);
+            return false;
+        }
+
+        // 检查父区块是否已存在（可能其他线程已同步）
+        if (getBlockByHash(parentHash) != null) {
+            log.info("父区块已存在，无需同步，哈希：{}", CryptoUtil.bytesToHex(parentHash));
+            return true;
+        }
+
+        // 若父区块是创世区块，直接返回失败（创世区块必须预存）
+        if (Arrays.equals(parentHash, getGenesisBlockHash())) {
+            log.error("创世区块不存在，无法同步");
+            return false;
+        }
+
+        log.info("开始同步父区块（深度：{}），哈希：{}", depth, CryptoUtil.bytesToHex(parentHash));
+
+        try {
+            // 1. 查找拥有该父区块的节点（从Kademlia网络获取邻居节点） candidateNodes
+            List<ExternalNodeInfo> closest = kademliaNodeServer.getRoutingTable().findClosest(new BigInteger(1, parentHash));
+            if (closest.isEmpty()) {
+                log.error("未找到可提供父区块的节点");
+                return false;
+            }
+            List<NodeInfo> candidateNodes = BeanCopyUtils.copyList(closest, NodeInfo.class);
+
+
+            // 2. 向候选节点发送区块请求（逐个尝试，直到成功）
+            CompletableFuture<Block> blockFuture = new CompletableFuture<>();
+            for (NodeInfo node : candidateNodes) {
+                try {
+                    // 异步请求目标区块
+                    blockSynchronizer.syncExecutor.submit(() -> {
+                        try {
+                            RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, node);
+                            proxyFactory.setTimeout(RPC_TIMEOUT); // 复用RPC_TIMEOUT常量
+                            BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
+                            // 调用远程节点的getBlock方法（需确保该方法支持通过哈希查询）
+                            Block result = remoteService.getBlockByHash(parentHash);
+                            if (result!= null) {
+                                blockFuture.complete(result);
+                            }
+                        } catch (Exception e) {
+                            log.debug("从节点{}获取父区块失败，继续尝试其他节点", node, e);
+                        }
+                    });
+                    // 等待结果，超时则尝试下一个节点
+                    Block parentBlock = blockFuture.get(PARENT_BLOCK_SYNC_TIMEOUT / candidateNodes.size(), TimeUnit.MILLISECONDS);
+
+                    // 3. 验证同步到的父区块
+                    if (parentBlock != null && Arrays.equals(parentBlock.getHash(), parentHash)) {
+                        log.info("成功同步父区块，哈希：{}", CryptoUtil.bytesToHex(parentHash));
+                        // 递归同步父区块的父区块（确保整个链条完整）
+                        boolean grandparentSynced = syncMissingParentBlocks(parentBlock.getPreviousHash(), depth + 1);
+                        if (!grandparentSynced) {
+                            log.error("父区块的父区块同步失败，中断链条");
+                            return false;
+                        }
+                        // 4. 将同步到的父区块加入本地链
+                        addBlockToMainChain(parentBlock);
+                        return true;
+                    }
+                } catch (TimeoutException | InterruptedException e) {
+                    log.debug("从节点{}获取父区块超时或中断，继续尝试", node, e);
+                    Thread.currentThread().interrupt();
+                } catch (Exception e) {
+                    log.debug("从节点{}获取父区块异常，继续尝试", node, e);
+                }
+            }
+
+            // 所有节点都尝试失败
+            log.error("所有候选节点均无法提供父区块，哈希：{}", CryptoUtil.bytesToHex(parentHash));
+            return false;
+
+        } catch (Exception e) {
+            log.error("父区块同步过程异常", e);
+            return false;
+        }
+    }
+
 
     /**
      * 创建隔离见证交易的签名哈希
