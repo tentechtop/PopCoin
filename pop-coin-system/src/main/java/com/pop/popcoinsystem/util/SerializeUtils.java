@@ -19,6 +19,7 @@ import com.pop.popcoinsystem.network.protocol.message.*;
 import java.math.BigInteger;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.util.List;
 
 /**
  * 序列化工具类
@@ -50,6 +51,10 @@ public class SerializeUtils {
 
         kryo.register(ExternalNodeInfo.class);
 
+        kryo.register(RpcRequestMessage.class);
+        kryo.register(RpcResponseMessage.class);
+
+        kryo.register(List.class);
 
         kryo.register(Script.class);
         kryo.register(ScriptPubKey.class);
