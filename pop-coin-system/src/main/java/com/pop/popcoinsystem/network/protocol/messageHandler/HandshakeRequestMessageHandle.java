@@ -62,7 +62,7 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
 
 
         // 3. 比较差异并发起同步
-        compareAndSync(
+        kademliaNodeServer.getBlockChainService().compareAndSync(
                 kademliaNodeServer,
                 sender,
                 localLatestHeight,
@@ -73,7 +73,6 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
                 remoteChainWork
 
         );
-
 
         //返回握手响应 携带自己的节点信息 和区块链信息 用于对方是否需要同步
         Handshake handshakeResponse = new Handshake();
@@ -88,81 +87,6 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
         handshakeResponseMessage.setData(handshakeResponse);
         kademliaNodeServer.getTcpClient().sendMessage(handshakeResponseMessage);
         return null;
-    }
-
-    /**
-     * 比较本地与远程节点的区块差异，并发起同步请求
-     */
-    private void compareAndSync(KademliaNodeServer nodeServer, NodeInfo remoteNode,
-                                long localHeight, byte[] localHash, byte[] localWork,
-                                long remoteHeight, byte[] remoteHash,byte[] remoteWork
-    ) throws ConnectException, InterruptedException {
-        // 情况1：远程链工作量更大（无论高度如何，都应同步到工作量更大的链）
-        if (DifficultyUtils.compare(localWork, remoteWork)==-1){
-            log.info("远程链工作量更大（本地:{}，远程:{}），准备同步", DifficultyUtils.bytesToLong(localWork), DifficultyUtils.bytesToLong(remoteWork));
-            if (localHeight < remoteHeight) {
-                // 远程链更长且工作量更大 - 从本地最新区块开始同步后续区块
-                log.info("远程链更长且工作量更大，请求区块同步");
-                sendHeadersRequest(nodeServer, remoteNode, localHash, remoteHash);
-            } else if (localHeight == remoteHeight) {
-                // 高度相同但工作量不同（分叉）- 从创世区块找分叉点
-                log.warn("区块链分叉，远程链工作量更大，查找分叉点");
-                sendForkPointRequest(nodeServer, remoteNode);
-            } else {
-                // 本地链更高但工作量更小（存在无效区块）- 从远程最新区块开始同步
-                log.warn("本地链高度更高但工作量更小，可能包含无效区块，请求完整链同步");
-                sendHeadersRequest(nodeServer, remoteNode, CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX), remoteHash);
-            }
-        }
-        // 情况2：本地链工作量更大
-        else if (DifficultyUtils.compare(localWork, remoteWork)==1) {
-            log.info("本地链工作量更大（本地:{}，远程:{}），无需主动同步", DifficultyUtils.bytesToLong(localWork), DifficultyUtils.bytesToLong(remoteWork));
-            // 远程节点会在自己的握手处理中发现差异并请求同步
-        }
-        // 情况3：工作量相同
-        else {
-            if (localHeight < remoteHeight) {
-                // 工作量相同但远程更长 - 同步新区块
-                log.info("本地链落后（本地高度:{}，远程高度:{}），开始同步", localHeight, remoteHeight);
-                sendHeadersRequest(nodeServer, remoteNode, localHash, remoteHash);
-            } else if (localHeight == remoteHeight && !Arrays.equals(localHash, remoteHash)) {
-                // 工作量相同、高度相同但哈希不同（临时分叉，等待更多区块确认）
-                log.warn("区块链临时分叉，工作量相同，等待更多区块确认");
-            } else {
-                // 链状态完全一致
-                log.info("链状态完全一致，无需同步");
-            }
-        }
-    }
-
-    /**
-     * 发送区块头请求
-     */
-    private void sendHeadersRequest(KademliaNodeServer nodeServer, NodeInfo remoteNode, byte[] startHash, byte[] endHash)
-            throws ConnectException, InterruptedException {
-        log.info("发送区块头请求");
-
-        GetHeadersRequestMessage headersRequest = new GetHeadersRequestMessage();
-        headersRequest.setSender(nodeServer.getNodeInfo());
-        headersRequest.setReceiver(remoteNode);
-        headersRequest.setData(new HeadersRequestParam(startHash, endHash));
-
-
-        //nodeServer.getTcpClient().sendMessage(headersRequest);
-    }
-
-    /**
-     * 发送分叉点查找请求
-     */
-    private void sendForkPointRequest(KademliaNodeServer nodeServer, NodeInfo remoteNode)
-            throws ConnectException, InterruptedException {
-        log.info("发送分叉点查找请求");
-
-        FindForkPointRequestMessage forkRequest = new FindForkPointRequestMessage();
-        forkRequest.setSender(nodeServer.getNodeInfo());
-        forkRequest.setReceiver(remoteNode);
-        forkRequest.setData(CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX));
-        //nodeServer.getTcpClient().sendMessage(forkRequest);
     }
 
 }
