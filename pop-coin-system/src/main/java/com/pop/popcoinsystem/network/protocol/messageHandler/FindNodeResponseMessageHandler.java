@@ -31,16 +31,11 @@ public class FindNodeResponseMessageHandler implements MessageHandler{
     }
 
     protected FindNodeResponseMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull FindNodeResponseMessage message) throws InterruptedException, ConnectException, FullBucketException {
-        log.info("收到查询结果");
         FindNodeResult data = message.getData();
         List<ExternalNodeInfo> nodes = data.getNodes();
+        log.info("收到查询结果{}",nodes);
         for(ExternalNodeInfo node:nodes){
-            try {
-                //ping消息应该携带 节点基本消息外的额外消息如
-                kademliaNodeServer.getRoutingTable().update(node);
-            }catch (FullBucketException e){
-                kademliaNodeServer.getRoutingTable().forceUpdate(node);
-            }
+            kademliaNodeServer.getRoutingTable().update(node);
         }
         return null;
     }

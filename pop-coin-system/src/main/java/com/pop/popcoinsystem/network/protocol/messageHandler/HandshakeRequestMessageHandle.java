@@ -99,7 +99,7 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
     ) throws ConnectException, InterruptedException {
         // 情况1：远程链工作量更大（无论高度如何，都应同步到工作量更大的链）
         if (DifficultyUtils.compare(localWork, remoteWork)==-1){
-            log.info("远程链工作量更大（本地:{}，远程:{}），准备同步", ByteUtils.bytesToLong(localWork), ByteUtils.bytesToLong(remoteWork));
+            log.info("远程链工作量更大（本地:{}，远程:{}），准备同步", DifficultyUtils.bytesToLong(localWork), DifficultyUtils.bytesToLong(remoteWork));
             if (localHeight < remoteHeight) {
                 // 远程链更长且工作量更大 - 从本地最新区块开始同步后续区块
                 log.info("远程链更长且工作量更大，请求区块同步");
@@ -116,7 +116,7 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
         }
         // 情况2：本地链工作量更大
         else if (DifficultyUtils.compare(localWork, remoteWork)==1) {
-            log.info("本地链工作量更大（本地:{}，远程:{}），无需主动同步", ByteUtils.bytesToLong(localWork), ByteUtils.bytesToLong(remoteWork));
+            log.info("本地链工作量更大（本地:{}，远程:{}），无需主动同步", DifficultyUtils.bytesToLong(localWork), DifficultyUtils.bytesToLong(remoteWork));
             // 远程节点会在自己的握手处理中发现差异并请求同步
         }
         // 情况3：工作量相同

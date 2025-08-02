@@ -186,7 +186,9 @@ public class KademliaNodeServer {
             startTcpTransmitServer();
             running = true;
             scheduler = Executors.newSingleThreadScheduledExecutor();
-            scheduler.scheduleAtFixedRate(this::maintainNetwork, 0, 60 * 5, TimeUnit.SECONDS);//首次执行立即开始，之后每 30 秒执行一次 maintainNetwork 方法
+            //维护网络 首次执行立即开始，之后每 30 秒执行一次 maintainNetwork 方法  单位秒
+            long delay = 60 * 5;
+            scheduler.scheduleAtFixedRate(this::maintainNetwork, 0, delay, TimeUnit.SECONDS);
         } catch (Exception e) {
             log.error("KademliaNode start error", e);
             stop();
@@ -339,20 +341,13 @@ public class KademliaNodeServer {
     public void broadcastMessage(KademliaMessage kademliaMessage) {
         long messageId = kademliaMessage.getMessageId();
         long now = System.currentTimeMillis();
-        // 检查：如果消息已处理过（未过期），直接返回，不重复广播
-
         // 检查：若消息已存在（未过期），则跳过广播
         if (broadcastMessages.getIfPresent(messageId) != null) {
             log.debug("消息 {} 已广播过（未过期），跳过", messageId);
             return;
         }
-
-
         // 记录：将消息ID存入缓存（自动过期）
         broadcastMessages.put(messageId, Boolean.TRUE);
-
-
-
         //将消息发送给已知节点
         List<ExternalNodeInfo> closest = this.getRoutingTable().findClosest(this.nodeInfo.getId());
         //去除自己
@@ -372,11 +367,10 @@ public class KademliaNodeServer {
      * 维护网络
      */
     public void maintainNetwork() {
-        log.info("开始维护网络");
+        log.debug("开始维护网络");
         RoutingTable routingTable = getRoutingTable();
         try {
             long now = System.currentTimeMillis();
-
             // 2. 检查路由表中节点的活性，移除不活跃节点
             checkNodeLiveness(now);
             // 3. 随机生成节点ID，执行FindNode操作刷新路由表（Kademlia协议核心）

@@ -30,7 +30,7 @@ public class RoutingTable {
      * 初始化路由表
      */
     public RoutingTable(BigInteger localNodeId, NodeSettings nodeSettings) {
-        log.info("初始化路由表");
+        log.debug("初始化路由表");
         this.localNodeId = localNodeId;
         this.nodeSettings = nodeSettings;
         buckets = new ArrayList<>();
