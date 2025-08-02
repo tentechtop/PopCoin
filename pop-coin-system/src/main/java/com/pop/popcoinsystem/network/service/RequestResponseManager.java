@@ -75,7 +75,7 @@ public class RequestResponseManager {
         if (!response.isResponse()) {
             return; // 只处理响应消息
         }
-        long messageId = response.getMessageId();
+        long messageId = response.getRequestId();
         RequestContext context = pendingRequests.remove(messageId);
         if (context != null) {
             context.timeoutFuture.cancel(false); // 取消超时任务
