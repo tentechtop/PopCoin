@@ -1435,4 +1435,9 @@ public class BlockChainServiceImpl implements BlockChainService {
         }
         return null; // 无共同区块
     }
+
+    @Override
+    public List<Block> getBlockByStartHashAndEndHashWithLimit(byte[] startHash, byte[] endHash, int batchSize) {
+        return popStorage.getBlockByStartHashAndEndHashWithLimit(startHash, endHash, batchSize);
+    }
 }

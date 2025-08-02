@@ -16,6 +16,7 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 
 public class RpcProxyFactory {
@@ -23,9 +24,18 @@ public class RpcProxyFactory {
     private  KademliaNodeServer kademliaNodeServer;
     private  NodeInfo targetNode; // 目标服务节点信息
 
+    private int timeoutSeconds = 5; // 默认超时时间5秒
+
     public RpcProxyFactory(KademliaNodeServer server, NodeInfo targetNode) {
         this.kademliaNodeServer = server;
         this.targetNode = targetNode;
+    }
+    // 添加超时时间设置方法
+    public void setTimeout(int timeoutSeconds) {
+        if (timeoutSeconds <= 0) {
+            throw new IllegalArgumentException("超时时间必须大于0");
+        }
+        this.timeoutSeconds = timeoutSeconds;
     }
 
     public RpcProxyFactory(KademliaNodeServer server) {
@@ -47,17 +57,21 @@ public class RpcProxyFactory {
         return (T) Proxy.newProxyInstance(
                 serviceInterface.getClassLoader(),
                 new Class[]{serviceInterface},
-                new RpcInvocationHandler(serviceInterface, targetNode)
+                new RpcInvocationHandler(serviceInterface, targetNode,timeoutSeconds)
         );
     }
+
+
 
     private class RpcInvocationHandler implements InvocationHandler {
         private final Class<?> serviceInterface;
         private final NodeInfo targetNode;
+        private final int timeoutSeconds; // 新增：超时时间
 
-        public RpcInvocationHandler(Class<?> serviceInterface, NodeInfo targetNode) {
+        public RpcInvocationHandler(Class<?> serviceInterface, NodeInfo targetNode,int timeoutSeconds) {
             this.serviceInterface = serviceInterface;
             this.targetNode = targetNode;
+            this.timeoutSeconds = timeoutSeconds;
         }
 
         @Override
@@ -80,7 +94,7 @@ public class RpcProxyFactory {
 
             // 3. 发送请求并获取响应
             KademliaMessage response = kademliaNodeServer.getTcpClient()
-                    .sendMessageWithResponse(requestMessage);
+                    .sendMessageWithResponse(requestMessage,timeoutSeconds, TimeUnit.SECONDS);
 
             // 4. 解析响应结果（根据实际响应格式处理）
             return parseResponse(response);

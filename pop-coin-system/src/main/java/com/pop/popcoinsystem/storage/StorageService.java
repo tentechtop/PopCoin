@@ -565,6 +565,105 @@ public class StorageService {
         return blocksInRange;
     }
 
+
+    /**
+     * 根据起始区块哈希和结束区块哈希，查询两者之间的主链区块（包含两端），并限制返回数量
+     * 注：仅支持主链上的连续区块查询，若区块不在主链或不连续则返回空列表
+     * @param startHash 起始区块哈希
+     * @param endHash 结束区块哈希
+     * @param batchSize 最大返回数量（1-500）
+     * @return 两个区块之间的主链区块（按区块链顺序排列），数量不超过batchSize，若不符合条件则返回空列表
+     */
+    public List<Block> getBlockByStartHashAndEndHashWithLimit(byte[] startHash, byte[] endHash, int batchSize) {
+        // 1. 校验输入参数
+        if (startHash == null || endHash == null) {
+            log.warn("起始或结束区块哈希不能为空");
+            return Collections.emptyList();
+        }
+        if (batchSize <= 0 || batchSize > 500) {
+            throw new IllegalArgumentException("批量大小必须在1-500之间: " + batchSize);
+        }
+
+        // 2. 获取起始和结束区块
+        Block startBlock = getBlockByHash(startHash);
+        Block endBlock = getBlockByHash(endHash);
+
+        // 3. 检查区块是否存在
+        if (startBlock == null) {
+            log.warn("起始区块不存在，哈希: {}", CryptoUtil.bytesToHex(startHash));
+            return Collections.emptyList();
+        }
+        if (endBlock == null) {
+            log.warn("结束区块不存在，哈希: {}", CryptoUtil.bytesToHex(endHash));
+            return Collections.emptyList();
+        }
+
+        // 4. 检查区块是否在主链上
+        long startHeight = startBlock.getHeight();
+        byte[] mainChainStartHash = getMainBlockHashByHeight(startHeight);
+        if (!Arrays.equals(mainChainStartHash, startBlock.getHash())) {
+            log.warn("起始区块不在主链上，哈希: {}", CryptoUtil.bytesToHex(startHash));
+            return Collections.emptyList();
+        }
+
+        long endHeight = endBlock.getHeight();
+        byte[] mainChainEndHash = getMainBlockHashByHeight(endHeight);
+        if (!Arrays.equals(mainChainEndHash, endBlock.getHash())) {
+            log.warn("结束区块不在主链上，哈希: {}", CryptoUtil.bytesToHex(endHash));
+            return Collections.emptyList();
+        }
+
+        // 5. 验证区块是否在同一条连续链上
+        if (!isBlocksInSameChain(startBlock, endBlock)) {
+            log.warn("起始区块与结束区块不在同一条连续链上，无法查询范围");
+            return Collections.emptyList();
+        }
+
+        // 6. 确定遍历方向和范围
+        List<Block> result = new ArrayList<>(batchSize);
+        long currentHeight;
+        long targetHeight;
+        int step;
+
+        if (startHeight <= endHeight) {
+            // 正序遍历（从低到高）
+            currentHeight = startHeight;
+            targetHeight = endHeight;
+            step = 1;
+        } else {
+            // 倒序遍历（从高到低）
+            currentHeight = startHeight;
+            targetHeight = endHeight;
+            step = -1;
+        }
+
+        // 7. 按批次大小收集区块
+        int collected = 0;
+        while (collected < batchSize &&
+                ((step > 0 && currentHeight <= targetHeight) ||
+                        (step < 0 && currentHeight >= targetHeight))) {
+
+            // 获取当前高度的区块哈希
+            byte[] blockHash = getMainBlockHashByHeight(currentHeight);
+            if (blockHash != null) {
+                Block block = getBlockByHash(blockHash);
+                if (block != null) {
+                    result.add(block);
+                    collected++;
+                } else {
+                    log.warn("区块哈希存在但数据缺失，高度: {}", currentHeight);
+                }
+            } else {
+                log.debug("主链中不存在该高度的区块，高度: {}", currentHeight);
+            }
+
+            currentHeight += step;
+        }
+
+        return result;
+    }
+
+
     /**
      * 验证两个区块是否在同一条连续链上（通过前驱哈希追溯）
      * @param start 起始区块
@@ -1333,6 +1432,7 @@ public class StorageService {
     //..................................................................................................................
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final RocksDB db;
+
 
 
 

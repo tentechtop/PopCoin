@@ -179,4 +179,6 @@ public interface BlockChainService {
             throws ConnectException, InterruptedException;
 
     byte[] findForkPoint(List<byte[]> localHashes);
+
+    List<Block> getBlockByStartHashAndEndHashWithLimit(byte[] startHash, byte[] endHash, int batchSize);
 }

@@ -10,26 +10,42 @@ import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.DifficultyUtils;
 import lombok.extern.slf4j.Slf4j;
 
+import java.math.BigInteger;
 import java.net.ConnectException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 
 import static com.pop.popcoinsystem.constant.BlockChainConstants.GENESIS_BLOCK_HASH_HEX;
 
 @Slf4j
 public class AsyncBlockSynchronizer {
+    // 新增：分批获取区块的大小（可配置）
+    private static final int BATCH_SIZE = 100;
+    // 新增：网络请求超时时间（毫秒）
+    private static final int RPC_TIMEOUT = 5000;
+    // 新增：最大重试次数
+    private static final int MAX_RETRY = 3;
+    // 新增：记录同步进度（key：远程节点ID，value：最近同步到的区块哈希）
+    private final ConcurrentHashMap<BigInteger, String> syncProgress = new ConcurrentHashMap<>();
+
 
     // 线程池用于执行异步任务
-    private final ExecutorService syncExecutor = Executors.newCachedThreadPool(runnable -> {
-        Thread thread = new Thread(runnable);
-        thread.setName("block-sync-worker");
-        thread.setDaemon(true); // 守护线程，程序退出时自动关闭
-        return thread;
-    });
+    // 线程池优化：限制最大线程数，避免资源耗尽
+    private final ExecutorService syncExecutor = new ThreadPoolExecutor(
+            5, // 核心线程数
+            20, // 最大线程数
+            60L, TimeUnit.SECONDS,
+            new LinkedBlockingQueue<>(),
+            runnable -> {
+                Thread thread = new Thread(runnable);
+                thread.setName("block-sync-worker");
+                thread.setDaemon(true);
+                return thread;
+            },
+            new ThreadPoolExecutor.CallerRunsPolicy() // 任务满时让提交者线程执行，避免任务丢失
+    );
 
 
     private final KademliaNodeServer kademliaNodeServer;
@@ -126,47 +142,101 @@ public class AsyncBlockSynchronizer {
      * 发送区块头请求（异步执行）
      */
     private void sendHeadersRequest(KademliaNodeServer nodeServer, NodeInfo remoteNode,
-                                    byte[] startHash, byte[] endHash)
-            throws ConnectException, InterruptedException {
-        log.info("发送区块头请求，从 {} 到 {}",
+                                    byte[] startHash, byte[] endHash) throws ConnectException, InterruptedException {
+        log.info("开始同步区块，从 {} 到 {}",
                 CryptoUtil.bytesToHex(startHash), CryptoUtil.bytesToHex(endHash));
-        try {
-            RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer,remoteNode);
-            BlockChainService blockChainService = proxyFactory.createProxy(BlockChainService.class);
-            List<Block> remoteBlocks  = blockChainService.getBlockByStartHashAndEndHash(startHash, endHash);
+
+        // 检查进度：如果之前同步过，从上次进度开始
+        BigInteger nodeId = remoteNode.getId();
+        String lastSyncedHashHex = syncProgress.get(nodeId);
+        byte[] currentStartHash = startHash;
+        if (lastSyncedHashHex != null && !lastSyncedHashHex.isEmpty()) {
+            currentStartHash = CryptoUtil.hexToBytes(lastSyncedHashHex);
+            log.info("检测到历史同步进度，从 {} 继续", lastSyncedHashHex);
+        }
+
+        BlockChainService localChainService = nodeServer.getBlockChainService();
+        Block prevBlock = localChainService.getBlockByHash(currentStartHash);
+        if (prevBlock == null && !Arrays.equals(currentStartHash, CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX))) {
+            log.error("起始区块不存在，同步失败");
+            return;
+        }
+
+        // 循环分批获取区块
+        while (true) {
+            // 1. 分批请求区块（本次最多BATCH_SIZE个）
+            List<Block> remoteBlocks = fetchBlockBatch(remoteNode, currentStartHash, endHash);
             if (remoteBlocks == null || remoteBlocks.isEmpty()) {
-                log.warn("未获取到远程区块，可能已同步完成");
+                log.info("所有区块同步完成");
+                syncProgress.remove(nodeId); // 清除进度
                 return;
             }
-            // 本地区块链服务（用于验证和应用区块）
-            BlockChainService localChainService = nodeServer.getBlockChainService(); // 假设节点持有本地服务实例
-            Block prevBlock = localChainService.getBlockByHash(startHash); // 起始区块（本地已存在）
 
-
-            // 遍历远程区块，验证并应用
+            // 2. 处理当前批次区块
+            Block lastProcessedBlock = null;
             for (Block block : remoteBlocks) {
-                // 1. 验证区块合法性（PoW、交易、前哈希连续性）
+                // 验证区块合法性
                 if (!localChainService.verifyBlock(block)) {
                     log.error("区块验证失败，哈希: {}", CryptoUtil.bytesToHex(block.getHash()));
-                    break; // 无效区块中断同步
+                    throw new RuntimeException("无效区块，中断同步");
                 }
-                // 2. 检查区块连续性（当前区块的前哈希需等于上一区块的哈希）
+
+                // 检查连续性
                 if (prevBlock != null && !Arrays.equals(block.getPreviousHash(), prevBlock.getHash())) {
-                    log.error("区块不连续，预期前哈希: {}，实际: {}",
-                            CryptoUtil.bytesToHex(prevBlock.getHash()),
-                            CryptoUtil.bytesToHex(block.getPreviousHash()));
-                    // 尝试补充中间缺失的区块（递归请求）
+                    log.warn("区块不连续，补充中间区块");
+                    // 递归处理中间缺失的区块（范围小，递归安全）
                     sendHeadersRequest(nodeServer, remoteNode, prevBlock.getHash(), block.getHash());
+                    prevBlock = localChainService.getBlockByHash(block.getPreviousHash());
+                    if (prevBlock == null) {
+                        throw new RuntimeException("补充区块失败，中断同步");
+                    }
+                }
+
+                // 添加到本地链
+                localChainService.addBlockToMainChain(block);
+                log.info("同步区块[{}]，高度: {}", CryptoUtil.bytesToHex(block.getHash()), block.getHeight());
+                lastProcessedBlock = block;
+                prevBlock = block;
+            }
+
+            // 3. 记录进度，准备下一批
+            if (lastProcessedBlock != null) {
+                String lastHashHex = CryptoUtil.bytesToHex(lastProcessedBlock.getHash());
+                syncProgress.put(nodeId, lastHashHex);
+                currentStartHash = lastProcessedBlock.getHash();
+
+                // 检查是否已达到目标区块
+                if (Arrays.equals(lastProcessedBlock.getHash(), endHash)) {
+                    log.info("已同步到目标区块 {}", lastHashHex);
+                    syncProgress.remove(nodeId);
                     return;
                 }
-                // 3. 应用区块到本地链（主链或备选链）
-                localChainService.addBlockToMainChain(block); // 若为分叉链，需先处理本地分叉
-                log.info("成功同步区块，高度: {}，哈希: {}", block.getHeight(), CryptoUtil.bytesToHex(block.getHash()));
-                prevBlock = block; // 更新上一区块，继续处理下一个
             }
-        } catch (Exception e) {
-            log.error("发送区块头请求失败", e);
         }
+    }
+
+    // 新增：分批获取区块（带重试和超时）
+    private List<Block> fetchBlockBatch(NodeInfo remoteNode, byte[] startHash, byte[] endHash) throws InterruptedException {
+        for (int retry = 0; retry < MAX_RETRY; retry++) {
+            try {
+                RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
+                // 设置RPC超时
+                proxyFactory.setTimeout(RPC_TIMEOUT);
+                BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
+
+                // 调用支持分批的方法（需在BlockChainService中新增）
+                return remoteService.getBlockByStartHashAndEndHashWithLimit(startHash, endHash, BATCH_SIZE);
+            } catch (Exception e) {
+                log.warn("第{}次获取区块失败（节点:{}），重试...", retry + 1, remoteNode, e);
+                if (retry == MAX_RETRY - 1) {
+                    log.error("达到最大重试次数，获取区块失败", e);
+                    return null;
+                }
+                // 指数退避重试（1s, 2s, 4s...）
+                Thread.sleep((long) (1000 * Math.pow(2, retry)));
+            }
+        }
+        return null;
     }
 
     /**
