@@ -7,7 +7,7 @@ import com.pop.popcoinsystem.data.transaction.TXInput;
 import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.data.transaction.UTXO;
 import com.pop.popcoinsystem.data.transaction.Witness;
-import com.pop.popcoinsystem.service.BlockChainService;
+import com.pop.popcoinsystem.service.BlockChainServiceImpl;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.SegWitUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +23,7 @@ import java.util.stream.IntStream;
 public class P2WPKHVerifier implements ScriptVerificationStrategy{
     @Lazy
     @Autowired
-    private BlockChainService blockChainService;
+    private BlockChainServiceImpl blockChainService;
 
     @Override
     public boolean verify(Transaction tx, TXInput input, int inputIndex, UTXO utxo) {

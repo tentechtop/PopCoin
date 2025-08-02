@@ -17,7 +17,7 @@ import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
 import com.pop.popcoinsystem.network.protocol.messageHandler.*;
 import com.pop.popcoinsystem.event.DisruptorManager;
 import com.pop.popcoinsystem.network.service.RpcServiceRegistry;
-import com.pop.popcoinsystem.service.BlockChainService;
+import com.pop.popcoinsystem.service.BlockChainServiceImpl;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import io.netty.bootstrap.Bootstrap;
@@ -37,7 +37,6 @@ import jakarta.annotation.PreDestroy;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.checkerframework.checker.units.qual.A;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Scope;
@@ -51,7 +50,7 @@ import java.util.concurrent.*;
 import static com.pop.popcoinsystem.constant.BlockChainConstants.GENESIS_BLOCK_HASH_HEX;
 import static com.pop.popcoinsystem.constant.BlockChainConstants.NET_VERSION;
 // 替换为带容量限制的LRU Map（需引入Guava或自定义）
-import com.google.common.collect.EvictingQueue;
+
 
 @Slf4j
 @Data
@@ -66,7 +65,7 @@ public class KademliaNodeServer {
 
     @Lazy
     @Autowired
-    private BlockChainService blockChainService;
+    private BlockChainServiceImpl blockChainService;
 
     //额外信息  包含了节点信息  外网ip  外网端口  内网ip  内网端口  节点状态  节点版本  节点类型  节点描述 节点分数 等待
     private ExternalNodeInfo externalNodeInfo;
@@ -166,8 +165,6 @@ public class KademliaNodeServer {
         this.registerMessageHandler(MessageType.RPC_RESPONSE.getCode(), new RpcResponseMessageHandler());
 
 
-
-
         //初始化UDP客户端
         this.udpClient = new UDPClient();
         this.tcpClient = new TCPClient();
@@ -188,7 +185,7 @@ public class KademliaNodeServer {
             scheduler = Executors.newSingleThreadScheduledExecutor();
             //维护网络 首次执行立即开始，之后每 30 秒执行一次 maintainNetwork 方法  单位秒
             long delay = 60 * 5;
-            scheduler.scheduleAtFixedRate(this::maintainNetwork, 0, delay, TimeUnit.SECONDS);
+            scheduler.scheduleAtFixedRate(this::maintainNetwork, delay, delay, TimeUnit.SECONDS);
         } catch (Exception e) {
             log.error("KademliaNode start error", e);
             stop();
@@ -283,7 +280,7 @@ public class KademliaNodeServer {
         udpClient.sendMessage(pingKademliaMessage);
 
         //向引导节点发送握手请求 收到握手回复后检查 自己的区块链信息
-        BlockChainService blockChainService = this.getBlockChainService();
+        BlockChainServiceImpl blockChainService = this.getBlockChainService();
         Block mainLatestBlock = blockChainService.getMainLatestBlock();
         Handshake handshake = new Handshake();
         handshake.setExternalNodeInfo(this.getExternalNodeInfo());//携带我的节点信息

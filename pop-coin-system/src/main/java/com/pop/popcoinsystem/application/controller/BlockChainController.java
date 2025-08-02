@@ -1,18 +1,14 @@
 package com.pop.popcoinsystem.application.controller;
 
-import com.pop.popcoinsystem.data.block.BlockVO;
 import com.pop.popcoinsystem.data.blockChain.BlockChain;
 import com.pop.popcoinsystem.data.block.BlockDTO;
-import com.pop.popcoinsystem.data.miner.Miner;
 import com.pop.popcoinsystem.data.transaction.UTXO;
 import com.pop.popcoinsystem.data.transaction.dto.TransactionDTO;
 import com.pop.popcoinsystem.data.transaction.dto.UTXODTO;
 import com.pop.popcoinsystem.data.vo.result.Result;
-import com.pop.popcoinsystem.service.BlockChainService;
+import com.pop.popcoinsystem.service.BlockChainServiceImpl;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
-import jakarta.annotation.Resource;
-import jakarta.websocket.server.PathParam;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
@@ -28,7 +24,7 @@ import org.springframework.web.bind.annotation.*;
 public class BlockChainController {
     @Lazy
     @Autowired
-    private BlockChainService blockChainService;
+    private BlockChainServiceImpl blockChainService;
 
 
     /**

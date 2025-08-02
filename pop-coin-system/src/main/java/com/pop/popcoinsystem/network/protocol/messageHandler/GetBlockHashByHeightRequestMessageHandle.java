@@ -6,7 +6,7 @@ import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.GetBlockHashByHeightRequestMessage;
 import com.pop.popcoinsystem.network.protocol.message.GetBlockHashByHeightResponseMessage;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
-import com.pop.popcoinsystem.service.BlockChainService;
+import com.pop.popcoinsystem.service.BlockChainServiceImpl;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 
@@ -25,7 +25,7 @@ public class GetBlockHashByHeightRequestMessageHandle implements MessageHandler 
         NodeInfo sender = message.getSender();
         NodeInfo me = kademliaNodeServer.getNodeInfo();
         Long data = message.getData();
-        BlockChainService blockChainService = kademliaNodeServer.getBlockChainService();
+        BlockChainServiceImpl blockChainService = kademliaNodeServer.getBlockChainService();
         Block mainBlockByHeight = blockChainService.getMainBlockByHeight(data);
 
         GetBlockHashByHeightResponseMessage responseMessage = new GetBlockHashByHeightResponseMessage();

@@ -7,7 +7,7 @@ import com.pop.popcoinsystem.data.script.ScriptSig;
 import com.pop.popcoinsystem.data.transaction.TXInput;
 import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.data.transaction.UTXO;
-import com.pop.popcoinsystem.service.BlockChainService;
+import com.pop.popcoinsystem.service.BlockChainServiceImpl;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.SegWitUtils;
 import com.pop.popcoinsystem.util.SerializeUtils;
@@ -24,7 +24,7 @@ public class P2PKHVerifier implements ScriptVerificationStrategy{
 
     @Lazy
     @Autowired
-    private BlockChainService blockChainService;
+    private BlockChainServiceImpl blockChainService;
 
     @Override
     public boolean verify(Transaction tx, TXInput input, int inputIndex, UTXO utxo) {

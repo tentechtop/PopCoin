@@ -13,7 +13,7 @@ import com.pop.popcoinsystem.data.vo.result.TPageResult;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.exception.InsufficientFundsException;
 import com.pop.popcoinsystem.exception.UnsupportedAddressException;
-import com.pop.popcoinsystem.service.BlockChainService;
+import com.pop.popcoinsystem.service.BlockChainServiceImpl;
 import com.pop.popcoinsystem.util.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,7 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 
 import static com.pop.popcoinsystem.storage.StorageService.getUTXOKey;
-import static com.pop.popcoinsystem.service.BlockChainService.convertTransactionDTO;
+import static com.pop.popcoinsystem.service.BlockChainServiceImpl.convertTransactionDTO;
 
 @Slf4j
 @Service
@@ -36,7 +36,7 @@ public class WalletService {
 
     @Lazy
     @Autowired
-    private BlockChainService blockChainService;
+    private BlockChainServiceImpl blockChainService;
 
 
 

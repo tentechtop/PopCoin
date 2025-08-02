@@ -8,7 +8,7 @@ import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.*;
 import com.pop.popcoinsystem.network.protocol.messageData.BlockHeadersRes;
 import com.pop.popcoinsystem.network.protocol.messageData.HeadersRequestParam;
-import com.pop.popcoinsystem.service.BlockChainService;
+import com.pop.popcoinsystem.service.BlockChainServiceImpl;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
@@ -35,7 +35,7 @@ public class GetHeadersRequestMessageHandle implements MessageHandler{
                 CryptoUtil.bytesToHex(start),
                 CryptoUtil.bytesToHex(end));
 
-        BlockChainService blockChainService = kademliaNodeServer.getBlockChainService();
+        BlockChainServiceImpl blockChainService = kademliaNodeServer.getBlockChainService();
         List<Block> blocksInRange =  blockChainService.getBlockByStartHashAndEndHashByHeight(data.getStart(), data.getEnd());
         if (blocksInRange.isEmpty()) {
             log.warn("未查询到指定范围内的区块");

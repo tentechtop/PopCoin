@@ -32,7 +32,7 @@ public class Mining {
 
     @Lazy
     @Autowired
-    private BlockChainService blockChainService;
+    private BlockChainServiceImpl blockChainService;
 
     // 挖矿性能控制（0-100，默认85%）
     private volatile int miningPerformance = 30;

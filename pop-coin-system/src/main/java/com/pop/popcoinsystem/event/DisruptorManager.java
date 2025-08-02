@@ -5,7 +5,7 @@ import com.lmax.disruptor.RingBuffer;
 import com.lmax.disruptor.dsl.Disruptor;
 import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.event.transaction.TransactionEvent;
-import com.pop.popcoinsystem.service.BlockChainService;
+import com.pop.popcoinsystem.service.BlockChainServiceImpl;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.Data;
@@ -29,7 +29,7 @@ public class DisruptorManager {
 
     @Lazy
     @Autowired
-    private BlockChainService blockChainService;
+    private BlockChainServiceImpl blockChainService;
 
     public DisruptorManager() {
 

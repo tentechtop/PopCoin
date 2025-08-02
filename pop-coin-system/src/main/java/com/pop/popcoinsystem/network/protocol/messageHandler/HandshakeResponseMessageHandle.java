@@ -8,11 +8,8 @@ import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.exception.FullBucketException;
 import com.pop.popcoinsystem.network.protocol.message.*;
 import com.pop.popcoinsystem.network.protocol.messageData.Handshake;
-import com.pop.popcoinsystem.network.protocol.messageData.HeadersRequestParam;
-import com.pop.popcoinsystem.service.BlockChainService;
-import com.pop.popcoinsystem.util.BeanCopyUtils;
+import com.pop.popcoinsystem.service.BlockChainServiceImpl;
 import com.pop.popcoinsystem.util.CryptoUtil;
-import com.pop.popcoinsystem.util.DifficultyUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 
@@ -42,7 +39,7 @@ public class HandshakeResponseMessageHandle implements MessageHandler{
             kademliaNodeServer.getRoutingTable().forceUpdate(data);
         }
 
-        BlockChainService blockChainService = kademliaNodeServer.getBlockChainService();
+        BlockChainServiceImpl blockChainService = kademliaNodeServer.getBlockChainService();
         Block block = blockChainService.getMainLatestBlock();
 
         byte[] genesisBlockHash = handshake.getGenesisBlockHash();

@@ -1,19 +1,14 @@
 package com.pop.popcoinsystem.network.protocol.messageHandler;
 
 import com.pop.popcoinsystem.data.block.Block;
-import com.pop.popcoinsystem.exception.FullBucketException;
-import com.pop.popcoinsystem.exception.UnsupportedChainException;
 import com.pop.popcoinsystem.network.KademliaNodeServer;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.*;
-import com.pop.popcoinsystem.service.BlockChainService;
-import io.netty.util.concurrent.Promise;
+import com.pop.popcoinsystem.service.BlockChainServiceImpl;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.Serializable;
-import java.net.ConnectException;
-import java.util.concurrent.ExecutionException;
 
 @Slf4j
 public class FindForkPointRequestMessageHandle implements MessageHandler{
@@ -26,7 +21,7 @@ public class FindForkPointRequestMessageHandle implements MessageHandler{
         log.info("收到分叉点查询请求，开始查找共同区块");
         NodeInfo sender = message.getSender();
         NodeInfo me = kademliaNodeServer.getNodeInfo();
-        BlockChainService chainService = kademliaNodeServer.getBlockChainService();
+        BlockChainServiceImpl chainService = kademliaNodeServer.getBlockChainService();
         byte[] startHash = message.getData(); // 通常是创世区块哈希
 
         // 1. 二分查找分叉点（核心逻辑）
@@ -36,7 +31,7 @@ public class FindForkPointRequestMessageHandle implements MessageHandler{
         return null;
     }
 
-    private Block findForkPoint(KademliaNodeServer kademliaNodeServer,FindForkPointRequestMessage message,BlockChainService chainService, byte[] startHash, byte[] endHash, NodeInfo remoteNode, KademliaNodeServer server) throws Exception {
+    private Block findForkPoint(KademliaNodeServer kademliaNodeServer, FindForkPointRequestMessage message, BlockChainServiceImpl chainService, byte[] startHash, byte[] endHash, NodeInfo remoteNode, KademliaNodeServer server) throws Exception {
         NodeInfo me = kademliaNodeServer.getNodeInfo();
         NodeInfo sender = message.getSender();
 

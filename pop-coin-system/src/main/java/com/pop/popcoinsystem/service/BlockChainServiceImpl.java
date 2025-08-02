@@ -43,7 +43,7 @@ import static com.pop.popcoinsystem.data.transaction.Transaction.calculateBlockR
 
 @Slf4j
 @Service
-public class BlockChainService {
+public class BlockChainServiceImpl {
     @Autowired
     private StorageService popStorage;
     @Autowired

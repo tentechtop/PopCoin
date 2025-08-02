@@ -4,13 +4,9 @@ import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.network.KademliaNodeServer;
 import com.pop.popcoinsystem.network.protocol.message.BlockMessage;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
-import com.pop.popcoinsystem.network.protocol.message.TransactionMessage;
-import com.pop.popcoinsystem.service.BlockChainService;
 import com.pop.popcoinsystem.util.ByteUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
 
 import java.io.Serializable;
 

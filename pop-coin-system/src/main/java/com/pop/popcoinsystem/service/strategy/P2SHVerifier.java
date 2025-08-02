@@ -1,22 +1,15 @@
 package com.pop.popcoinsystem.service.strategy;
 
-import com.pop.popcoinsystem.data.enums.SigHashType;
-import com.pop.popcoinsystem.data.script.Script;
 import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.data.script.ScriptSig;
 import com.pop.popcoinsystem.data.transaction.TXInput;
 import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.data.transaction.UTXO;
-import com.pop.popcoinsystem.service.BlockChainService;
-import com.pop.popcoinsystem.util.CryptoUtil;
-import com.pop.popcoinsystem.util.SegWitUtils;
-import com.pop.popcoinsystem.util.SerializeUtils;
+import com.pop.popcoinsystem.service.BlockChainServiceImpl;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
 
 @Slf4j
 @Service
@@ -24,7 +17,7 @@ public class P2SHVerifier implements ScriptVerificationStrategy{
 
     @Lazy
     @Autowired
-    private BlockChainService blockChainService;
+    private BlockChainServiceImpl blockChainService;
 
     @Override
     public boolean verify(Transaction tx, TXInput input, int inputIndex, UTXO utxo) {

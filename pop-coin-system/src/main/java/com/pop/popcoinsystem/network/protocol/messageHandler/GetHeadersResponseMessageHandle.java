@@ -8,7 +8,7 @@ import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.*;
 import com.pop.popcoinsystem.network.protocol.messageData.BlockHeadersRes;
 import com.pop.popcoinsystem.network.protocol.messageData.HeadersRequestParam;
-import com.pop.popcoinsystem.service.BlockChainService;
+import com.pop.popcoinsystem.service.BlockChainServiceImpl;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 
@@ -32,7 +32,7 @@ public class GetHeadersResponseMessageHandle implements MessageHandler{
         List<Block> remoteBlocks = data.getHeaders();//暂时用完整区块 后续再升级
         // 1. 验证区块连续性和有效性（核心步骤）
         Block lastLocalBlock = null;
-        BlockChainService blockChainService = kademliaNodeServer.getBlockChainService();
+        BlockChainServiceImpl blockChainService = kademliaNodeServer.getBlockChainService();
 
         for (Block remoteBlock : remoteBlocks) {
             // 验证1：区块高度是否连续（防止跳跃）
