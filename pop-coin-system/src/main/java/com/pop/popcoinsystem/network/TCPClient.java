@@ -31,8 +31,11 @@ public class TCPClient {
 
     /** 节点ID到Channel的映射 */
     private final Map<BigInteger, Channel> nodeTCPChannel = new ConcurrentHashMap<>();
-    /** 通道到RequestResponseManager的映射 */
-    private final Map<Channel, RequestResponseManager> channelToResponseManager = new ConcurrentHashMap<>();
+
+    // 请求响应管理器，全局唯一实例
+    private final RequestResponseManager responseManager;
+
+
 
     // 用于在Channel中存储节点ID的属性键
     private static final AttributeKey<BigInteger> NODE_ID_KEY = AttributeKey.valueOf("NODE_ID");
@@ -42,7 +45,8 @@ public class TCPClient {
         executorService = Executors.newFixedThreadPool(10);
         // 全局复用一个EventLoopGroup，避免资源浪费
         eventLoopGroup = new NioEventLoopGroup();
-
+        // 创建全局唯一的请求响应管理器
+        responseManager = new RequestResponseManager();
         // 初始化Bootstrap并复用配置
         bootstrap = new Bootstrap();
         bootstrap.group(eventLoopGroup)
@@ -59,6 +63,63 @@ public class TCPClient {
                     }
                 });
     }
+
+
+
+    public KademliaMessage sendMessageWithResponse(KademliaMessage message)
+            throws ConnectException, TimeoutException, InterruptedException, Exception {
+        // 默认超时时间5秒，也可以提供重载方法让用户指定超时
+        return sendMessageWithResponse((RpcRequestMessage)message, 5, TimeUnit.SECONDS);
+    }
+
+    /**
+     * 重载方法：允许用户指定超时时间
+     */
+    public KademliaMessage sendMessageWithResponse(RpcRequestMessage message, long timeout, TimeUnit unit)
+            throws ConnectException, TimeoutException, InterruptedException, Exception {
+        if (message == null || message.getReceiver() == null) {
+            throw new IllegalArgumentException("消息或接收者不能为空");
+        }
+        //请求ID已经在消息创建阶段设置
+        long requestId = message.getRequestId();
+
+        BigInteger nodeId = message.getReceiver().getId();
+        Channel channel = getOrCreateChannel(message.getReceiver());
+        if (channel == null || !channel.isActive()) {
+            throw new ConnectException("节点 " + nodeId + " 无可用连接");
+        }
+
+        // 标记为请求消息（非响应）
+        message.setResponse(false);
+        // 发送请求并获取Promise（内部异步处理）
+        Promise<KademliaMessage> promise = responseManager.sendRequest(channel, message, timeout, unit);
+        try {
+            // 阻塞等待结果
+            if (!promise.await(timeout, unit)) {
+                // 超时：主动取消并抛出超时异常
+                promise.cancel(false);
+                throw new TimeoutException("等待节点 " + nodeId + " 响应超时（" + timeout + unit + "）");
+            }
+            // 检查结果状态
+            if (promise.isSuccess()) {
+                return promise.getNow();
+            } else {
+                // 失败：抛出具体异常
+                Throwable cause = promise.cause();
+                if (cause instanceof Exception) {
+                    throw (Exception) cause;
+                } else {
+                    throw new Exception("发送消息失败：" + cause.getMessage(), cause);
+                }
+            }
+        } finally {
+            // 清理：如果消息处理完成，从管理器中移除
+            if (promise.isDone()) {
+                responseManager.clearRequest(message.getRequestId());
+            }
+        }
+    }
+
 
     public  void sendMessage(KademliaMessage message) throws InterruptedException, ConnectException {
         try {
@@ -82,145 +143,6 @@ public class TCPClient {
             log.error("Failed to send message: {}", e.getMessage());
         }
     }
-
-
-
-    /**
-     * 发送消息并获取响应
-     * @return Future对象，可通过该对象获取响应结果
-     */
-    /**
-     * 发送消息并获取响应的Promise（异步处理）
-     * @return Future对象，可通过该对象异步获取响应结果
-     */
-    public Promise<KademliaMessage> sendMessageWithResponsePromise(KademliaMessage message)
-            throws InterruptedException, ConnectException {
-
-        if (message == null || message.getReceiver() == null) {
-            throw new IllegalArgumentException("Message or receiver cannot be null");
-        }
-        BigInteger nodeId = message.getReceiver().getId();
-        Channel channel = getOrCreateChannel(message.getReceiver());
-        if (channel == null || !channel.isActive()) {
-            throw new ConnectException("No active channel available for node: " + nodeId);
-        }
-
-        // 获取通道对应的请求响应管理器
-        RequestResponseManager responseManager = channelToResponseManager.computeIfAbsent(
-                channel, k -> new RequestResponseManager(channel)
-        );
-        long messageId = message.getMessageId();
-        // 创建Promise对象（绑定到Netty的EventLoop线程，确保线程安全）
-        Promise<KademliaMessage> promise = new DefaultPromise<>(channel.eventLoop());
-        try {
-            // 注册请求到管理器，关联messageId和promise
-            responseManager.registerRequest(messageId, promise);
-            // 标记为请求消息
-            message.setResponse(false);
-            // 发送消息并添加发送结果监听
-            channel.writeAndFlush(message).addListener((ChannelFutureListener) future -> {
-                if (!future.isSuccess()) {
-                    // 发送失败：完成promise的异常状态并清理
-                    String errorMsg = "Failed to send message to node " + nodeId;
-                    log.error(errorMsg, future.cause());
-                    if (!promise.isDone()) {
-                        promise.setFailure(new IOException(errorMsg, future.cause()));
-                    }
-                    responseManager.clearRequest(messageId);
-                }
-            });
-            // 设置超时处理（默认5秒，可根据需求调整或改为参数传入）
-            channel.eventLoop().schedule(() -> {
-                if (!promise.isDone()) {
-                    String errorMsg = "Timeout waiting for response from node " + nodeId + " (messageId: " + messageId + ")";
-                    log.warn(errorMsg);
-                    promise.setFailure(new TimeoutException(errorMsg));
-                    responseManager.clearRequest(messageId);
-                }
-            }, 5, TimeUnit.SECONDS);
-
-            // 监听通道关闭事件，提前终止等待
-            channel.closeFuture().addListener(future -> {
-                if (!promise.isDone()) {
-                    String errorMsg = "Channel to node " + nodeId + " closed before response";
-                    promise.setFailure(new IOException(errorMsg));
-                    responseManager.clearRequest(messageId);
-                }
-            });
-
-        } catch (Exception e) {
-            // 处理注册或发送过程中的异常
-            if (!promise.isDone()) {
-                promise.setFailure(e);
-            }
-            responseManager.clearRequest(messageId);
-            throw e;
-        }
-
-        return promise;
-    }
-
-
-    public KademliaMessage sendMessageWithResponse(KademliaMessage message)
-            throws ConnectException, TimeoutException, InterruptedException, Exception {
-        // 默认超时时间5秒，也可以提供重载方法让用户指定超时
-        return sendMessageWithResponse((RpcRequestMessage)message, 5, TimeUnit.SECONDS);
-    }
-
-    /**
-     * 重载方法：允许用户指定超时时间
-     */
-    public KademliaMessage sendMessageWithResponse(RpcRequestMessage message, long timeout, TimeUnit unit)
-            throws ConnectException, TimeoutException, InterruptedException, Exception {
-        if (message == null || message.getReceiver() == null) {
-            throw new IllegalArgumentException("消息或接收者不能为空");
-        }
-        //请求ID已经在消息创建阶段设置
-        BigInteger nodeId = message.getReceiver().getId();
-        Channel channel = getOrCreateChannel(message.getReceiver());
-        if (channel == null || !channel.isActive()) {
-            throw new ConnectException("节点 " + nodeId + " 无可用连接");
-        }
-        // 获取通道对应的请求响应管理器（内部使用Promise）
-        RequestResponseManager responseManager = channelToResponseManager.computeIfAbsent(
-                channel, k -> new RequestResponseManager(channel)
-        );
-        // 标记为请求消息（非响应）
-        message.setResponse(false);
-        // 发送请求并获取Promise（内部异步处理）
-        Promise<KademliaMessage> promise = responseManager.sendRequest(channel, message, timeout, unit);
-        try {
-            // 阻塞等待结果（核心：将异步转为同步，对外屏蔽Promise）
-            // 这里使用await()而非get()，避免检查异常包装
-            if (!promise.await(timeout, unit)) {
-                // 超时：主动取消并抛出超时异常
-                promise.cancel(false);
-                throw new TimeoutException("等待节点 " + nodeId + " 响应超时（" + timeout + unit + "）");
-            }
-            // 检查结果状态
-            if (promise.isSuccess()) {
-                // 成功：直接返回响应结果（用户拿到的就是最终数据）
-                return promise.getNow();
-            } else {
-                // 失败：抛出具体异常（如连接断开、消息处理失败等）
-                Throwable cause = promise.cause();
-                if (cause instanceof Exception) {
-                    throw (Exception) cause;
-                } else {
-                    throw new Exception("发送消息失败：" + cause.getMessage(), cause);
-                }
-            }
-        } finally {
-            // 清理：如果消息处理完成，从管理器中移除（避免内存泄漏）
-            if (promise.isDone()) {
-                responseManager.clearRequest(message.getMessageId());
-            }
-        }
-    }
-
-
-
-
 
 
 
@@ -276,9 +198,6 @@ public class TCPClient {
         log.info("Trying to connect to {}:{} (node {})", ipv4, tcpPort, nodeId);
         ChannelFuture connectFuture = bootstrap.connect(address);
 
-
-
-
         Integer connectTimeout = (Integer) bootstrap.config().options().get(ChannelOption.CONNECT_TIMEOUT_MILLIS);
         int timeoutMillis = (connectTimeout != null) ? connectTimeout : DEFAULT_CONNECT_TIMEOUT;
         // 等待连接完成，受CONNECT_TIMEOUT_MILLIS限制
@@ -294,15 +213,7 @@ public class TCPClient {
         Channel channel = connectFuture.channel();
         // 存储节点ID与通道的关联，用于后续清理
         channel.attr(NODE_ID_KEY).set(nodeId);
-
-        // 关键：主动连接成功后，立即初始化RequestResponseManager
-        channelToResponseManager.computeIfAbsent(
-                channel,
-                k -> new RequestResponseManager(channel)
-        );
-        log.info("成功连接到节点[{}]，已初始化RequestResponseManager", nodeId);
-
-        log.info("Successfully connected to {}:{} (node {})", ipv4, tcpPort, nodeId);
+        log.info("成功连接到节点 Successfully connected to {}:{} (node {})", ipv4, tcpPort, nodeId);
         // 非阻塞监听通道关闭事件
         channel.closeFuture().addListener(future -> {
             log.info("Channel to node {} closed", nodeId);
@@ -360,14 +271,12 @@ public class TCPClient {
     }
 
 
-    public Map<Channel, RequestResponseManager> getChannelToResponseManager() {
-        return channelToResponseManager;
-    }
-
-
     public NioEventLoopGroup getEventLoopGroup() {
         return eventLoopGroup;
     }
 
 
+    public RequestResponseManager getResponseManager() {
+        return responseManager;
+    }
 }
