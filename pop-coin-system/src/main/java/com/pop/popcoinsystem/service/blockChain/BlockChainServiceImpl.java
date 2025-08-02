@@ -23,7 +23,7 @@ import com.pop.popcoinsystem.data.transaction.dto.WitnessDTO;
 import com.pop.popcoinsystem.data.vo.result.TPageResult;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.data.vo.result.ListPageResult;
-import com.pop.popcoinsystem.network.KademliaNodeServer;
+import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.network.protocol.message.BlockMessage;
 import com.pop.popcoinsystem.network.protocol.message.TransactionMessage;
 import com.pop.popcoinsystem.util.*;

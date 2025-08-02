@@ -1,4 +1,4 @@
-package com.pop.popcoinsystem.network.service;
+package com.pop.popcoinsystem.network.rpc;
 
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import io.netty.channel.Channel;

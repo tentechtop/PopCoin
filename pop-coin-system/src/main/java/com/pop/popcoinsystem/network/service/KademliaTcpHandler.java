@@ -1,21 +1,15 @@
-package com.pop.popcoinsystem.network;
+package com.pop.popcoinsystem.network.service;
 
-import com.pop.popcoinsystem.network.common.NodeInfo;
-import com.pop.popcoinsystem.network.protocol.MessageType;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.messageHandler.MessageHandler;
-import com.pop.popcoinsystem.network.service.RequestResponseManager;
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
+import com.pop.popcoinsystem.network.rpc.RequestResponseManager;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.Serializable;
 
-import static com.pop.popcoinsystem.network.KademliaNodeServer.KademliaMessageHandler;
-import static com.pop.popcoinsystem.network.KademliaNodeServer.MESSAGE_EXPIRATION_TIME;
+import static com.pop.popcoinsystem.network.service.KademliaNodeServer.KademliaMessageHandler;
 
 @Slf4j
 public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMessage> {

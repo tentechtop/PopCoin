@@ -1,5 +1,6 @@
-package com.pop.popcoinsystem.network;
+package com.pop.popcoinsystem.network.rpc;
 
+import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.RpcRequestMessage;

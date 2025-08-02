@@ -1,4 +1,4 @@
-package com.pop.popcoinsystem.network;
+package com.pop.popcoinsystem.network.service;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -16,7 +16,7 @@ import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
 import com.pop.popcoinsystem.network.protocol.messageHandler.*;
 import com.pop.popcoinsystem.event.DisruptorManager;
-import com.pop.popcoinsystem.network.service.RpcServiceRegistry;
+import com.pop.popcoinsystem.network.rpc.RpcServiceRegistry;
 import com.pop.popcoinsystem.service.blockChain.BlockChainServiceImpl;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;

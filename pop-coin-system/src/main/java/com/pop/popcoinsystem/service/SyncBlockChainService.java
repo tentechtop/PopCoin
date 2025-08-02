@@ -1,15 +1,14 @@
 package com.pop.popcoinsystem.service;
 
 import com.pop.popcoinsystem.data.vo.result.Result;
-import com.pop.popcoinsystem.network.KademliaNodeServer;
-import com.pop.popcoinsystem.network.RpcProxyFactory;
+import com.pop.popcoinsystem.network.service.KademliaNodeServer;
+import com.pop.popcoinsystem.network.rpc.RpcProxyFactory;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.FindNodeResult;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.common.RoutingTable;
 import com.pop.popcoinsystem.network.protocol.message.FindNodeResponseMessage;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
-import com.pop.popcoinsystem.network.protocol.message.RpcRequestMessage;
 import com.pop.popcoinsystem.network.protocol.messageData.RpcRequestData;
 import com.pop.popcoinsystem.service.transaction.TransactionService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,7 +16,6 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.math.BigInteger;
-import java.net.ConnectException;
 import java.util.List;
 
 @Service

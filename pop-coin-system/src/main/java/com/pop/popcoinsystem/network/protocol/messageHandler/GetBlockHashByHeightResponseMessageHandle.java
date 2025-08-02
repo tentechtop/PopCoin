@@ -1,8 +1,7 @@
 package com.pop.popcoinsystem.network.protocol.messageHandler;
 
-import com.pop.popcoinsystem.network.KademliaNodeServer;
+import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.network.common.NodeInfo;
-import com.pop.popcoinsystem.network.protocol.message.GetBlockHashByHeightRequestMessage;
 import com.pop.popcoinsystem.network.protocol.message.GetBlockHashByHeightResponseMessage;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import lombok.extern.slf4j.Slf4j;

@@ -1,6 +1,6 @@
 package com.pop.popcoinsystem.network.protocol;
 
-import com.pop.popcoinsystem.network.service.RpcServiceRegistry;
+import com.pop.popcoinsystem.network.rpc.RpcServiceRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 

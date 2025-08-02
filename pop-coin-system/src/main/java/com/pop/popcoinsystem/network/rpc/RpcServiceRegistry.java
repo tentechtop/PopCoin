@@ -1,4 +1,4 @@
-package com.pop.popcoinsystem.network.service;
+package com.pop.popcoinsystem.network.rpc;
 
 
 import com.pop.popcoinsystem.aop.annotation.RpcServiceAlias;

@@ -2,7 +2,7 @@ package com.pop.popcoinsystem.aop;
 
 import com.pop.popcoinsystem.aop.annotation.RpcService;
 import com.pop.popcoinsystem.aop.annotation.RpcServiceAlias;
-import com.pop.popcoinsystem.network.service.RpcServiceRegistry;
+import com.pop.popcoinsystem.network.rpc.RpcServiceRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Autowired;

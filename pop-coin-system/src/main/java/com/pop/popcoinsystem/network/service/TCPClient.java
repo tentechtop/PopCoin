@@ -1,22 +1,17 @@
-package com.pop.popcoinsystem.network;
+package com.pop.popcoinsystem.network.service;
 
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
-import com.pop.popcoinsystem.network.protocol.message.RpcRequestMessage;
-import com.pop.popcoinsystem.network.service.RequestResponseManager;
+import com.pop.popcoinsystem.network.rpc.RequestResponseManager;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
-import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.util.AttributeKey;
-import io.netty.util.concurrent.DefaultPromise;
 import io.netty.util.concurrent.Promise;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.IOException;
 import java.math.BigInteger;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;

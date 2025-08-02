@@ -1,36 +1,12 @@
 package com.pop.popcoinsystem;
 
-import com.pop.popcoinsystem.network.KademliaNodeServer;
-import com.pop.popcoinsystem.network.KademliaUdpHandler;
-import com.pop.popcoinsystem.network.UDPClient;
-import com.pop.popcoinsystem.network.common.Bucket;
-import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
+import com.pop.popcoinsystem.network.service.KademliaNodeServer;
+import com.pop.popcoinsystem.network.service.UDPClient;
 import com.pop.popcoinsystem.network.common.NodeInfo;
-import com.pop.popcoinsystem.network.common.RoutingTable;
-import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
-import com.pop.popcoinsystem.util.SerializeUtils;
-import io.netty.bootstrap.Bootstrap;
-import io.netty.bootstrap.ServerBootstrap;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import io.netty.channel.*;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.DatagramPacket;
-import io.netty.channel.socket.SocketChannel;
-import io.netty.channel.socket.nio.NioDatagramChannel;
-import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
-import io.netty.handler.codec.LengthFieldPrepender;
-import io.netty.util.CharsetUtil;
 import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigInteger;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.UUID;
 
 import static java.lang.Thread.sleep;
 

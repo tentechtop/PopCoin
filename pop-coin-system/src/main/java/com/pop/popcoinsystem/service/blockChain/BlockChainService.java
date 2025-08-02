@@ -5,7 +5,6 @@ import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.blockChain.BlockChain;
 import com.pop.popcoinsystem.data.enums.SigHashType;
-import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.data.transaction.UTXO;
 import com.pop.popcoinsystem.data.transaction.UTXOSearch;
 import com.pop.popcoinsystem.data.transaction.Transaction;
@@ -13,7 +12,7 @@ import com.pop.popcoinsystem.data.transaction.dto.TransactionDTO;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.data.vo.result.ListPageResult;
 import com.pop.popcoinsystem.data.vo.result.TPageResult;
-import com.pop.popcoinsystem.network.KademliaNodeServer;
+import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 
 import java.net.ConnectException;
