@@ -153,7 +153,7 @@ public class KademliaNodeServer {
 
         //初始化UDP客户端
         this.udpClient = new UDPClient();
-        this.tcpClient = new TCPClient(this);
+        this.tcpClient = new TCPClient();
     }
     public void registerMessageHandler(int type, MessageHandler messageHandler) {
         KademliaMessageHandler.put(type, messageHandler);

@@ -1,13 +1,9 @@
 package com.pop.popcoinsystem.network.protocol.message;
 
-import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.protocol.MessageType;
-import com.pop.popcoinsystem.network.protocol.message.content.Handshake;
+import com.pop.popcoinsystem.network.protocol.messageData.Handshake;
 import com.pop.popcoinsystem.util.SerializeUtils;
-import lombok.Builder;
 import lombok.ToString;
-
-import java.math.BigInteger;
 
 
 @ToString(callSuper = true)

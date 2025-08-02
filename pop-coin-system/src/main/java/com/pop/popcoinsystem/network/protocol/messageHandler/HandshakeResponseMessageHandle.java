@@ -3,14 +3,12 @@ package com.pop.popcoinsystem.network.protocol.messageHandler;
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.exception.UnsupportedChainException;
 import com.pop.popcoinsystem.network.KademliaNodeServer;
-import com.pop.popcoinsystem.network.common.Bucket;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeInfo;
-import com.pop.popcoinsystem.network.common.RoutingTable;
 import com.pop.popcoinsystem.exception.FullBucketException;
 import com.pop.popcoinsystem.network.protocol.message.*;
-import com.pop.popcoinsystem.network.protocol.message.content.Handshake;
-import com.pop.popcoinsystem.network.protocol.message.content.HeadersRequestParam;
+import com.pop.popcoinsystem.network.protocol.messageData.Handshake;
+import com.pop.popcoinsystem.network.protocol.messageData.HeadersRequestParam;
 import com.pop.popcoinsystem.service.BlockChainService;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
@@ -18,13 +16,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.Serializable;
-import java.math.BigInteger;
 import java.net.ConnectException;
 import java.util.Arrays;
-import java.util.Date;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 import static com.pop.popcoinsystem.constant.BlockChainConstants.GENESIS_BLOCK_HASH_HEX;
 

@@ -1,4 +1,4 @@
-package com.pop.popcoinsystem.network.protocol.message.content;
+package com.pop.popcoinsystem.network.protocol.messageData;
 
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import lombok.Data;

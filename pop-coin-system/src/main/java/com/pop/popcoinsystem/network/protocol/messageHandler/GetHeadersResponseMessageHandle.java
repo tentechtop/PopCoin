@@ -1,17 +1,14 @@
 package com.pop.popcoinsystem.network.protocol.messageHandler;
 
 import com.pop.popcoinsystem.data.block.Block;
-import com.pop.popcoinsystem.data.block.BlockHeader;
 import com.pop.popcoinsystem.exception.FullBucketException;
 import com.pop.popcoinsystem.exception.UnsupportedChainException;
 import com.pop.popcoinsystem.network.KademliaNodeServer;
-import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.*;
-import com.pop.popcoinsystem.network.protocol.message.content.BlockHeadersRes;
-import com.pop.popcoinsystem.network.protocol.message.content.HeadersRequestParam;
+import com.pop.popcoinsystem.network.protocol.messageData.BlockHeadersRes;
+import com.pop.popcoinsystem.network.protocol.messageData.HeadersRequestParam;
 import com.pop.popcoinsystem.service.BlockChainService;
-import com.pop.popcoinsystem.util.BeanCopyUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 

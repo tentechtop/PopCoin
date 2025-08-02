@@ -71,6 +71,8 @@ public enum MessageType {
     GET_BLOCK_BY_HEIGHT_RES(71, "根据区块高度查询区块响应"),
 
 
+    RPC_REQUEST(80, "RPC请求"),
+    RPC_RESPONSE(81, "RPC响应"),
 
 
     ;

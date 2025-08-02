@@ -1,9 +1,7 @@
 package com.pop.popcoinsystem.network.protocol.message;
 
 import com.pop.popcoinsystem.network.protocol.MessageType;
-import com.pop.popcoinsystem.network.protocol.message.content.BlockHeadersRes;
-import com.pop.popcoinsystem.network.protocol.message.content.Handshake;
-import com.pop.popcoinsystem.network.protocol.message.content.HeadersRequestParam;
+import com.pop.popcoinsystem.network.protocol.messageData.BlockHeadersRes;
 import lombok.ToString;
 
 @ToString(callSuper = true)

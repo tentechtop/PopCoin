@@ -3,14 +3,12 @@ package com.pop.popcoinsystem.network.protocol.message;
 import com.google.common.base.Objects;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.util.SerializeUtils;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 
 import java.io.Serializable;
 import java.util.Random;
-import java.util.UUID;
 
 @Getter
 @Setter
@@ -28,7 +26,7 @@ public abstract class KademliaMessage<D extends Serializable> {
     /**
      * 构造消息
      */
-    public KademliaMessage(int type, NodeInfo sender, NodeInfo receiver, D data) {
+    public KademliaMessage(int type, D data) {
         this.messageId = generateMessageId();
         this.type = type;
         this.sender = sender;

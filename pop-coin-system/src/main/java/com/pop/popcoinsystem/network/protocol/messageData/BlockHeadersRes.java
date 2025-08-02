@@ -1,7 +1,6 @@
-package com.pop.popcoinsystem.network.protocol.message.content;
+package com.pop.popcoinsystem.network.protocol.messageData;
 
 import com.pop.popcoinsystem.data.block.Block;
-import com.pop.popcoinsystem.data.block.BlockHeader;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
