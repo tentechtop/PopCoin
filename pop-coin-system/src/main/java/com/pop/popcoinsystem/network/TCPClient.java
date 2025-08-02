@@ -8,6 +8,8 @@ import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.DefaultPromise;
 import io.netty.util.concurrent.Promise;
@@ -58,6 +60,14 @@ public class TCPClient {
                     protected void initChannel(NioSocketChannel ch) throws Exception {
                         ChannelPipeline pipeline = ch.pipeline();
                         // 使用独立的编解码器，解除与服务器实现的耦合
+                        pipeline.addLast(new LengthFieldBasedFrameDecoder(
+                                10 * 1024 * 1024,  // 最大帧长度
+                                8,                 // 长度字段偏移量（跳过类型4字节 + 版本4字节）
+                                4,                 // 长度字段长度（内容长度字段，4字节）
+                                0,                 // 长度调整值（总长度 = 内容长度 + 12字节头部）
+                                0                  // 不跳过字节
+                        ));
+                        pipeline.addLast(new LengthFieldPrepender(4));
                         pipeline.addLast(new KademliaNodeServer.TCPKademliaMessageDecoder());
                         pipeline.addLast(new KademliaNodeServer.TCPKademliaMessageEncoder());
                     }

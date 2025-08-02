@@ -58,9 +58,16 @@ public class UDPClient {
                     @Override
                     protected void initChannel(NioDatagramChannel ch) throws Exception {
                         ChannelPipeline pipeline = ch.pipeline();
-                        // 复用与服务器一致的UDP编解码器（确保协议兼容）
-                        pipeline.addLast(new KademliaNodeServer.UDPKademliaMessageEncoder());
-                        pipeline.addLast(new KademliaNodeServer.UDPKademliaMessageDecoder());
+                        pipeline.addLast(new LengthFieldBasedFrameDecoder(
+                                10 * 1024 * 1024,  // 最大帧长度
+                                8,                 // 长度字段偏移量（跳过类型4字节 + 版本4字节）
+                                4,                 // 长度字段长度（内容长度字段，4字节）
+                                0,                 // 长度调整值（总长度 = 内容长度 + 12字节头部）
+                                0                  // 不跳过字节
+                        ));
+                        pipeline.addLast(new LengthFieldPrepender(4));
+                        pipeline.addLast(new KademliaNodeServer.TCPKademliaMessageDecoder());
+                        pipeline.addLast(new KademliaNodeServer.TCPKademliaMessageEncoder());
                     }
                 });
     }
