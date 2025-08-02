@@ -45,12 +45,12 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
             //单播消息
             long requestId = message.getRequestId();
             if (message.isResponse()){
-                log.info("响应消息ID {}", requestId);
+                log.debug("响应消息ID {}", requestId);
                 // 2.1 响应消息：交给RequestResponseManager处理，完成客户端的Promise
-                log.info("响应内容 {}", message.getData());
+                log.debug("响应内容 {}", message.getData());
                 handleResponseMessage(ctx, message);
             }else {
-                log.info("收到请求消息，requestId: {}", requestId);
+                log.debug("收到请求消息，requestId: {}", requestId);
                 // 处理请求消息并生成响应
                 handleRequestMessage(ctx, message);
             }

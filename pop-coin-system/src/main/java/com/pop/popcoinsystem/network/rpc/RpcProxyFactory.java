@@ -30,13 +30,16 @@ public class RpcProxyFactory {
 
     public RpcProxyFactory(KademliaNodeServer server) {
         this.kademliaNodeServer = server;
-        if (targetNode == null){
-            RoutingTable routingTable = server.getRoutingTable();
-            //TODO 未来实现查找全节点
-            List<ExternalNodeInfo> closest = routingTable.findClosest(server.getNodeInfo().getId());
-            ExternalNodeInfo externalNodeInfo = closest.get(0);
-            this.targetNode = BeanCopyUtils.copyObject(externalNodeInfo, NodeInfo.class);
+        RoutingTable routingTable = server.getRoutingTable();
+        //TODO 未来实现查找全节点
+        List<ExternalNodeInfo> closest = routingTable.findClosest(server.getNodeInfo().getId());
+        //去除自己
+        closest.removeIf(node -> node.getId().equals(server.getNodeInfo().getId()));
+        if (closest.isEmpty()){
+            throw new RuntimeException("没有可用的节点");
         }
+        ExternalNodeInfo externalNodeInfo = closest.get(0);
+        this.targetNode = BeanCopyUtils.copyObject(externalNodeInfo, NodeInfo.class);
     }
 
     @SuppressWarnings("unchecked")

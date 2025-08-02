@@ -10,6 +10,7 @@ import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.FindForkPointRequestMessage;
 import com.pop.popcoinsystem.network.protocol.message.GetHeadersRequestMessage;
 import com.pop.popcoinsystem.network.protocol.messageData.HeadersRequestParam;
+import com.pop.popcoinsystem.network.rpc.RpcProxyFactory;
 import com.pop.popcoinsystem.service.mining.Mining;
 import com.pop.popcoinsystem.service.blockChain.strategy.ScriptVerificationStrategy;
 import com.pop.popcoinsystem.service.blockChain.strategy.ScriptVerifierFactory;
@@ -1340,6 +1341,9 @@ public class BlockChainServiceImpl implements BlockChainService {
         return Result.OK(blockDTOS);
     }
 
+
+
+
     public List<Block> getBlockByStartHashAndEndHash(byte[] start, byte[] end) {
         return popStorage.getBlockByStartHashAndEndHash(start, end);
     }
@@ -1456,20 +1460,29 @@ public class BlockChainServiceImpl implements BlockChainService {
         }
     }
 
+    @Override
+    public byte[] findForkPoint(List<byte[]> remoteHashes) {
+        // 遍历远程提供的哈希（按从新到旧顺序），返回第一个在本地链中存在的哈希
+        for (byte[] hash : remoteHashes) {
+            if (getBlockByHash(hash) != null) {
+                return hash; // 找到最后一个共同区块
+            }
+        }
+        return null; // 无共同区块
+    }
+
     /**
      * 发送区块头请求
      */
     private void sendHeadersRequest(KademliaNodeServer nodeServer, NodeInfo remoteNode, byte[] startHash, byte[] endHash)
             throws ConnectException, InterruptedException {
         log.info("发送区块头请求");
-
-        GetHeadersRequestMessage headersRequest = new GetHeadersRequestMessage();
-        headersRequest.setSender(nodeServer.getNodeInfo());
-        headersRequest.setReceiver(remoteNode);
-        headersRequest.setData(new HeadersRequestParam(startHash, endHash));
+        RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer);
+        BlockChainService blockChainService = proxyFactory.createProxy(BlockChainService.class);
+        Result blockByRange = blockChainService.getBlockByRange(1, 102);
 
 
-        //nodeServer.getTcpClient().sendMessage(headersRequest);
+
     }
 
     /**

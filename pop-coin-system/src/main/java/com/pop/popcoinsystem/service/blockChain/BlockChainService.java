@@ -177,4 +177,6 @@ public interface BlockChainService {
                         long localHeight, byte[] localHash, byte[] localWork,
                         long remoteHeight, byte[] remoteHash, byte[] remoteWork)
             throws ConnectException, InterruptedException;
+
+    byte[] findForkPoint(List<byte[]> localHashes);
 }

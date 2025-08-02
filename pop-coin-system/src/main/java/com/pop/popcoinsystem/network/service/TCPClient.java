@@ -95,7 +95,7 @@ public class TCPClient {
             if (!promise.await(timeout, unit)) {
                 // 超时：主动取消并抛出超时异常
                 promise.cancel(false);
-                throw new TimeoutException("等待节点 " + nodeId + " 响应超时（" + timeout + unit + "）");
+                throw new TimeoutException("等待节点 " + nodeId + " 响应超时（" + timeout +" "+ unit + "）");
             }
             // 检查结果状态
             if (promise.isSuccess()) {
