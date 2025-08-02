@@ -1,4 +1,4 @@
-package com.pop.popcoinsystem.service;
+package com.pop.popcoinsystem.service.impl;
 
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockDTO;
@@ -10,6 +10,7 @@ import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.FindForkPointRequestMessage;
 import com.pop.popcoinsystem.network.protocol.message.GetHeadersRequestMessage;
 import com.pop.popcoinsystem.network.protocol.messageData.HeadersRequestParam;
+import com.pop.popcoinsystem.service.Mining;
 import com.pop.popcoinsystem.service.strategy.ScriptVerificationStrategy;
 import com.pop.popcoinsystem.service.strategy.ScriptVerifierFactory;
 import com.pop.popcoinsystem.storage.StorageService;

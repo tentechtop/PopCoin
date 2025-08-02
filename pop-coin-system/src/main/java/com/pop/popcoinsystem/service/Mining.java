@@ -2,6 +2,7 @@ package com.pop.popcoinsystem.service;
 
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.miner.Miner;
+import com.pop.popcoinsystem.service.impl.BlockChainServiceImpl;
 import com.pop.popcoinsystem.storage.StorageService;
 import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.data.vo.result.Result;

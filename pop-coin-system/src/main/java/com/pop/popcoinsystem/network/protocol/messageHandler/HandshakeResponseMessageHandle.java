@@ -8,7 +8,7 @@ import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.exception.FullBucketException;
 import com.pop.popcoinsystem.network.protocol.message.*;
 import com.pop.popcoinsystem.network.protocol.messageData.Handshake;
-import com.pop.popcoinsystem.service.BlockChainServiceImpl;
+import com.pop.popcoinsystem.service.impl.BlockChainServiceImpl;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
@@ -73,7 +73,7 @@ public class HandshakeResponseMessageHandle implements MessageHandler{
         );
 
         //再发送查找节点的请求
-        log.info("收到响应后再发送查找节点的请求");
+        log.debug("收到响应后再发送查找节点的请求");
         FindNodeRequestMessage findNodeRequestMessage = new FindNodeRequestMessage();
         findNodeRequestMessage.setSender(kademliaNodeServer.getNodeInfo());
         findNodeRequestMessage.setReceiver(sender);

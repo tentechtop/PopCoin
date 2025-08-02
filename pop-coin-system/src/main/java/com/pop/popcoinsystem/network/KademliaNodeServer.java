@@ -17,7 +17,7 @@ import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
 import com.pop.popcoinsystem.network.protocol.messageHandler.*;
 import com.pop.popcoinsystem.event.DisruptorManager;
 import com.pop.popcoinsystem.network.service.RpcServiceRegistry;
-import com.pop.popcoinsystem.service.BlockChainServiceImpl;
+import com.pop.popcoinsystem.service.impl.BlockChainServiceImpl;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import io.netty.bootstrap.Bootstrap;
@@ -487,9 +487,6 @@ public class KademliaNodeServer {
 
 
 
-
-
-
     public static class UDPKademliaMessageEncoder extends MessageToMessageEncoder<KademliaMessage<?>> {
         @Override
         protected void encode(ChannelHandlerContext channelHandlerContext, KademliaMessage<?> kademliaMessage, List<Object> list) throws Exception {
@@ -608,7 +605,7 @@ public class KademliaNodeServer {
             }
             // 读取内容长度
             int contentLength = byteBuf.readInt();
-            log.info("内容长度:{}", contentLength);
+            log.debug("内容长度:{}", contentLength);
             // 检查是否有足够的数据读取完整的消息内容
             if (byteBuf.readableBytes() < contentLength) {
                 byteBuf.resetReaderIndex();

@@ -6,7 +6,7 @@ import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.GetBlockHashByHeightRequestMessage;
 import com.pop.popcoinsystem.network.protocol.message.GetBlockHashByHeightResponseMessage;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
-import com.pop.popcoinsystem.service.BlockChainServiceImpl;
+import com.pop.popcoinsystem.service.impl.BlockChainServiceImpl;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 
