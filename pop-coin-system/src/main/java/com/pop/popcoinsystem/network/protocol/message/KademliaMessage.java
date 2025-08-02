@@ -25,6 +25,8 @@ public abstract class KademliaMessage<D extends Serializable> {
     private long timestamp = System.currentTimeMillis(); // 时间戳 发送时间
     private D data;//消息数据
 
+
+
     private boolean isResponse = false; // 标记是否为响应消息
     /**
      * 构造消息

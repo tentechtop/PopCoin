@@ -1,5 +1,6 @@
 package com.pop.popcoinsystem.network;
 
+import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.MessageType;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.messageHandler.MessageHandler;
@@ -21,6 +22,9 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
 
 
     public KademliaTcpHandler(KademliaNodeServer nodeServer) {
+        if (nodeServer == null) {
+            throw new NullPointerException("传入的KademliaNodeServer为null！请检查是否正确传入实例");
+        }
         this.nodeServer = nodeServer;
     }
 
@@ -29,6 +33,8 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
     @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, KademliaMessage message) throws Exception {
         long messageId = message.getMessageId();
+        log.info("TCP接收 {}", nodeServer.getNodeInfo());
+
         if (nodeServer.getBroadcastMessages().getIfPresent(messageId) != null) {
             log.info("TCP接收已处理的消息 {}，丢弃", messageId);
             return;

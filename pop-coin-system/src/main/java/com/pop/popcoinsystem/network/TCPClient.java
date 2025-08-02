@@ -31,8 +31,6 @@ import java.util.concurrent.*;
 @Slf4j
 public class TCPClient {
 
-    @Autowired
-    private KademliaNodeServer kademliaNodeServer;
 
     private final ExecutorService executorService;
     private Bootstrap bootstrap;
@@ -65,7 +63,6 @@ public class TCPClient {
                         // 使用独立的编解码器，解除与服务器实现的耦合
                         pipeline.addLast(new KademliaNodeServer.TCPKademliaMessageDecoder());
                         pipeline.addLast(new KademliaNodeServer.TCPKademliaMessageEncoder());
-                        pipeline.addLast(new KademliaTcpHandler(kademliaNodeServer));
                     }
                 });
     }
