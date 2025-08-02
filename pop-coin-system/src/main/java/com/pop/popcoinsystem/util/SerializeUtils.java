@@ -15,6 +15,8 @@ import com.pop.popcoinsystem.data.script.ScriptSig;
 import com.pop.popcoinsystem.data.transaction.UTXO;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.*;
+import com.pop.popcoinsystem.network.protocol.messageData.Handshake;
+import com.pop.popcoinsystem.network.protocol.messageData.HeadersRequestParam;
 
 import java.math.BigInteger;
 import java.security.PrivateKey;
@@ -53,6 +55,10 @@ public class SerializeUtils {
 
         kryo.register(RpcRequestMessage.class);
         kryo.register(RpcResponseMessage.class);
+
+        kryo.register(HeadersRequestParam.class);
+
+        kryo.register(Handshake.class);
 
         kryo.register(List.class);
 

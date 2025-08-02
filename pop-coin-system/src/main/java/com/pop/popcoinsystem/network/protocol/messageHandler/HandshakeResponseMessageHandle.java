@@ -76,6 +76,7 @@ public class HandshakeResponseMessageHandle implements MessageHandler{
         );
 
         //再发送查找节点的请求
+        log.info("收到响应后再发送查找节点的请求");
         FindNodeRequestMessage findNodeRequestMessage = new FindNodeRequestMessage();
         findNodeRequestMessage.setSender(kademliaNodeServer.getNodeInfo());
         findNodeRequestMessage.setReceiver(sender);
