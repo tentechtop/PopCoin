@@ -146,6 +146,7 @@ public class KademliaNodeServer {
         this.registerMessageHandler(MessageType.PONG.getCode(), new PongMessageHandler());
         this.registerMessageHandler(MessageType.FIND_NODE_REQ.getCode(), new FindNodeRequestMessageHandler());
         this.registerMessageHandler(MessageType.FIND_NODE_RES.getCode(), new FindNodeResponseMessageHandler());
+
         this.registerMessageHandler(MessageType.HANDSHAKE_RES.getCode(), new HandshakeResponseMessageHandle());
         this.registerMessageHandler(MessageType.HANDSHAKE_REQ.getCode(), new HandshakeRequestMessageHandle());
         this.registerMessageHandler(MessageType.TRANSACTION.getCode(), new TransactionMessageHandler());

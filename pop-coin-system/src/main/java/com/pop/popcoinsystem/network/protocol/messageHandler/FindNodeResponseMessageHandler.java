@@ -26,9 +26,8 @@ import java.util.concurrent.TimeUnit;
 public class FindNodeResponseMessageHandler implements MessageHandler{
 
     @Override
-    public KademliaMessage<? extends Serializable> handleMesage(KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) {
-
-        return null;
+    public KademliaMessage<? extends Serializable> handleMesage(KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) throws FullBucketException, InterruptedException, ConnectException {
+        return doHandle(kademliaNodeServer, (FindNodeResponseMessage) message);
     }
 
     protected FindNodeResponseMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull FindNodeResponseMessage message) throws InterruptedException, ConnectException, FullBucketException {
