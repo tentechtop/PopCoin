@@ -39,6 +39,9 @@ public class RpcRequestMessageHandler implements MessageHandler {
             Class<?>[] paramTypes = rpcRequest.getParamTypes();
             Object[] parameters = rpcRequest.getParameters();
 
+            log.info("RPC调用开始 -> 请求ID: {}, 服务: {}, 方法: {}", requestId, serviceName, methodName);
+
+
             // 验证必要参数
             if (serviceName == null || methodName == null) {
                 throw new IllegalArgumentException("服务名和方法名不能为空");
