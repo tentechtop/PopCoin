@@ -13,6 +13,7 @@ import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
 import com.pop.popcoinsystem.network.protocol.messageHandler.*;
 import com.pop.popcoinsystem.event.DisruptorManager;
+import com.pop.popcoinsystem.network.service.RpcServiceRegistry;
 import com.pop.popcoinsystem.service.BlockChainService;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import io.netty.bootstrap.Bootstrap;
@@ -55,6 +56,10 @@ import com.google.common.collect.EvictingQueue;
 public class KademliaNodeServer {
     //节点信息
     private NodeInfo nodeInfo;
+
+    @Autowired
+    private RpcServiceRegistry rpcServiceRegistry;
+
 
     @Lazy
     @Autowired

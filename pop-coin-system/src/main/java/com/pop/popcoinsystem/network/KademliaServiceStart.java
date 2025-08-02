@@ -5,6 +5,9 @@ import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.common.NodeSettings;
 import com.pop.popcoinsystem.network.enums.NodeType;
+import com.pop.popcoinsystem.network.service.RpcServiceRegistry;
+import com.pop.popcoinsystem.service.transaction.TransactionService;
+import com.pop.popcoinsystem.service.transaction.TransactionServiceImpl;
 import com.pop.popcoinsystem.storage.StorageService;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
@@ -14,6 +17,7 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -96,6 +100,17 @@ public class KademliaServiceStart {
         return server;
     }
 
+
+
+    // 注册RPC服务
+    @Bean
+    public CommandLineRunner registerRpcService(RpcServiceRegistry registry) {
+        return args -> {
+            // 注册TransactionService接口及其实现类
+            registry.registerService(TransactionService.class, new TransactionServiceImpl());
+            log.info("TransactionService 已注册到RPC服务");
+        };
+    }
 
     // 添加@PostConstruct，在容器初始化后自动执行
     @PostConstruct

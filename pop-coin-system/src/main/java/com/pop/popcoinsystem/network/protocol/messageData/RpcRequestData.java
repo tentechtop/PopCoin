@@ -14,7 +14,8 @@ public class RpcRequestData implements Serializable {
     private String methodName;        // 方法名
     private Class<?>[] paramTypes;    // 参数类型（Class<?> 本身可序列化）
     private Object[] parameters;      // 参数值（需确保参数对象可序列化）
-    private String requestId;         // 请求唯一标识
+    private long requestId;         // 请求唯一标识
 
+    private Exception exception;      // 异常信息（Exception 实现了 Serializable）
 
 }

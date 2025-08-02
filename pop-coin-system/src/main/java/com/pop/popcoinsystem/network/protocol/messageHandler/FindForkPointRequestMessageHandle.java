@@ -36,7 +36,7 @@ public class FindForkPointRequestMessageHandle implements MessageHandler{
         return null;
     }
 
-    private Block findForkPoint(KademliaNodeServer kademliaNodeServer,FindForkPointRequestMessage message,BlockChainService chainService, byte[] startHash, byte[] endHash, NodeInfo remoteNode, KademliaNodeServer server) throws InterruptedException, ConnectException, ExecutionException {
+    private Block findForkPoint(KademliaNodeServer kademliaNodeServer,FindForkPointRequestMessage message,BlockChainService chainService, byte[] startHash, byte[] endHash, NodeInfo remoteNode, KademliaNodeServer server) throws Exception {
         NodeInfo me = kademliaNodeServer.getNodeInfo();
         NodeInfo sender = message.getSender();
 
@@ -56,15 +56,15 @@ public class FindForkPointRequestMessageHandle implements MessageHandler{
                 continue;
             }
             // 向远程节点查询该高度的区块哈希，判断是否相同
+            log.info("向节点{}查询高度{}的区块哈希", sender, mid);
             GetBlockHashByHeightRequestMessage request = new GetBlockHashByHeightRequestMessage(mid);
             request.setSender(me);
             request.setReceiver(sender);
             request.setResponse(true);
             GetBlockHashByHeightResponseMessageHandle response = null;
-            Promise<KademliaMessage> kademliaMessagePromise = server.getTcpClient().sendMessageWithResponse(request);
-            KademliaMessage kademliaMessage = kademliaMessagePromise.get();
+            KademliaMessage kademliaMessage = server.getTcpClient().sendMessageWithResponse(request);
 
-            log.info("向节点{}查询高度{}的区块哈希", sender, mid);
+
 
 /*            if (response != null && Arrays.equals(response.getBlockHash(), midHash)) {
                 // 中间区块相同，向更高处查找

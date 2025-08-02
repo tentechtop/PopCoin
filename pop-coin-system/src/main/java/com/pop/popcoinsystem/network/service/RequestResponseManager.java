@@ -17,8 +17,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class RequestResponseManager {
     // 存储等待响应的请求：messageId -> 上下文（包含Promise和超时任务）
     private final ConcurrentHashMap<Long, RequestContext> pendingRequests = new ConcurrentHashMap<>();
-    // 用于生成唯一messageId（原子递增，确保唯一性）
-    private final AtomicLong messageIdGenerator = new AtomicLong(0);
+
     // 通道的EventLoop（用于执行超时任务）
     private final EventLoop eventLoop;
 
@@ -36,8 +35,9 @@ public class RequestResponseManager {
      */
     public Promise<KademliaMessage> sendRequest(Channel channel, KademliaMessage message, long timeout, TimeUnit unit) {
         // 1. 生成唯一messageId（覆盖消息原有ID，确保全局唯一）
-        long messageId = messageIdGenerator.incrementAndGet();
-        message.setMessageId(messageId);
+        //long messageId = messageIdGenerator.incrementAndGet();
+        //message.setMessageId(messageId);
+        long messageId = message.getMessageId();
         message.setResponse(true); // 标记为请求
 
         // 2. 创建Promise（绑定到通道的EventLoop，确保线程安全）
@@ -101,6 +101,72 @@ public class RequestResponseManager {
         });
         pendingRequests.clear();
     }
+
+    /**
+     * 手动清理已处理的请求（避免内存泄漏）
+     */
+    public void clearRequest(long messageId) {
+        RequestContext context = pendingRequests.remove(messageId);
+        if (context != null) {
+            context.timeoutFuture.cancel(false); // 取消超时任务
+        }
+    }
+
+    /**
+     * 注册请求与Promise的关联，并设置超时机制
+     * @param messageId 消息唯一标识
+     * @param promise 用于接收响应结果的Promise
+     */
+    public void registerRequest(long messageId, Promise<KademliaMessage> promise) {
+        // 默认超时时间5秒，也可改为接收超时参数的重载方法
+        registerRequest(messageId, promise, 5, TimeUnit.SECONDS);
+    }
+
+    /**
+     * 重载方法：支持自定义超时时间
+     * @param messageId 消息唯一标识
+     * @param promise 用于接收响应结果的Promise
+     * @param timeout 超时时间
+     * @param unit 时间单位
+     */
+    public void registerRequest(long messageId, Promise<KademliaMessage> promise, long timeout, TimeUnit unit) {
+        if (messageId <= 0) {
+            throw new IllegalArgumentException("Invalid messageId: " + messageId);
+        }
+        if (promise == null) {
+            throw new IllegalArgumentException("Promise cannot be null");
+        }
+        if (timeout <= 0) {
+            throw new IllegalArgumentException("Invalid timeout: " + timeout);
+        }
+
+        // 检查是否已有相同messageId的请求在等待，避免重复注册
+        if (pendingRequests.containsKey(messageId)) {
+            throw new IllegalStateException("Request with messageId " + messageId + " is already registered");
+        }
+
+        // 注册超时任务：超时未收到响应则标记Promise为失败
+        ScheduledFuture<?> timeoutFuture = eventLoop.schedule(() -> {
+            RequestContext context = pendingRequests.remove(messageId);
+            if (context != null && !context.promise.isDone()) {
+                String errorMsg = "Request (id=" + messageId + ") timed out after " + timeout + unit;
+                context.promise.setFailure(new TimeoutException(errorMsg));
+            }
+        }, timeout, unit);
+
+        // 将请求上下文存入映射表，关联messageId与Promise
+        pendingRequests.put(messageId, new RequestContext(promise, timeoutFuture));
+
+        // 监听Promise的完成状态，自动清理资源
+        promise.addListener(future -> {
+            // 无论成功、失败还是取消，都清理对应的请求记录
+            RequestContext context = pendingRequests.remove(messageId);
+            if (context != null) {
+                context.timeoutFuture.cancel(false); // 取消超时任务
+            }
+        });
+    }
+
 
     // 内部类：请求上下文（包含Promise和超时任务）
     private static class RequestContext {

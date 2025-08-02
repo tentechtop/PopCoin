@@ -5,10 +5,7 @@ import io.netty.channel.Channel;
 import java.math.BigInteger;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
-import java.util.HashMap;
-import java.util.Map;
 
 public enum MessageType {
     EMPTY(0, "空消息"),
@@ -95,7 +92,8 @@ public enum MessageType {
     }
 
     public static String getDescriptionByCode(int code){
-        return codeMap.get(code).getDescription();
+        MessageType type = codeMap.get(code);
+        return type != null ? type.getDescription() : "未知消息类型"; // 处理不存在的code
     }
 
     MessageType(int code, String description) {

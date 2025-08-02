@@ -28,12 +28,12 @@ public class RpcRequestMessage extends KademliaMessage<RpcRequestData> {
         this.getData().setParameters(parameters);
     }
 
-    public void setRequestId(String requestId) {
+    public void setRequestId(long requestId) {
         this.getData().setRequestId(requestId);
     }
 
     // 简化 get 方法
-    public String getRequestId() {
+    public long getRequestId() {
         return this.getData().getRequestId();
     }
 
@@ -51,6 +51,10 @@ public class RpcRequestMessage extends KademliaMessage<RpcRequestData> {
 
     public Object[] getParameters() {
         return this.getData().getParameters();
+    }
+
+    public Throwable getException() {
+        return this.getData().getException();
     }
 }
 

@@ -12,7 +12,7 @@ public class RpcResponseMessage extends KademliaMessage<RpcResponseData> {
     }
 
     // 简化 set/get 方法（直接操作 data 字段）
-    public void setRequestId(String requestId) {
+    public void setRequestId(long requestId) {
         this.getData().setRequestId(requestId);
     }
 
@@ -24,7 +24,7 @@ public class RpcResponseMessage extends KademliaMessage<RpcResponseData> {
         this.getData().setException(exception);
     }
 
-    public String getRequestId() {
+    public long getRequestId() {
         return this.getData().getRequestId();
     }
 
