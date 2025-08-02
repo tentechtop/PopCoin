@@ -5,26 +5,19 @@ import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.RpcRequestMessage;
 import com.pop.popcoinsystem.network.service.RequestResponseManager;
 import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
-import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.DefaultPromise;
-import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.Promise;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 
 import java.io.IOException;
 import java.math.BigInteger;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.*;
 
@@ -182,7 +175,7 @@ public class TCPClient {
         if (message == null || message.getReceiver() == null) {
             throw new IllegalArgumentException("消息或接收者不能为空");
         }
-        message.setRequestId(message.getMessageId());
+        //请求ID已经在消息创建阶段设置
         BigInteger nodeId = message.getReceiver().getId();
         Channel channel = getOrCreateChannel(message.getReceiver());
         if (channel == null || !channel.isActive()) {
@@ -356,7 +349,14 @@ public class TCPClient {
     }
 
 
+    public Map<Channel, RequestResponseManager> getChannelToResponseManager() {
+        return channelToResponseManager;
+    }
+
+
     public NioEventLoopGroup getEventLoopGroup() {
         return eventLoopGroup;
     }
+
+
 }

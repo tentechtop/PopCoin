@@ -251,7 +251,7 @@ public class KademliaNodeServer {
                             pipeline.addLast(new LengthFieldPrepender(4));
                             pipeline.addLast(new TCPKademliaMessageDecoder());
                             pipeline.addLast(new TCPKademliaMessageEncoder());
-                            pipeline.addLast(new KademliaTcpHandler(KademliaNodeServer.this));
+                            pipeline.addLast(new KademliaTcpHandler(KademliaNodeServer.this,tcpClient));
                         }
                     })
                     .option(ChannelOption.SO_BACKLOG, 128)

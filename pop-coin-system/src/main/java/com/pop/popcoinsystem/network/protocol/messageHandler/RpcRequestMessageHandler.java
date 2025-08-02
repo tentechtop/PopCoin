@@ -28,11 +28,12 @@ public class RpcRequestMessageHandler implements MessageHandler {
 
 
     protected RpcResponseMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull RpcRequestMessage rpcRequest) throws InterruptedException {
-        log.info("收到RpcRequest -> 调用请求");
         NodeInfo me = kademliaNodeServer.getNodeInfo();
         NodeInfo sender = rpcRequest.getSender();
 
-        long requestId = rpcRequest.getRequestId();
+        long requestId = rpcRequest.getRequestId();//响应消息必须保持一致
+        log.info("收到RPC,{}",rpcRequest.isResponse()? "响应" : "请求");
+
         RpcResponseMessage response = new RpcResponseMessage();
         response.setRequestId(requestId);
         response.setSender(me);

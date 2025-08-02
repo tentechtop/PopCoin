@@ -37,26 +37,26 @@ public class RequestResponseManager {
         // 1. 生成唯一messageId（覆盖消息原有ID，确保全局唯一）
         //long messageId = messageIdGenerator.incrementAndGet();
         //message.setMessageId(messageId);
-        long messageId = message.getMessageId();
+        long requestId = message.getRequestId();
         // 2. 创建Promise（绑定到通道的EventLoop，确保线程安全）
         Promise<KademliaMessage> promise = new DefaultPromise<>(eventLoop);
         // 3. 注册超时任务
         ScheduledFuture<?> timeoutFuture = eventLoop.schedule(() -> {
             // 超时：移除请求并标记失败
-            RequestContext context = pendingRequests.remove(messageId);
+            RequestContext context = pendingRequests.remove(requestId);
             if (context != null && !promise.isDone()) {
-                promise.setFailure(new TimeoutException("Request (id=" + messageId + ") timeout after " + timeout + unit));
+                promise.setFailure(new TimeoutException("Request (id=" + requestId + ") timeout after " + timeout + unit));
             }
         }, timeout, unit);
 
         // 4. 存储请求上下文
-        pendingRequests.put(messageId, new RequestContext(promise, timeoutFuture));
+        pendingRequests.put(requestId, new RequestContext(promise, timeoutFuture));
 
         // 5. 发送消息
         channel.writeAndFlush(message).addListener((ChannelFutureListener) future -> {
             if (!future.isSuccess()) {
                 // 发送失败：清理上下文并标记失败
-                RequestContext context = pendingRequests.remove(messageId);
+                RequestContext context = pendingRequests.remove(requestId);
                 if (context != null) {
                     context.timeoutFuture.cancel(false); // 取消超时任务
                     if (!promise.isDone()) {
@@ -65,7 +65,6 @@ public class RequestResponseManager {
                 }
             }
         });
-
         return promise;
     }
 
