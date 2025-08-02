@@ -40,9 +40,7 @@ public class SyncBlockChainService {
         nodeInfo.setUdpPort(8333);
         rpcRequestMessage.setReceiver(nodeInfo);
 
-        //KademliaMessage kademliaMessage = kademliaNodeServer.getTcpClient().sendMessageWithResponse(rpcRequestMessage);
-
-
-        return Result.ok();
+        KademliaMessage kademliaMessage = kademliaNodeServer.getTcpClient().sendMessageWithResponse(rpcRequestMessage);
+        return Result.ok(kademliaMessage);
     }
 }
