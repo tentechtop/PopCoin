@@ -5,6 +5,7 @@ import com.pop.popcoinsystem.network.KademliaNodeServer;
 import com.pop.popcoinsystem.exception.FullBucketException;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeInfo;
+import com.pop.popcoinsystem.network.common.RoutingTable;
 import com.pop.popcoinsystem.network.protocol.message.*;
 import com.pop.popcoinsystem.network.protocol.messageData.Handshake;
 import com.pop.popcoinsystem.service.BlockChainService;
@@ -27,23 +28,11 @@ public class PongMessageHandler implements MessageHandler{
     }
 
     protected EmptyKademliaMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull PongKademliaMessage message) throws InterruptedException, FullBucketException, ConnectException {
-        log.info("收到pong");//pong信息中应该携带网络信息 消息头应该有网络消息
-        //主动和节点握手
+        log.info("收到pong");
+        //更新节点
         NodeInfo sender = message.getSender();
-        kademliaNodeServer.getRoutingTable().update(BeanCopyUtils.copyObject(sender, ExternalNodeInfo.class));
-        BlockChainService blockChainService = kademliaNodeServer.getBlockChainService();
-        Block mainLatestBlock = blockChainService.getMainLatestBlock();
-        ExternalNodeInfo me = kademliaNodeServer.getExternalNodeInfo();
-        Handshake handshake = new Handshake();
-        handshake.setExternalNodeInfo(me);
-        handshake.setGenesisBlockHash(CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX));
-        handshake.setLatestBlockHash(mainLatestBlock.getHash());
-        handshake.setLatestBlockHeight(mainLatestBlock.getHeight());
-        handshake.setChainWork(mainLatestBlock.getChainWork());
-        HandshakeRequestMessage handshakeRequestMessage = new HandshakeRequestMessage(handshake);
-        handshakeRequestMessage.setSender(kademliaNodeServer.getNodeInfo());
-        handshakeRequestMessage.setReceiver(message.getSender());
-        kademliaNodeServer.getTcpClient().sendMessage(handshakeRequestMessage);
+        RoutingTable routingTable = kademliaNodeServer.getRoutingTable();
+        routingTable.update(sender);
         return null;
     }
 

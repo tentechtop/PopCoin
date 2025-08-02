@@ -17,7 +17,6 @@ public class Handshake implements Serializable {
     private byte[] latestBlockHash;
     //最新区块高度
     private long latestBlockHeight;
-
     //工作总量
     private byte[] chainWork;
 

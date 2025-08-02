@@ -2,7 +2,11 @@ package com.pop.popcoinsystem.service;
 
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.network.KademliaNodeServer;
+import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
+import com.pop.popcoinsystem.network.common.FindNodeResult;
 import com.pop.popcoinsystem.network.common.NodeInfo;
+import com.pop.popcoinsystem.network.common.RoutingTable;
+import com.pop.popcoinsystem.network.protocol.message.FindNodeResponseMessage;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.RpcRequestMessage;
 import com.pop.popcoinsystem.network.protocol.messageData.RpcRequestData;
@@ -12,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigInteger;
 import java.net.ConnectException;
+import java.util.List;
 
 @Service
 public class SyncBlockChainService {
@@ -36,8 +41,6 @@ public class SyncBlockChainService {
         rpcRequestMessage.setReqResId();
         rpcRequestMessage.setResponse(false);//请求消息
 
-
-
         NodeInfo nodeInfo = new NodeInfo();
         nodeInfo.setId(BigInteger.ONE);
         nodeInfo.setIpv4("192.168.137.102");
@@ -49,27 +52,28 @@ public class SyncBlockChainService {
         return Result.ok(kademliaMessage);
     }
 
-    public Result sendTextMessage1(String message) throws InterruptedException, ConnectException {
-        RpcRequestData rpcRequestData = new RpcRequestData();
-        rpcRequestData.setServiceName("TransactionService");
-        rpcRequestData.setMethodName("sayHello");
-        rpcRequestData.setParameters(new Object[]{message});
-        rpcRequestData.setParamTypes(new Class[]{String.class});
 
-        RpcRequestMessage rpcRequestMessage = new RpcRequestMessage();
-        rpcRequestMessage.setData(rpcRequestData);
-        rpcRequestMessage.setSender(kademliaNodeServer.getNodeInfo());
+    public Result findNode() throws Exception {
+        RoutingTable routingTable = kademliaNodeServer.getRoutingTable();
+        NodeInfo nodeInfo = kademliaNodeServer.getNodeInfo();
 
 
+        NodeInfo nodeInfo1 = new NodeInfo();
+        nodeInfo1.setId(BigInteger.ONE);
+        nodeInfo1.setIpv4("192.168.137.102");
+        nodeInfo1.setTcpPort(8334);
+        nodeInfo1.setUdpPort(8333);
 
-        NodeInfo nodeInfo = new NodeInfo();
-        nodeInfo.setId(BigInteger.ONE);
-        nodeInfo.setIpv4("192.168.137.102");
-        nodeInfo.setTcpPort(8334);
-        nodeInfo.setUdpPort(8333);
-        rpcRequestMessage.setReceiver(nodeInfo);
-        kademliaNodeServer.getTcpClient().sendMessage(rpcRequestMessage);
 
-        return Result.ok();
+        List<ExternalNodeInfo> closest = routingTable.findClosest(nodeInfo.getId());
+        FindNodeResult findNodeResult = new FindNodeResult();
+        findNodeResult.setNodes(closest);
+        findNodeResult.setDestinationId(nodeInfo.getId());
+        FindNodeResponseMessage findNodeResponseMessage = new FindNodeResponseMessage();
+        findNodeResponseMessage.setSender(nodeInfo);
+        findNodeResponseMessage.setReceiver(nodeInfo1);
+        findNodeResponseMessage.setData(findNodeResult);
+        KademliaMessage kademliaMessage = kademliaNodeServer.getTcpClient().sendMessageWithResponse(findNodeResponseMessage);
+        return Result.ok(kademliaMessage);
     }
 }

@@ -2,6 +2,9 @@ package com.pop.popcoinsystem.network;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.pop.popcoinsystem.data.block.Block;
+import com.pop.popcoinsystem.network.protocol.message.HandshakeRequestMessage;
+import com.pop.popcoinsystem.network.protocol.messageData.Handshake;
 import com.pop.popcoinsystem.network.protocol.messageHandler.TransactionMessageHandler;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeInfo;
@@ -16,6 +19,7 @@ import com.pop.popcoinsystem.event.DisruptorManager;
 import com.pop.popcoinsystem.network.service.RpcServiceRegistry;
 import com.pop.popcoinsystem.service.BlockChainService;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
+import com.pop.popcoinsystem.util.CryptoUtil;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
@@ -44,6 +48,7 @@ import java.net.InetSocketAddress;
 import java.util.*;
 import java.util.concurrent.*;
 
+import static com.pop.popcoinsystem.constant.BlockChainConstants.GENESIS_BLOCK_HASH_HEX;
 import static com.pop.popcoinsystem.constant.BlockChainConstants.NET_VERSION;
 // 替换为带容量限制的LRU Map（需引入Guava或自定义）
 import com.google.common.collect.EvictingQueue;
@@ -268,11 +273,26 @@ public class KademliaNodeServer {
     // 连接到引导节点
     public void connectToBootstrapNodes(NodeInfo bootstrapNodeInfo) throws Exception {
         if (bootstrapNodeInfo == null) return;
-        //向引导节点发送Ping消息 实现握手
+        //向引导节点发送Ping消息 回复pong之后 将引导节点加入网络
         PingKademliaMessage pingKademliaMessage = new PingKademliaMessage();
-        pingKademliaMessage.setSender(nodeInfo);
+        pingKademliaMessage.setSender(this.nodeInfo);//本节点信息
         pingKademliaMessage.setReceiver(bootstrapNodeInfo);
         udpClient.sendMessage(pingKademliaMessage);
+
+        //向引导节点发送握手请求 收到握手回复后检查 自己的区块链信息
+        BlockChainService blockChainService = this.getBlockChainService();
+        Block mainLatestBlock = blockChainService.getMainLatestBlock();
+        Handshake handshake = new Handshake();
+        handshake.setExternalNodeInfo(this.getExternalNodeInfo());//携带我的节点信息
+        handshake.setGenesisBlockHash(CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX));
+        handshake.setLatestBlockHash(mainLatestBlock.getHash());
+        handshake.setLatestBlockHeight(mainLatestBlock.getHeight());
+        handshake.setChainWork(mainLatestBlock.getChainWork());
+        HandshakeRequestMessage handshakeRequestMessage = new HandshakeRequestMessage(handshake);
+        handshakeRequestMessage.setSender(this.nodeInfo);//本节点信息
+        handshakeRequestMessage.setReceiver(bootstrapNodeInfo);
+        this.getTcpClient().sendMessage(handshakeRequestMessage);
+
     }
 
 

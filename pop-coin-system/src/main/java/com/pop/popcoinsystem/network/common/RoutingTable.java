@@ -2,6 +2,7 @@ package com.pop.popcoinsystem.network.common;
 
 import com.pop.popcoinsystem.exception.FullBucketException;
 import com.pop.popcoinsystem.storage.StorageService;
+import com.pop.popcoinsystem.util.BeanCopyUtils;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -50,6 +51,30 @@ public class RoutingTable {
         StorageService instance = StorageService.getInstance();
         lock.writeLock().lock();
         try {
+            node.setLastSeen(new Date());
+            Bucket bucket = this.findBucket(node.getId());
+            // 更新桶的访问时间
+            lastBucketAccessTime.put(bucket.getId(), System.currentTimeMillis());
+            node.setDistance(node.getId().xor(this.localNodeId));
+            instance.addOrUpdateRouteTableNode(node);
+            if (bucket.contains(node)) {
+                bucket.pushToFront(node);
+                return false;
+            }else if (bucket.size() < this.nodeSettings.getBucketSize()) {
+                bucket.add(node);
+                return true;
+            }
+        } finally {
+            lock.writeLock().unlock();
+        }
+        throw new FullBucketException();
+    }
+
+    public boolean update(NodeInfo updateNode) throws FullBucketException {
+        StorageService instance = StorageService.getInstance();
+        lock.writeLock().lock();
+        try {
+            ExternalNodeInfo node = BeanCopyUtils.copyObject(updateNode, ExternalNodeInfo.class);
             node.setLastSeen(new Date());
             Bucket bucket = this.findBucket(node.getId());
             // 更新桶的访问时间

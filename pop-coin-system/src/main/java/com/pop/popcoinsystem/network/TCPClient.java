@@ -71,13 +71,13 @@ public class TCPClient {
     public KademliaMessage sendMessageWithResponse(KademliaMessage message)
             throws ConnectException, TimeoutException, InterruptedException, Exception {
         // 默认超时时间5秒，也可以提供重载方法让用户指定超时
-        return sendMessageWithResponse((RpcRequestMessage)message, 5, TimeUnit.SECONDS);
+        return sendMessageWithResponse(message, 5, TimeUnit.SECONDS);
     }
 
     /**
      * 重载方法：允许用户指定超时时间
      */
-    public KademliaMessage sendMessageWithResponse(RpcRequestMessage message, long timeout, TimeUnit unit)
+    public KademliaMessage sendMessageWithResponse(KademliaMessage message, long timeout, TimeUnit unit)
             throws ConnectException, TimeoutException, InterruptedException, Exception {
         if (message == null || message.getReceiver() == null) {
             throw new IllegalArgumentException("消息或接收者不能为空");

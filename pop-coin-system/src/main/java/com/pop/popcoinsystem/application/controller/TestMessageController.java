@@ -21,8 +21,12 @@ public class TestMessageController {
         return syncBlockChainService.sendTextMessage( message);
     }
 
-    @GetMapping("/send1/{message}")
-    public Result sendTextMessage1(@PathVariable("message") String  message) throws Exception {
-        return syncBlockChainService.sendTextMessage1( message);
+    @GetMapping("/findNode")
+    public Result findNode() throws Exception {
+        return syncBlockChainService.findNode();
     }
+
+
+
+
 }

@@ -32,7 +32,7 @@ public class FindNodeResponseMessageHandler implements MessageHandler{
     }
 
     protected FindNodeResponseMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull FindNodeResponseMessage message) throws InterruptedException, ConnectException, FullBucketException {
-        log.info("收到节点查询响应");
+        log.info("收到查询结果");
         FindNodeResult data = message.getData();
         List<ExternalNodeInfo> nodes = data.getNodes();
         for(ExternalNodeInfo node:nodes){
