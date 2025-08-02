@@ -85,6 +85,11 @@ public class KademliaNodeServer {
             .build();
 
 
+    public Cache<Long, Boolean> getBroadcastMessages() {
+        return broadcastMessages;
+    }
+
+
 
     // 消息过期时间（毫秒）
     public static final long MESSAGE_EXPIRATION_TIME = 30000;
@@ -603,7 +608,6 @@ public class KademliaNodeServer {
             byteBuf.readBytes(contentBytes);
             // 反序列化为消息对象
             KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
-            log.info("TCP解码消息内容:{}", message);
             // 添加到输出列表
             list.add(message);
         }

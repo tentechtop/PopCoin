@@ -11,21 +11,12 @@ public class RpcResponseMessage extends KademliaMessage<RpcResponseData> {
         super(MessageType.RPC_RESPONSE.getCode(), new RpcResponseData());
     }
 
-    // 简化 set/get 方法（直接操作 data 字段）
-    public void setRequestId(long requestId) {
-        this.getData().setRequestId(requestId);
-    }
-
     public void setResult(Object result) {
         this.getData().setResult(result);
     }
 
     public void setException(Exception exception) {
         this.getData().setException(exception);
-    }
-
-    public long getRequestId() {
-        return this.getData().getRequestId();
     }
 
     public Object getResult() {

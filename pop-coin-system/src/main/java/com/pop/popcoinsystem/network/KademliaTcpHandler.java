@@ -4,6 +4,7 @@ import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.MessageType;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.messageHandler.MessageHandler;
+import com.pop.popcoinsystem.network.service.RequestResponseManager;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
@@ -33,7 +34,19 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
     @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, KademliaMessage message) throws Exception {
         long messageId = message.getMessageId();
-        log.info("TCP接收 {}", nodeServer.getNodeInfo());
+        boolean single = message.isSingle();
+        if (single){
+            //单播消息
+            log.info("TCP接收单播消息 {}", messageId);
+            if (message.isResponse()){
+                log.info("TCP接收单播响应消息 {}", messageId);
+
+            }else {
+                log.info("TCP接收单播请求消息 {}", messageId);
+                
+            }
+        }
+
 
         if (nodeServer.getBroadcastMessages().getIfPresent(messageId) != null) {
             log.info("TCP接收已处理的消息 {}，丢弃", messageId);
@@ -44,15 +57,7 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
         MessageHandler messageHandler = KademliaMessageHandler.get(message.getType());
         KademliaMessage<? extends Serializable> kademliaMessage = messageHandler.handleMesage(nodeServer, message);
         if (kademliaMessage != null){
-            log.info("一问一答 {}", kademliaMessage);
-            ChannelFuture channelFuture = channelHandlerContext.writeAndFlush(kademliaMessage);
-            channelFuture.addListener(future -> {
-                if (future.isSuccess()) {
-                    log.info("TCP发送成功 {}", kademliaMessage.getMessageId());
-                } else {
-                    log.info("TCP发送失败 {}", kademliaMessage.getMessageId());
-                }
-            });
+            nodeServer.getTcpClient().sendMessage(kademliaMessage);
         }
     }
 

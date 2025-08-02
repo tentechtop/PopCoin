@@ -32,6 +32,10 @@ public class SyncBlockChainService {
         RpcRequestMessage rpcRequestMessage = new RpcRequestMessage();
         rpcRequestMessage.setData(rpcRequestData);
         rpcRequestMessage.setSender(kademliaNodeServer.getNodeInfo());
+        rpcRequestMessage.setReqResId();
+        rpcRequestMessage.setResponse(false);//请求消息
+
+
 
         NodeInfo nodeInfo = new NodeInfo();
         nodeInfo.setId(BigInteger.ONE);

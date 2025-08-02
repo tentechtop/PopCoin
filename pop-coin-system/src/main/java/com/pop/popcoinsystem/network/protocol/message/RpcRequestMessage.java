@@ -28,15 +28,6 @@ public class RpcRequestMessage extends KademliaMessage<RpcRequestData> {
         this.getData().setParameters(parameters);
     }
 
-    public void setRequestId(long requestId) {
-        this.setMessageId(requestId);
-    }
-
-    // 简化 get 方法
-    public long getRequestId() {
-        return this.getMessageId();
-    }
-
     public String getServiceName() {
         return this.getData().getServiceName();
     }

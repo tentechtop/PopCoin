@@ -17,8 +17,7 @@ import static com.pop.popcoinsystem.constant.BlockChainConstants.messageIdGenera
 @Setter
 @ToString
 public abstract class KademliaMessage<D extends Serializable> {
-    // 消息唯一标识（用于去重）序列化后仅占8 字节（二进制）
-    private long messageId = generateMessageId();
+    private long messageId = generateMessageId();//广播场景：需要messageId全局唯一（避免同一消息被重复转发，导致风暴）。
     private int type;
     private NodeInfo sender;//消息发送者
     private NodeInfo receiver;//消息接收者
@@ -26,8 +25,29 @@ public abstract class KademliaMessage<D extends Serializable> {
     private D data;//消息数据
 
 
+    //设置请求响应ID
+    // 请求-响应关联标识（仅用于单播）
+    // 作用：单播场景下，请求和响应的reqResId必须相同，用于匹配"一问一答"
+    // 广播场景下可忽略（设为0或null）
+    private long requestId = 0;//仅用于单播的请求 - 响应关联（同一对请求 - 响应的reqResId相同，不影响广播）。
+    private boolean isResponse;//是请求 true=响应消息，false=请求消息
 
-    private boolean isResponse = false; // 标记是否为响应消息
+
+    //如果reqResId = 0 则不是单播消息 不会交给请求响应处理器
+    //是否单播消息
+    public boolean isSingle() {
+        return this.requestId != 0;
+    }
+
+    //是否是响应消息
+    public boolean isResponse() {
+        return this.isResponse;
+    }
+
+    public void setReqResId() {
+        this.requestId =  messageIdGenerator.incrementAndGet();
+    }
+
     /**
      * 构造消息
      */
@@ -41,14 +61,11 @@ public abstract class KademliaMessage<D extends Serializable> {
     }
 
 
-    //是否是响应消息
-    public boolean isResponse() {
-        return isResponse;
-    }
 
-    //设置消息响应
+
+    //设置是请求 还是响应
     public void setResponse(boolean response) {
-        isResponse = response;
+        this.isResponse = response;
     }
 
 
@@ -57,7 +74,7 @@ public abstract class KademliaMessage<D extends Serializable> {
      * 检查消息是否过期  超过10分钟就是过期
      */
     public boolean isExpired() {
-        return System.currentTimeMillis() - timestamp > 10 * 60 * 1000;
+        return System.currentTimeMillis() - this.timestamp > 10 * 60 * 1000;
     }
 
     public KademliaMessage() {
