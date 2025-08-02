@@ -3,8 +3,6 @@ package com.pop.popcoinsystem.util;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-import com.esotericsoftware.kryo.pool.KryoFactory;
-import com.esotericsoftware.kryo.pool.KryoPool;
 import com.pop.popcoinsystem.application.service.wallet.Wallet;
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockBody;
@@ -19,6 +17,9 @@ import com.pop.popcoinsystem.network.protocol.message.*;
 import com.pop.popcoinsystem.network.protocol.messageData.Handshake;
 import com.pop.popcoinsystem.network.protocol.messageData.HeadersRequestParam;
 import org.objenesis.ObjenesisStd;
+import org.objenesis.strategy.InstantiatorStrategy;
+import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy;
+
 import java.math.BigInteger;
 import java.security.PrivateKey;
 import java.security.PublicKey;
@@ -26,31 +27,35 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
-
-import org.objenesis.strategy.StdInstantiatorStrategy;
+import org.objenesis.strategy.StdInstantiatorStrategy; // 关键：引入Objenesis的策略
 
 /**
- * 序列化工具类
+ * 序列化工具类（Kryo 5.x 适配，无KryoPool版本）
  */
 public class SerializeUtils {
-    // 创建 Kryo 工厂
-    private static final KryoFactory factory = () -> {
+
+
+
+    // 用ThreadLocal存储Kryo实例（每个线程一个独立实例，解决线程安全问题）
+    private static final ThreadLocal<Kryo> kryoThreadLocal = ThreadLocal.withInitial(() -> {
         Kryo kryo = new Kryo();
-        // 关键配置：允许循环引用（解决复杂对象引用问题）
-        // 非必须注册所有类（但建议显式注册以提高性能）
-        kryo.setRegistrationRequired(false);
 
-        // 关键配置：使用Objenesis解决无参构造函数问题
-        kryo.setInstantiatorStrategy(new StdInstantiatorStrategy());
-        kryo.setReferences(true);
+        // 实例化策略（Kryo 5.x 必须这样配置）
+        InstantiatorStrategy strategy = new DefaultInstantiatorStrategy();
+        kryo.setInstantiatorStrategy(strategy);
 
-        // 注册基础类型和常用类
+        // 基础配置
+        kryo.setRegistrationRequired(false); // 允许未注册类
+        kryo.setReferences(true); // 支持循环引用
+
+        // 注册基础类型
         kryo.register(Date.class);
-        kryo.register(UUID.class);
         kryo.register(BigInteger.class);
         kryo.register(byte[].class);
         kryo.register(List.class);
-        kryo.register(ArrayList.class); // 具体集合类型需要注册
+        kryo.register(ArrayList.class);
+        kryo.register(UUID.class, new UUIDSerializer()); // 自定义UUID序列化器
+
         // 注册加密相关类
         kryo.register(PrivateKey.class);
         kryo.register(PublicKey.class);
@@ -80,21 +85,14 @@ public class SerializeUtils {
         kryo.register(WitnessDTO.class);
         kryo.register(Wallet.class);
 
-
-        // 注册脚本相关类（关键：补充内部类注册）
+        // 注册脚本相关类
         kryo.register(Script.class);
         kryo.register(Script.ScriptElement.class);
         kryo.register(ScriptPubKey.class);
         kryo.register(ScriptSig.class);
 
         return kryo;
-    };
-    // 创建线程安全的 Kryo 池
-    // 创建线程安全的Kryo池（多线程环境必须使用池化）
-    private static final KryoPool pool = new KryoPool.Builder(factory)
-            .softReferences() // 允许GC回收闲置实例，避免内存泄漏
-            .build();
-
+    });
 
     /**
      * 反序列化（从字节数组恢复对象）
@@ -103,18 +101,20 @@ public class SerializeUtils {
         if (bytes == null || bytes.length == 0) {
             return null;
         }
-        // 从池获取Kryo实例（关键：复用配置好的实例）
-        Kryo kryo = pool.borrow();
+
+        // 从当前线程获取Kryo实例
+        Kryo kryo = kryoThreadLocal.get();
         Input input = null;
         try {
             input = new Input(bytes);
             return kryo.readClassAndObject(input);
+        } catch (Exception e) {
+            throw new RuntimeException("反序列化失败: " + e.getMessage(), e);
         } finally {
             if (input != null) {
                 input.close();
             }
-            // 归还实例到池
-            pool.release(kryo);
+            // 无需回收，ThreadLocal会为线程缓存实例
         }
     }
 
@@ -125,19 +125,35 @@ public class SerializeUtils {
         if (object == null) {
             return new byte[0];
         }
-        // 从池获取Kryo实例
-        Kryo kryo = pool.borrow();
+
+        // 从当前线程获取Kryo实例
+        Kryo kryo = kryoThreadLocal.get();
         Output output = null;
         try {
-            output = new Output(4096, -1); // 初始容量4096，可自动扩容
+            output = new Output(4096, -1); // 初始容量4096，自动扩容
             kryo.writeClassAndObject(output, object);
             return output.toBytes();
+        } catch (Exception e) {
+            throw new RuntimeException("序列化失败: " + e.getMessage(), e);
         } finally {
             if (output != null) {
                 output.close();
             }
-            // 归还实例到池
-            pool.release(kryo);
+        }
+    }
+
+    /**
+     * 自定义UUID序列化器（避免反射私有字段）
+     */
+    public static class UUIDSerializer extends com.esotericsoftware.kryo.Serializer<UUID> {
+        @Override
+        public void write(Kryo kryo, Output output, UUID uuid) {
+            output.writeString(uuid.toString());
+        }
+
+        @Override
+        public UUID read(Kryo kryo, Input input, Class<? extends UUID> type) {
+            return UUID.fromString(input.readString());
         }
     }
 }

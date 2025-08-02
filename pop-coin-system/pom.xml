@@ -105,7 +105,12 @@
         <dependency>
             <groupId>com.esotericsoftware</groupId>
             <artifactId>kryo</artifactId>
-            <version>4.0.1</version>
+            <version>5.5.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.objenesis</groupId>
+            <artifactId>objenesis</artifactId>
+            <version>3.3</version> <!-- 最新稳定版 -->
         </dependency>
         <!--集合增强、并发工具、缓存、限流等 高性能编程、复杂数据结构处理	-->
         <dependency>
