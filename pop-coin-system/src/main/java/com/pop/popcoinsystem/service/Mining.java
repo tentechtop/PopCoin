@@ -645,18 +645,20 @@ public class Mining {
 
         long targetTime = DIFFICULTY_ADJUSTMENT_INTERVAL * BLOCK_GENERATION_TIME; //600秒 10分钟
 
-        log.info("\n难度调整:" +
-                "\n目标总时间: " +  targetTime + "秒\"" +
-                "\n实际" + DIFFICULTY_ADJUSTMENT_INTERVAL + "个区块总生成时间: " + actualTimeTaken + "秒\"" +
-                "\n目标平均生成时间: "+BLOCK_GENERATION_TIME+"秒\"" +
-                "\n实际平均生成时间: " + (double) actualTimeTaken / DIFFICULTY_ADJUSTMENT_INTERVAL + "秒\"");
+
 
         // 修正方向：目标时间/实际时间
         double factor = (double) targetTime / actualTimeTaken;
         factor = Math.max(0.25, Math.min(4.0, factor));  // 保持限制范围
         long newDifficulty = (long) (currentDifficulty * factor);
         newDifficulty = Math.max(1L, newDifficulty);
-        log.info("\n难度调整因子: " + factor +
+
+        log.info("\n难度调整:" +
+                "\n目标总时间: " +  targetTime + "秒" +
+                "\n实际" + DIFFICULTY_ADJUSTMENT_INTERVAL + "个区块总生成时间: " + actualTimeTaken + "秒" +
+                "\n目标平均生成时间: "+BLOCK_GENERATION_TIME+"秒" +
+                "\n实际平均生成时间: " + (double) actualTimeTaken / DIFFICULTY_ADJUSTMENT_INTERVAL + "秒"+
+                "\n难度调整因子: " + factor +
                 "\n旧难度值: " + currentDifficulty+"" +
                 "\n新难度值: " + newDifficulty);
         currentDifficulty = newDifficulty;

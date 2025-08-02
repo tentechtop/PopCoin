@@ -13,6 +13,7 @@ import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.NetworkUtil;
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.Resource;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +29,7 @@ import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.List;
+import java.util.Map;
 
 @Data
 @Slf4j
@@ -50,6 +52,9 @@ public class KademliaServiceStart {
     @Lazy
     @Autowired
     private KademliaNodeServer kademliaNodeServer;
+
+    private RpcServiceRegistry rpcServiceRegistry;
+
 
     // 定义单例Bean，Spring会确保仅创建一次
     @Bean
@@ -108,22 +113,24 @@ public class KademliaServiceStart {
 
 
 
-    // 注册RPC服务
     @Bean
     public CommandLineRunner registerRpcService(RpcServiceRegistry registry) {
         return args -> {
-            // 注册TransactionService接口及其实现类
-            registry.registerService(TransactionService.class, new TransactionServiceImpl());
-            log.info("TransactionService 已注册到RPC服务");
-        };
-    }
-
-    // 添加@PostConstruct，在容器初始化后自动执行
-    @PostConstruct
-    public void startNetwork() {
-        new Thread(() -> {
             try {
+                log.info("正在启动网络......");
+                kademliaNodeServer.setRpcServiceRegistry(registry);
                 kademliaNodeServer.start();  // 启动服务器
+
+                RpcServiceRegistry rpcServiceRegistry1 = kademliaNodeServer.getRpcServiceRegistry();
+
+                // 注册TransactionService接口及其实现类
+                Map<String, Object> service = rpcServiceRegistry1.getService();
+                //遍历这些服务
+                service.forEach((interfaceName, implInstance) -> {log.info("遍历RPC服务:{}", interfaceName);});
+                Object transactionService = rpcServiceRegistry1.getService("TransactionService");
+                log.info("测试获取:{}", transactionService);
+
+
                 // 连接所有引导节点（从配置文件读取）
                 log.info("正在连接引导节点......:{}",bootstrap);
                 if (bootstrap != null && !bootstrap.isEmpty()) {
@@ -143,7 +150,8 @@ public class KademliaServiceStart {
             } catch (Exception e) {
                 log.error("节点启动失败", e);  // 使用log代替e.printStackTrace()
             }
-        }).start();
+        };
     }
+
 
 }

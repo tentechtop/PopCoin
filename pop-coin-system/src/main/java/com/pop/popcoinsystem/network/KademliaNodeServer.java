@@ -57,9 +57,7 @@ public class KademliaNodeServer {
     //节点信息
     private NodeInfo nodeInfo;
 
-    @Autowired
     private RpcServiceRegistry rpcServiceRegistry;
-
 
     @Lazy
     @Autowired
@@ -68,7 +66,7 @@ public class KademliaNodeServer {
     //额外信息  包含了节点信息  外网ip  外网端口  内网ip  内网端口  节点状态  节点版本  节点类型  节点描述 节点分数 等待
     private ExternalNodeInfo externalNodeInfo;
 
-    private  NodeSettings nodeSettings;
+    private NodeSettings nodeSettings;
     //路由表
     private RoutingTable routingTable;
     //节点设置

@@ -2,6 +2,7 @@ package com.pop.popcoinsystem.network;
 
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
+import com.pop.popcoinsystem.network.protocol.message.RpcRequestMessage;
 import com.pop.popcoinsystem.network.service.RequestResponseManager;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
@@ -173,18 +174,18 @@ public class TCPClient {
     public KademliaMessage sendMessageWithResponse(KademliaMessage message)
             throws ConnectException, TimeoutException, InterruptedException, Exception {
         // 默认超时时间5秒，也可以提供重载方法让用户指定超时
-        return sendMessageWithResponse(message, 5, TimeUnit.SECONDS);
+        return sendMessageWithResponse((RpcRequestMessage)message, 5, TimeUnit.SECONDS);
     }
 
     /**
      * 重载方法：允许用户指定超时时间
      */
-    public KademliaMessage sendMessageWithResponse(KademliaMessage message, long timeout, TimeUnit unit)
+    public KademliaMessage sendMessageWithResponse(RpcRequestMessage message, long timeout, TimeUnit unit)
             throws ConnectException, TimeoutException, InterruptedException, Exception {
         if (message == null || message.getReceiver() == null) {
             throw new IllegalArgumentException("消息或接收者不能为空");
         }
-
+        message.setRequestId(message.getMessageId());
         BigInteger nodeId = message.getReceiver().getId();
         Channel channel = getOrCreateChannel(message.getReceiver());
         if (channel == null || !channel.isActive()) {
@@ -198,7 +199,6 @@ public class TCPClient {
         message.setResponse(false);
         // 发送请求并获取Promise（内部异步处理）
         Promise<KademliaMessage> promise = responseManager.sendRequest(channel, message, timeout, unit);
-
         try {
             // 阻塞等待结果（核心：将异步转为同步，对外屏蔽Promise）
             // 这里使用await()而非get()，避免检查异常包装
@@ -207,7 +207,6 @@ public class TCPClient {
                 promise.cancel(false);
                 throw new TimeoutException("等待节点 " + nodeId + " 响应超时（" + timeout + unit + "）");
             }
-
             // 检查结果状态
             if (promise.isSuccess()) {
                 // 成功：直接返回响应结果（用户拿到的就是最终数据）

@@ -38,7 +38,15 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
         MessageHandler messageHandler = KademliaMessageHandler.get(message.getType());
         KademliaMessage<? extends Serializable> kademliaMessage = messageHandler.handleMesage(nodeServer, message);
         if (kademliaMessage != null){
+            log.info("一问一答 {}", kademliaMessage);
             ChannelFuture channelFuture = channelHandlerContext.writeAndFlush(kademliaMessage);
+            channelFuture.addListener(future -> {
+                if (future.isSuccess()) {
+                    log.info("TCP发送成功 {}", kademliaMessage.getMessageId());
+                } else {
+                    log.info("TCP发送失败 {}", kademliaMessage.getMessageId());
+                }
+            });
         }
     }
 

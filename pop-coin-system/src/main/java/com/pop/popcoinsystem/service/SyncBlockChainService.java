@@ -16,6 +16,8 @@ import java.math.BigInteger;
 public class SyncBlockChainService {
 
 
+
+
     @Lazy
     @Autowired
     private KademliaNodeServer kademliaNodeServer;
@@ -38,7 +40,9 @@ public class SyncBlockChainService {
         nodeInfo.setUdpPort(8333);
         rpcRequestMessage.setReceiver(nodeInfo);
 
-        KademliaMessage kademliaMessage = kademliaNodeServer.getTcpClient().sendMessageWithResponse(rpcRequestMessage);
-        return Result.ok(kademliaMessage.getData());
+        //KademliaMessage kademliaMessage = kademliaNodeServer.getTcpClient().sendMessageWithResponse(rpcRequestMessage);
+
+
+        return Result.ok();
     }
 }

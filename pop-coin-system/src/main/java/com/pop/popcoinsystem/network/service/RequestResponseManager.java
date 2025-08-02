@@ -38,11 +38,8 @@ public class RequestResponseManager {
         //long messageId = messageIdGenerator.incrementAndGet();
         //message.setMessageId(messageId);
         long messageId = message.getMessageId();
-        message.setResponse(true); // 标记为请求
-
         // 2. 创建Promise（绑定到通道的EventLoop，确保线程安全）
         Promise<KademliaMessage> promise = new DefaultPromise<>(eventLoop);
-
         // 3. 注册超时任务
         ScheduledFuture<?> timeoutFuture = eventLoop.schedule(() -> {
             // 超时：移除请求并标记失败

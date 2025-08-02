@@ -10,7 +10,7 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 
 @Slf4j
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = "com.pop.popcoinsystem") // 确保包含目标包
 public class PopCoinSystemApplication {
     public static void main(String[] args) throws UnknownHostException {
         ConfigurableApplicationContext application = SpringApplication.run(PopCoinSystemApplication.class, args);

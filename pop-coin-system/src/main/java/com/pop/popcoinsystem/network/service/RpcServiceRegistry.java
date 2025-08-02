@@ -1,8 +1,11 @@
 package com.pop.popcoinsystem.network.service;
 
 
+import com.pop.popcoinsystem.aop.annotation.RpcServiceAlias;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
+import org.springframework.util.CollectionUtils;
 
 import java.util.Map;
 import java.util.Set;
@@ -14,11 +17,33 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 @Component
+@Scope("singleton") // 显式指定单例
 public class RpcServiceRegistry {
-
     // 核心存储：服务接口全限定名 -> 实现类实例
     // 使用ConcurrentHashMap保证线程安全，支持高并发读写
     private final Map<String, Object> serviceMap = new ConcurrentHashMap<>();
+    // 别名映射：别名 -> 全限定名
+    private final Map<String, String> aliasMap = new ConcurrentHashMap<>();
+
+    /**
+     * 批量注册服务实现类
+     * @param serviceMap 接口类 -> 实现类实例的映射
+     */
+    public void batchRegisterServices(Map<Class<?>, Object> serviceMap) {
+        if (CollectionUtils.isEmpty(serviceMap)) {
+            log.warn("没有需要注册的RPC服务");
+            return;
+        }
+        serviceMap.forEach((interfaceClass, implInstance) -> {
+            try {
+                this.registerService(interfaceClass, implInstance);
+            } catch (IllegalArgumentException e) {
+                log.error("批量注册服务失败 | 接口: {} | 原因: {}",
+                        interfaceClass.getName(), e.getMessage());
+            }
+        });
+    }
+
 
     /**
      * 注册服务（手动指定接口与实现类）
@@ -27,7 +52,7 @@ public class RpcServiceRegistry {
      * @param <T> 服务接口类型
      * @throws IllegalArgumentException 当实现类不匹配接口时抛出
      */
-    public <T> void registerService(Class<T> serviceInterface, T serviceImpl) {
+    public <T> void registerService(Class<T> serviceInterface, Object serviceImpl) {
         // 1. 校验参数合法性
         if (serviceInterface == null) {
             throw new IllegalArgumentException("服务接口不能为空");
@@ -46,22 +71,42 @@ public class RpcServiceRegistry {
         // 3. 注册服务（接口全限定名为key）
         String serviceName = serviceInterface.getName();
         serviceMap.put(serviceName, serviceImpl);
-        log.info("RPC服务注册成功 | 接口: {} | 实现类: {}",
-                serviceName, serviceImpl.getClass().getName());
+
+        // 处理别名
+        if (serviceInterface.isAnnotationPresent(RpcServiceAlias.class)) {
+            String alias = serviceInterface.getAnnotation(RpcServiceAlias.class).value();
+            if (aliasMap.containsKey(alias)) {
+                throw new IllegalArgumentException("服务别名重复: " + alias);
+            }
+            aliasMap.put(alias, serviceName);
+            log.info("RPC服务注册成功 | 别名: {} | 接口: {} | 实现类: {}", alias, serviceName,serviceImpl.getClass().getName());
+        } else {
+            log.info("RPC服务注册成功 | 接口: {} | 实现类: {}",
+                    serviceName, serviceImpl.getClass().getName());
+        }
     }
 
+
+
     /**
-     * 根据接口名获取服务实例
-     * @param serviceName 服务接口全限定名（如 "com.pop.TransactionService"）
-     * @return 服务实现类实例，若未注册则返回null
+     * 支持通过别名或全限定名获取服务
      */
-    public Object getService(String serviceName) {
+    public Object getService(String name) {
+        // 先查别名映射
+        String serviceName = aliasMap.getOrDefault(name, name);
         Object service = serviceMap.get(serviceName);
+
         if (service == null) {
-            log.warn("RPC服务未注册 | 接口: {}", serviceName);
+            log.warn("RPC服务未找到 | 名称: {}", name);
         }
         return service;
     }
+
+
+    public Map<String, Object> getService() {
+        return serviceMap;
+    }
+
 
     /**
      * 根据接口类获取服务实例（泛型重载，方便调用）
