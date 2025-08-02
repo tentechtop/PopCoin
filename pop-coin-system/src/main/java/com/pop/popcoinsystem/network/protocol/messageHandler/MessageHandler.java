@@ -11,7 +11,7 @@ import java.util.concurrent.ExecutionException;
 
 public interface MessageHandler {
 
-    KademliaMessage<? extends Serializable> handleMesage (KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) throws InterruptedException, FullBucketException, ConnectException, UnsupportedChainException, ExecutionException;
+    KademliaMessage<? extends Serializable> handleMesage (KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) throws Exception;
 
 
 

@@ -18,11 +18,11 @@ import java.util.concurrent.ExecutionException;
 @Slf4j
 public class FindForkPointRequestMessageHandle implements MessageHandler{
     @Override
-    public KademliaMessage<? extends Serializable> handleMesage(KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) throws InterruptedException, FullBucketException, ConnectException, UnsupportedChainException, ExecutionException {
+    public KademliaMessage<? extends Serializable> handleMesage(KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) throws Exception {
         return doHandle(kademliaNodeServer, (FindForkPointRequestMessage) message);
     }
 
-    protected FindForkPointRequestMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull FindForkPointRequestMessage message) throws InterruptedException, ConnectException, ExecutionException {
+    protected FindForkPointRequestMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull FindForkPointRequestMessage message) throws Exception {
         log.info("收到分叉点查询请求，开始查找共同区块");
         NodeInfo sender = message.getSender();
         NodeInfo me = kademliaNodeServer.getNodeInfo();
