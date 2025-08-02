@@ -34,6 +34,7 @@ public class FindNodeRequestMessageHandler implements MessageHandler{
         FindNodeResult findNodeResult = new FindNodeResult();
         findNodeResult.setNodes(closest);
         findNodeResult.setDestinationId(findId);
+        log.info("返回查找结果:{}", findNodeResult);
         FindNodeResponseMessage findNodeResponseMessage = new FindNodeResponseMessage();
         findNodeResponseMessage.setSender(kademliaNodeServer.getNodeInfo());
         findNodeResponseMessage.setReceiver(sender);

@@ -533,10 +533,10 @@ public class KademliaNodeServer {
             byteBuf.markReaderIndex();
             // 读取消息类型
             int messageType = byteBuf.readInt();
-            log.info("消息类型:{}", MessageType.getDescriptionByCode(messageType));
+            log.debug("消息类型:{}", MessageType.getDescriptionByCode(messageType));
             // 读取总长度（内容长度字段 + 内容长度）
             int netVersion = byteBuf.readInt();
-            log.info("网络版本:{}", netVersion);
+            log.debug("网络版本:{}", netVersion);
             //是否和我的网络版本一致
             if (netVersion != NET_VERSION) {
                 log.warn("网络版本不一致");
@@ -544,7 +544,7 @@ public class KademliaNodeServer {
             }
             // 读取内容长度
             int contentLength = byteBuf.readInt();
-            log.info("内容长度:{}", contentLength);
+            log.debug("内容长度:{}", contentLength);
             // 检查是否有足够的数据读取完整的消息内容
             if (byteBuf.readableBytes() < contentLength) {
                 byteBuf.resetReaderIndex();
@@ -556,7 +556,7 @@ public class KademliaNodeServer {
             byteBuf.readBytes(contentBytes);
             // 反序列化为消息对象
             KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
-            log.info("UDP解码消息内容:{}", message);
+            log.debug("UDP解码消息内容:{}", message);
             // 添加到输出列表
             list.add(message);
         }
@@ -605,10 +605,10 @@ public class KademliaNodeServer {
             byteBuf.markReaderIndex();
             // 读取消息类型
             int messageType = byteBuf.readInt();
-            log.info("消息类型:{}", MessageType.getDescriptionByCode(messageType));
+            log.debug("消息类型:{}", MessageType.getDescriptionByCode(messageType));
             // 读取总长度（内容长度字段 + 内容长度）
             int netVersion = byteBuf.readInt();
-            log.info("网络版本:{}", netVersion);
+            log.debug("网络版本:{}", netVersion);
             //是否和我的网络版本一致
             if (netVersion != NET_VERSION) {
                 log.warn("网络版本不一致");
