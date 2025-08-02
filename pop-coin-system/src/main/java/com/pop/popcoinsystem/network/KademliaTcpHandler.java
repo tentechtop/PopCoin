@@ -57,16 +57,17 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
                 handleResponseMessage(ctx, message);
             }else {
                 log.info("请求消息ID {}", requestId);
-
-
+                MessageHandler messageHandler = KademliaMessageHandler.get(message.getType());
+                KademliaMessage<? extends Serializable> kademliaMessage = messageHandler.handleMesage(nodeServer, message);
+                if (kademliaMessage != null){
+                    //响应
+                    nodeServer.getTcpClient().sendMessage(kademliaMessage);
+                }
             }
         }else {
             //广播消息
-        }
-        MessageHandler messageHandler = KademliaMessageHandler.get(message.getType());
-        KademliaMessage<? extends Serializable> kademliaMessage = messageHandler.handleMesage(nodeServer, message);
-        if (kademliaMessage != null){
-            nodeServer.getTcpClient().sendMessage(kademliaMessage);
+            MessageHandler messageHandler = KademliaMessageHandler.get(message.getType());
+            messageHandler.handleMesage(nodeServer, message);
         }
     }
 

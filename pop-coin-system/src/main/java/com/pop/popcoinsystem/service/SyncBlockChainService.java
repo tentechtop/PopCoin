@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.math.BigInteger;
+import java.net.ConnectException;
 
 @Service
 public class SyncBlockChainService {
@@ -46,5 +47,29 @@ public class SyncBlockChainService {
 
         KademliaMessage kademliaMessage = kademliaNodeServer.getTcpClient().sendMessageWithResponse(rpcRequestMessage);
         return Result.ok(kademliaMessage);
+    }
+
+    public Result sendTextMessage1(String message) throws InterruptedException, ConnectException {
+        RpcRequestData rpcRequestData = new RpcRequestData();
+        rpcRequestData.setServiceName("TransactionService");
+        rpcRequestData.setMethodName("sayHello");
+        rpcRequestData.setParameters(new Object[]{message});
+        rpcRequestData.setParamTypes(new Class[]{String.class});
+
+        RpcRequestMessage rpcRequestMessage = new RpcRequestMessage();
+        rpcRequestMessage.setData(rpcRequestData);
+        rpcRequestMessage.setSender(kademliaNodeServer.getNodeInfo());
+
+
+
+        NodeInfo nodeInfo = new NodeInfo();
+        nodeInfo.setId(BigInteger.ONE);
+        nodeInfo.setIpv4("192.168.137.102");
+        nodeInfo.setTcpPort(8334);
+        nodeInfo.setUdpPort(8333);
+        rpcRequestMessage.setReceiver(nodeInfo);
+        kademliaNodeServer.getTcpClient().sendMessage(rpcRequestMessage);
+
+        return Result.ok();
     }
 }

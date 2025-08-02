@@ -20,4 +20,9 @@ public class TestMessageController {
     public Result sendTextMessage(@PathVariable("message") String  message) throws Exception {
         return syncBlockChainService.sendTextMessage( message);
     }
+
+    @GetMapping("/send1/{message}")
+    public Result sendTextMessage1(@PathVariable("message") String  message) throws Exception {
+        return syncBlockChainService.sendTextMessage1( message);
+    }
 }
