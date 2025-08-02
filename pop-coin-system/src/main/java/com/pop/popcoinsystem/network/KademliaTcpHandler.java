@@ -104,14 +104,15 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
             if (response != null) {
                 // 标记为响应消息
                 response.setResponse(true);
+                nodeServer.getTcpClient().sendMessage(response);//优化过 会复用通道
                 // 通过当前通道直接回复，避免再次查找通道
-                ctx.channel().writeAndFlush(response).addListener(future -> {
+     /*           ctx.channel().writeAndFlush(response).addListener(future -> {
                     if (future.isSuccess()) {
                         log.info("请求消息 {} 的响应已发送", message.getRequestId());
                     } else {
                         log.error("请求消息 {} 的响应发送失败", message.getRequestId(), future.cause());
                     }
-                });
+                });*/
             }
         } catch (Exception e) {
             log.error("处理请求消息 {} 时发生异常", message.getRequestId(), e);
