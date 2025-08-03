@@ -104,6 +104,7 @@ public class KademliaServiceStart {
         server.setNodeInfo(nodeInfo);
         ExternalNodeInfo externalNodeInfo = storageService.getRouteTableNode(nodeSetting.getId());
         if (externalNodeInfo == null){
+            externalNodeInfo = new ExternalNodeInfo();
             externalNodeInfo.setScore(60);
         }
         externalNodeInfo.setId(nodeSetting.getId());

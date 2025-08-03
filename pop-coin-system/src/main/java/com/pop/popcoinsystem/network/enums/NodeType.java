@@ -1,9 +1,9 @@
 package com.pop.popcoinsystem.network.enums;
 
 public enum NodeType {
-    FULL(1),      // 全节点
-    LIGHT(2),     // 轻节点
-    OUTBOUND(3);  // 仅出站
+    FULL(1),      // 全节点 保存所有数据
+    LIGHT(2),     // 轻节点 保存并同步区块头
+    OUTBOUND(3);  // 仅出站 不保存任何数据
 
     private final int value;
     private static final java.util.Map<Integer, NodeType> map = new java.util.HashMap<>();
