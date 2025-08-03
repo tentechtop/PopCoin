@@ -183,7 +183,7 @@ public class KademliaNodeServer {
             startTcpTransmitServer();
             running = true;
             scheduler = Executors.newSingleThreadScheduledExecutor();
-            //维护网络 首次执行立即开始，之后每 30 秒执行一次 maintainNetwork 方法  单位秒
+            //维护网络 首次执行立即开始，之后每 delay  秒执行一次 maintainNetwork 方法  单位秒
             long delay = 60 * 5;
             scheduler.scheduleAtFixedRate(this::maintainNetwork, delay, delay, TimeUnit.SECONDS);
         } catch (Exception e) {
@@ -384,7 +384,7 @@ public class KademliaNodeServer {
      * 检查节点活性：对超时未响应的节点发送发送Ping，仍无响应则移除
      */
     private void checkNodeLiveness(long now) {
-        // 获取路由表中所有节点
+        // 获取路由表中所有节点  或者本节点最近的节点 或者用抽样检测
         List<ExternalNodeInfo> allNodes = routingTable.getAllNodes();
         if (allNodes.isEmpty()) {
             log.debug("路由表为空，无需检查节点活性");
@@ -422,18 +422,7 @@ public class KademliaNodeServer {
             PingKademliaMessage pingMsg = new PingKademliaMessage();
             pingMsg.setSender(nodeInfo);
             pingMsg.setReceiver(BeanCopyUtils.copyObject(node, NodeInfo.class));
-
-            // 发送Ping并设置超时检查（5秒未响应则判定为失效）
             udpClient.sendAsyncMessage(pingMsg);
-            scheduler.schedule(() -> {
-                // 检查节点是否仍未活跃
-                ExternalNodeInfo latestNode = routingTable.findNode(node.getId());
-                if (latestNode != null &&
-                        System.currentTimeMillis() - latestNode.getLastSeen().getTime() > 5000) {
-                    log.info("节点 {} Ping超时，移除", node.getId());
-                    routingTable.delete(node);
-                }
-            }, 5, TimeUnit.SECONDS);
         } catch (Exception e) {
             log.error("向节点 {} 发送Ping检查失败", node.getId(), e);
         }
