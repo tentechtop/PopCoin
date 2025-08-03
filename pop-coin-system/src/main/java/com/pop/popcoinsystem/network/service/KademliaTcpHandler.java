@@ -40,6 +40,15 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, KademliaMessage message) throws Exception {
+        long messageId = message.getMessageId();
+        // 检查：若消息已存在（未过期），则跳过广播
+        if (nodeServer.getBroadcastMessages().getIfPresent(messageId) != null) {
+            log.debug("消息,或者交易 {} 已处理过（未过期），跳过", messageId);
+            return;
+        }
+        // 记录：将消息ID存入缓存（自动过期）
+        nodeServer.getBroadcastMessages().put(messageId, Boolean.TRUE);
+
         boolean single = message.isSingle();
         if (single){
             //单播消息

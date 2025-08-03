@@ -26,7 +26,7 @@ import static java.lang.Thread.sleep;
 
 @Slf4j
 @Service
-public class Mining {
+public class MiningServiceImpl {
 
     @Autowired
     private StorageService storageService;

@@ -2,7 +2,7 @@ package com.pop.popcoinsystem.application.controller;
 
 import com.pop.popcoinsystem.data.miner.Miner;
 import com.pop.popcoinsystem.data.vo.result.Result;
-import com.pop.popcoinsystem.service.mining.MiningService;
+import com.pop.popcoinsystem.service.mining.MiningStart;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/mining")
 public class MiningController {
     @Autowired
-    private MiningService miningService;
+    private MiningStart miningService;
 
     /**
      * 设置该节点的挖矿信息

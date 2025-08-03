@@ -10,7 +10,7 @@ import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.rpc.RpcProxyFactory;
 import com.pop.popcoinsystem.service.blockChain.asyn.AsyncBlockSynchronizerImpl;
-import com.pop.popcoinsystem.service.mining.Mining;
+import com.pop.popcoinsystem.service.mining.MiningServiceImpl;
 import com.pop.popcoinsystem.service.blockChain.strategy.ScriptVerificationStrategy;
 import com.pop.popcoinsystem.service.blockChain.strategy.ScriptVerifierFactory;
 import com.pop.popcoinsystem.storage.StorageService;
@@ -59,7 +59,7 @@ public class BlockChainServiceImpl implements BlockChainService {
     @Autowired
     private KademliaNodeServer kademliaNodeServer;
     @Autowired
-    private Mining mining;
+    private MiningServiceImpl mining;
 
     @Autowired
     private AsyncBlockSynchronizerImpl blockSynchronizer; // 复用异步同步器
@@ -399,6 +399,10 @@ public class BlockChainServiceImpl implements BlockChainService {
     }
 
 
+
+
+
+
     /**
      * 递归同步缺失的父区块（包括所有祖先区块）
      * @param parentHash 待同步的父区块哈希
@@ -408,7 +412,7 @@ public class BlockChainServiceImpl implements BlockChainService {
     private boolean syncMissingParentBlocks(byte[] parentHash, int depth) {
         // 检查同步深度，防止恶意区块导致无限递归
         if (depth >= MAX_SYNC_DEPTH) {
-            log.error("提示:同步深度超过限制（{}），可能存在循环依赖", MAX_SYNC_DEPTH);
+            log.error("提示:同步深度超过（{}），可能存在循环依赖", MAX_SYNC_DEPTH);
             return true;
         }
 
@@ -1605,8 +1609,5 @@ public class BlockChainServiceImpl implements BlockChainService {
         int medianIndex = windowSize / 2; // 对于11个元素，索引为5（0~10）
         return timestamps.get(medianIndex);
     }
-
-
-
 
 }
