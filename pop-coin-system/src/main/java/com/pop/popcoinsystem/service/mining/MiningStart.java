@@ -115,7 +115,7 @@ public class MiningStart implements ApplicationRunner {
 
         //if (miner == null) return;
         //等 Spring 容器完全初始化后再启动挖矿
-        miningService.startMining();
+       /* miningService.startMining();*/
     }
 
     public Result<String> startMining(Miner miner) throws Exception {

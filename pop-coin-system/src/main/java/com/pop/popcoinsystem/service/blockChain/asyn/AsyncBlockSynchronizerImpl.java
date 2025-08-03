@@ -376,8 +376,7 @@ public class AsyncBlockSynchronizerImpl implements AsyncBlockSynchronizer{
     /**
      * 拉取单批区块（带重试和超时）
      */
-    private List<Block> fetchBlockBatch(NodeInfo remoteNode, byte[] startHash, byte[] endHash, int batchSize)
-            throws InterruptedException {
+    private List<Block> fetchBlockBatch(NodeInfo remoteNode, byte[] startHash, byte[] endHash, int batchSize) throws InterruptedException {
         for (int retry = 0; retry < MAX_RETRY; retry++) {
             try {
                 RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);

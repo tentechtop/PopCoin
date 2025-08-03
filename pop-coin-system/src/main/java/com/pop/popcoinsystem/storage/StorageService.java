@@ -33,9 +33,18 @@ import static com.pop.popcoinsystem.util.YamlReaderUtils.loadYaml;
 @Slf4j
 public class StorageService {
 
+    //存储路径
+    private static String storagePath = STORAGE_PATH;
+    static {
+        Map<String, Object> config = loadYaml("application.yml");
+        if (config != null) {
+            storagePath = (String) getNestedValue(config, "system.storagePath");
+            log.info("读取存储路径: " + storagePath);
+        }
+    }
 
     // 数据库存储路径
-    private static final String DB_PATH = STORAGE_PATH+"/network" + NET_VERSION + ".db/";
+    private static String DB_PATH = storagePath+"/network" + NET_VERSION + ".db/";
 
     //这些KEY都保存在BLOCK_CHAIN 中 因为他们单独特殊
     private static final byte[] KEY_UTXO_COUNT = "key_utxo_count".getBytes();//UTXO总数

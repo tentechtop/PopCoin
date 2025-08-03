@@ -15,13 +15,25 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static com.pop.popcoinsystem.constant.BlockChainConstants.STORAGE_PATH;
+import static com.pop.popcoinsystem.util.YamlReaderUtils.getNestedValue;
+import static com.pop.popcoinsystem.util.YamlReaderUtils.loadYaml;
 
 
 @Slf4j
 public class WalletStorage {
+    private static String storagePath = STORAGE_PATH;
+    static {
+        Map<String, Object> config = loadYaml("application.yml");
+        if (config != null) {
+            storagePath = (String) getNestedValue(config, "system.storagePath");
+            log.info("读取存储路径: " + storagePath);
+        }
+    }
+
+
     // 数据库存储路径
-    private static final String DB_PATH = STORAGE_PATH+"/wallet"+ ".db/";
-    private static final String LOG_PATH = DB_PATH + "rocksdb_logs/"; // 单独目录存放 RocksDB 日志
+    private static String DB_PATH = storagePath+"/wallet"+ ".db/";
+
     // UTXO键前缀分隔符
     private static final String UTXO_KEY_SEPARATOR = "_UTXO_";
     // ------------------------------ 数据操作 ------------------------------
@@ -481,7 +493,7 @@ public class WalletStorage {
                 .setKeepLogFileNum(2); // 最多保留 2 个日志文件
 
         // 配置日志
-        String logDir = LOG_PATH; // 单独目录存放 RocksDB 日志
+        String logDir = DB_PATH + "rocksdb_logs/"; // 单独目录存放 RocksDB 日志
         new File(logDir).mkdirs(); // 确保目录存在
         options.setDbLogDir(logDir);
 
