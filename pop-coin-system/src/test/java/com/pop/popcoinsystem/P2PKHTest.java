@@ -36,7 +36,9 @@ public class P2PKHTest {
         String P2PKHAddress = CryptoUtil.ECDSASigner.createP2PKHAddressByPK(publicKey1.getEncoded());
         log.info("公钥转地址: {}", P2PKHAddress);
         log.info("验证地址是否有效: {}", CryptoUtil.ECDSASigner.isValidP2WPKHAddress(P2PKHAddress));
+
         log.info("地址转哈希: {}", CryptoUtil.bytesToHex(Objects.requireNonNull(CryptoUtil.ECDSASigner.addressToP2PKH(P2PKHAddress))));
+
         log.info("公钥转哈希: {}", CryptoUtil.bytesToHex(CryptoUtil.ECDSASigner.createP2PKHByPK(publicKey1.getEncoded())));
         AddressType addressType = CryptoUtil.ECDSASigner.getAddressType(P2PKHAddress);
         log.info("地址类型: {}", addressType);

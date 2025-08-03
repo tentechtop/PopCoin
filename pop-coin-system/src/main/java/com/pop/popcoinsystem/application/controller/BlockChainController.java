@@ -6,6 +6,7 @@ import com.pop.popcoinsystem.data.transaction.UTXO;
 import com.pop.popcoinsystem.data.transaction.dto.TransactionDTO;
 import com.pop.popcoinsystem.data.transaction.dto.UTXODTO;
 import com.pop.popcoinsystem.data.vo.result.Result;
+import com.pop.popcoinsystem.service.blockChain.BlockChainService;
 import com.pop.popcoinsystem.service.blockChain.BlockChainServiceImpl;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
@@ -24,7 +25,7 @@ import org.springframework.web.bind.annotation.*;
 public class BlockChainController {
     @Lazy
     @Autowired
-    private BlockChainServiceImpl blockChainService;
+    private BlockChainService blockChainService;
 
 
     /**
@@ -125,19 +126,41 @@ public class BlockChainController {
     /**
      * 查询地址中的余额
      */
-    @PostMapping("/getBalance")
-    public String getBalance() {
+    @GetMapping("/getBalance/{address}")
+    public Result getBalance(@PathVariable("address") String address) {
+        return blockChainService.getBalance(address);
+    }
+
+
+    /**
+     * 启动节点数据同步
+     */
+    @PostMapping("/startSync")
+    public String startSync() {
         return "";
     }
 
 
     /**
-     * 控制节点区块同步
+     * 获取同步进度
      */
-    @PostMapping("/controlSync")
-    public String controlSync() {
+    @PostMapping("/getSyncProgress")
+    public String getSyncProgress() {
         return "";
     }
+
+    /**
+     * 停止节点数据同步
+     */
+    @PostMapping("/stopSync")
+    public String stopSync() {
+        return "";
+    }
+
+
+
+
+
 
     /**
      * 获取本节点与网络的高度差

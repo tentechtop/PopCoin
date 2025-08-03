@@ -22,7 +22,6 @@ import static com.pop.popcoinsystem.util.CryptoUtil.bytesToHex;
 
 @Slf4j
 public class Script implements Serializable {
-
     /**
      * ScriptSig().getData() 的核心是提取解锁脚本中用于验证交易合法性的原始数据，这些数据通常包括交易签名、公钥等关键信息，是证明 “
      * 当前转账者有权限花费该笔比特币” 的核心依据。在代码层面，

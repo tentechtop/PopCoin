@@ -32,6 +32,8 @@ public class ScriptPubKey extends Script implements Serializable {
     }
 
 
+
+
     // 从公钥生成P2PKH锁定脚本
     public static ScriptPubKey createP2PKH(byte[] publicKey) {
         byte[] pubKeyHash = CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(publicKey));
@@ -69,6 +71,9 @@ public class ScriptPubKey extends Script implements Serializable {
         
         return script;
     }
+
+
+
 
     // 创建P2WPKH (Pay-to-Witness-Public-Key-Hash) 类型的锁定脚本
     public static ScriptPubKey createP2WPKH(byte[] pubKeyHash) {
@@ -129,6 +134,8 @@ public class ScriptPubKey extends Script implements Serializable {
     public ScriptPubKey() {
         super();
     }
+
+
 
     // 验证解锁脚本是否能解锁此锁定脚本
     public boolean verify(ScriptSig scriptSig, byte[] txToSign, int inputIndex, boolean isGenesisBlock) {

@@ -3,6 +3,7 @@ package com.pop.popcoinsystem.service.blockChain;
 import com.pop.popcoinsystem.aop.annotation.RpcServiceAlias;
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockDTO;
+import com.pop.popcoinsystem.data.block.BlockHeader;
 import com.pop.popcoinsystem.data.blockChain.BlockChain;
 import com.pop.popcoinsystem.data.enums.SigHashType;
 import com.pop.popcoinsystem.data.transaction.UTXO;
@@ -39,6 +40,11 @@ public interface BlockChainService {
      * 验证区块合法性（包括交易、PoW、链连续性等）
      */
     boolean verifyBlock(Block block, boolean broadcastMessage);
+
+    /**
+     * 验证区块头
+     */
+    boolean verifyBlockHeader(BlockHeader blockHeader);
 
     /**
      * 创建隔离见证交易的签名哈希
@@ -189,4 +195,5 @@ public interface BlockChainService {
 
     BlockDTO getBlockDto(Block block);
 
+    Result getBalance(String address);
 }

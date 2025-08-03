@@ -1,6 +1,8 @@
 package com.pop.popcoinsystem.util;
 
 import com.pop.popcoinsystem.data.script.AddressType;
+import com.pop.popcoinsystem.data.script.Script;
+import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.network.enums.NETVersion;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -671,9 +673,65 @@ public class CryptoUtil {
         }
 
 
+        /**
+         * 根据地址获取对应的锁定脚本（ScriptPubKey）
+         * 锁定脚本定义了花费该地址资金的条件
+         * @param address 目标地址
+         * @return 锁定脚本对象（ScriptPubKey）
+         */
+        public static ScriptPubKey getLockingScriptByAddress(String address) {
+            if (address == null || address.trim().isEmpty()) {
+                throw new IllegalArgumentException("地址不能为空");
+            }
 
+            // 1. 确定地址类型
+            AddressType addressType = getAddressType(address);
+            if (addressType == null) {
+                throw new IllegalArgumentException("无效的地址格式: " + address);
+            }
 
+            // 2. 获取地址对应的哈希（公钥哈希或脚本哈希）
+            byte[] hash = getAddressHash(address);
+            if (hash == null) {
+                throw new IllegalArgumentException("无法解析地址的哈希值: " + address);
+            }
+            ScriptPubKey scriptPubKey = new ScriptPubKey();
+            switch (addressType) {
+                case P2PKH:
+                    byte[] bytes = addressToP2PKH(address);
+                    scriptPubKey = ScriptPubKey.createP2PKHByPublicKeyHash(bytes);
+                    break;
+                case P2SH:
+                    byte[] bytes1 = addressToP2SH(address);
+                    scriptPubKey = ScriptPubKey.createP2SH(bytes1);
+                    break;
 
+                case P2WPKH:
+                    byte[] bytes2 = addressToP2WPKH(address);
+                    scriptPubKey = ScriptPubKey.createP2WPKH(bytes2);
+                    break;
+                case P2WSH:
+                    byte[] bytes3 = addressToP2WSH(address);
+                    scriptPubKey = ScriptPubKey.createP2WSH(bytes3);
+                    break;
+
+                default:
+                    throw new UnsupportedOperationException("不支持的地址类型: " + addressType);
+            }
+            return scriptPubKey;
+        }
+
+        /**
+         * 验证哈希长度是否符合地址类型要求
+         * @param hash 待验证的哈希
+         * @param expectedLength 预期长度（字节）
+         * @param addressType 地址类型（用于错误提示）
+         */
+        private static void validateHashLength(byte[] hash, int expectedLength, String addressType) {
+            if (hash.length != expectedLength) {
+                throw new IllegalArgumentException(addressType + "地址的哈希长度必须为" + expectedLength + "字节，实际为" + hash.length + "字节");
+            }
+        }
 
 
     }

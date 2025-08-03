@@ -4,6 +4,7 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockDTO;
+import com.pop.popcoinsystem.data.block.BlockHeader;
 import com.pop.popcoinsystem.data.blockChain.BlockChain;
 import com.pop.popcoinsystem.data.enums.SigHashType;
 import com.pop.popcoinsystem.data.script.*;
@@ -46,6 +47,7 @@ import static com.pop.popcoinsystem.constant.BlockChainConstants.*;
 import static com.pop.popcoinsystem.service.blockChain.asyn.AsyncBlockSynchronizerImpl.RPC_TIMEOUT;
 import static com.pop.popcoinsystem.storage.StorageService.getUTXOKey;
 import static com.pop.popcoinsystem.data.transaction.Transaction.calculateBlockReward;
+import static com.pop.popcoinsystem.util.CryptoUtil.ECDSASigner.getLockingScriptByAddress;
 
 
 @Slf4j
@@ -332,7 +334,11 @@ public class BlockChainServiceImpl implements BlockChainService {
     public boolean verifyAndAddTradingPool(Transaction transaction, boolean broadcastMessage) {
         log.info("您的交易已提交,正在验证交易...");
         if (verifyTransaction(transaction)) {
-            mining.addTransaction(transaction);
+            byte[] blockHashByTxId = getBlockHashByTxId(transaction.getTxId());
+            if (blockHashByTxId == null){
+                //不存在双花
+                mining.addTransaction(transaction);
+            }
             if (kademliaNodeServer.isRunning()){
                 log.info("交易验证成功,广播交易");
                 TransactionMessage transactionKademliaMessage = new TransactionMessage();
@@ -438,6 +444,10 @@ public class BlockChainServiceImpl implements BlockChainService {
         return true;
     }
 
+    @Override
+    public boolean verifyBlockHeader(BlockHeader blockHeader) {
+        return false;
+    }
 
     /**
      * 触发父区块同步，当父区块同步成功后自动处理其对应的孤儿区块
@@ -1079,6 +1089,10 @@ public class BlockChainServiceImpl implements BlockChainService {
         return popStorage.getBlockByTxId(txId);
     }
 
+    private byte[] getBlockHashByTxId(byte[] txId) {
+        return popStorage.getBlockHashByTxId(txId);
+    }
+
 
     /**
      * 找到两个链的公共祖先
@@ -1673,5 +1687,52 @@ public class BlockChainServiceImpl implements BlockChainService {
         int medianIndex = windowSize / 2; // 对于11个元素，索引为5（0~10）
         return timestamps.get(medianIndex);
     }
+
+    /**
+     * 获取地址余额
+     * @param address
+     * @return
+     */
+    @Override
+    public Result getBalance(String address) {
+        final int PAGE_SIZE = 5000; // 分页大小，5000更符合常见分页逻辑
+        final int RETRY_COUNT = 3; // 重试次数
+        ScriptPubKey lockingScriptByAddress = getLockingScriptByAddress(address);
+        byte[] scriptBytes = lockingScriptByAddress.serialize();
+        byte[] scriptHash = CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(scriptBytes));
+
+        String cursor = null;
+        boolean hasMore = true;
+
+        long typeBalance = 0;
+        int totalFetched = 0;
+        while (hasMore) {
+            TPageResult<UTXOSearch> pageResult = null;
+            // 带重试的分页查询
+            pageResult = selectUtxoAmountsByScriptHash(scriptHash, PAGE_SIZE, cursor);
+            if (pageResult == null) {
+                log.error("{} UTXO查询返回空结果 -> cursor: {}", address, cursor);
+                break;
+            }
+            UTXOSearch searchResult = pageResult.getData();
+            if (searchResult == null) {
+                log.warn("{} UTXO分页数据为空 -> cursor: {}", address, cursor);
+                break;
+            }
+            Set<String> currentPageUTXOs = searchResult.getUtxos();
+            if (currentPageUTXOs != null && !currentPageUTXOs.isEmpty()) {
+                typeBalance += searchResult.getTotal();
+                totalFetched += currentPageUTXOs.size();
+            }
+            // 更新分页状态
+            hasMore = !pageResult.isLastPage();
+            cursor = pageResult.getLastKey();
+        }
+
+        return Result.ok(typeBalance);
+    }
+
+
+
 
 }
