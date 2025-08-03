@@ -22,11 +22,11 @@ public class BlockMessageHandler implements MessageHandler {
 
     protected BlockMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull BlockMessage message) throws InterruptedException {
         Block data = message.getData();
-        log.info("收到区块消息消息{}",data);
+        log.debug("收到区块消息{}",data);
         byte[] bytes = data.getHash();
         long blockMessageId = ByteUtils.bytesToLong(bytes);
         if (kademliaNodeServer.getBroadcastMessages().getIfPresent(blockMessageId) != null) {
-            log.info("接收已处理的区块消息 {}，丢弃", blockMessageId);
+            log.debug("接收已处理的区块消息 {}，丢弃", blockMessageId);
         }else {
             // 记录：标记为已处理
             kademliaNodeServer.getBroadcastMessages().put(blockMessageId, Boolean.TRUE);

@@ -3,7 +3,11 @@ package com.pop.popcoinsystem.constant;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
+
+import static com.pop.popcoinsystem.util.YamlReaderUtils.getNestedValue;
+import static com.pop.popcoinsystem.util.YamlReaderUtils.loadYaml;
 
 @Slf4j
 public class BlockChainConstants {
@@ -17,6 +21,7 @@ public class BlockChainConstants {
 
     //存储路径
     public static String STORAGE_PATH = "db/";
+
     public static void setStoragePath(String storagePath) {
         STORAGE_PATH = storagePath;
     }
