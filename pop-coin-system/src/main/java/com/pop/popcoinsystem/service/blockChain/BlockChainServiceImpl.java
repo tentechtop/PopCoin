@@ -398,86 +398,112 @@ public class BlockChainServiceImpl implements BlockChainService {
 
 
     /**
-     * 递归同步缺失的父区块（包括所有祖先区块）
-     * @param parentHash 待同步的父区块哈希
-     * @return 同步是否成功
+     * 迭代方式同步缺失的父区块（替代递归，避免栈溢出）
      */
-    // 修改方法定义，移除depth参数
-    private boolean syncMissingParentBlocks(byte[] parentHash) {
-        // 检查父区块是否已存在（可能其他线程已同步）
-        if (getBlockByHash(parentHash) != null) {
-            log.info("父区块已存在，无需同步，哈希：{}", CryptoUtil.bytesToHex(parentHash));
-            return true;
-        }
+    private boolean syncMissingParentBlocks(byte[] targetParentHash) {
+        // 用栈存储待同步的区块哈希（模拟递归调用栈）
+        Stack<byte[]> hashStack = new Stack<>();
+        hashStack.push(targetParentHash);
 
-        // 若父区块是创世区块，直接返回失败（创世区块必须预存）
-        if (Arrays.equals(parentHash, getGenesisBlockHash())) {
-            log.error("创世区块不存在，无法同步");
-            return false;
-        }
+        // 记录已处理的哈希，避免循环同步（如恶意区块形成环）
+        Set<String> processedHashes = new HashSet<>();
 
-        log.info("开始同步父区块，哈希：{}", CryptoUtil.bytesToHex(parentHash));
+        while (!hashStack.isEmpty()) {
+            byte[] currentHash = hashStack.pop();
+            String currentHashHex = CryptoUtil.bytesToHex(currentHash);
 
-        try {
-            // 1. 查找拥有该父区块的节点（从Kademlia网络获取邻居节点）
-            List<ExternalNodeInfo> closest = kademliaNodeServer.getRoutingTable().findClosest(new BigInteger(1, parentHash));
-            if (closest.isEmpty()) {
-                log.error("未找到可提供父区块的节点");
+            // 检查是否已处理过（防环）
+            if (processedHashes.contains(currentHashHex)) {
+                log.warn("检测到循环依赖的区块哈希：{}，跳过", currentHashHex);
+                continue;
+            }
+            processedHashes.add(currentHashHex);
+
+            // 检查区块是否已存在，存在则无需同步
+            if (getBlockByHash(currentHash) != null) {
+                log.info("区块已存在，无需同步：{}", currentHashHex);
+                continue;
+            }
+
+            // 若为创世区块且不存在，同步失败
+            if (Arrays.equals(currentHash, getGenesisBlockHash())) {
+                log.error("创世区块不存在，同步失败");
                 return false;
             }
-            List<NodeInfo> candidateNodes = BeanCopyUtils.copyList(closest, NodeInfo.class);
 
-            // 2. 向候选节点发送区块请求（逐个尝试，直到成功）
+            // 同步当前区块
+            Block currentBlock = syncSingleBlock(currentHash);
+            if (currentBlock == null) {
+                log.error("同步区块失败：{}，中断链条", currentHashHex);
+                return false;
+            }
+
+            // 将当前区块的父哈希压入栈，继续同步（模拟递归）
+            byte[] parentHash = currentBlock.getPreviousHash();
+            hashStack.push(parentHash);
+
+            // 每同步10个区块，手动触发一次GC（可选，根据内存情况调整）
+            if (processedHashes.size() % 10 == 0) {
+                System.gc(); // 提示JVM回收内存（非强制）
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 同步单个区块（提取为独立方法，便于复用和控制）
+     */
+    private Block syncSingleBlock(byte[] blockHash) {
+        try {
+            // 1. 查找候选节点
+            List<ExternalNodeInfo> closestNodes = kademliaNodeServer.getRoutingTable()
+                    .findClosest(new BigInteger(1, blockHash));
+            if (closestNodes.isEmpty()) {
+                log.error("无候选节点提供区块：{}", CryptoUtil.bytesToHex(blockHash));
+                return null;
+            }
+            List<NodeInfo> candidateNodes = BeanCopyUtils.copyList(closestNodes, NodeInfo.class);
+
+            // 2. 向节点请求区块
             CompletableFuture<Block> blockFuture = new CompletableFuture<>();
             for (NodeInfo node : candidateNodes) {
                 try {
-                    // 异步请求目标区块
                     blockSynchronizer.syncExecutor.submit(() -> {
                         try {
                             RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, node);
                             proxyFactory.setTimeout(RPC_TIMEOUT);
                             BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
-                            Block result = remoteService.getBlockByHash(parentHash);
-                            if (result!= null) {
+                            Block result = remoteService.getBlockByHash(blockHash);
+                            if (result != null) {
                                 blockFuture.complete(result);
                             }
                         } catch (Exception e) {
-                            log.debug("从节点{}获取父区块失败，继续尝试其他节点", node, e);
+                            log.debug("从节点{}获取区块失败，继续尝试", node, e);
                         }
                     });
-                    // 等待结果，超时则尝试下一个节点
-                    Block parentBlock = blockFuture.get(PARENT_BLOCK_SYNC_TIMEOUT / candidateNodes.size(), TimeUnit.MILLISECONDS);
 
-                    // 3. 验证同步到的父区块
-                    if (parentBlock != null && Arrays.equals(parentBlock.getHash(), parentHash)) {
-                        log.info("成功同步父区块，哈希：{}", CryptoUtil.bytesToHex(parentHash));
-                        // 递归同步父区块的父区块（移除depth参数）
-                        boolean grandparentSynced = syncMissingParentBlocks(parentBlock.getPreviousHash());
-                        if (!grandparentSynced) {
-                            log.error("父区块的父区块同步失败，中断链条");
-                            return false;
-                        }
-                        // 4. 将同步到的父区块加入本地链
-                        addBlockToMainChain(parentBlock);
-                        return true;
+                    // 等待结果（超时后尝试下一个节点）
+                    Block block = blockFuture.get(PARENT_BLOCK_SYNC_TIMEOUT / candidateNodes.size(), TimeUnit.MILLISECONDS);
+                    if (block != null && Arrays.equals(block.getHash(), blockHash)) {
+                        // 验证并添加区块到本地
+                        addBlockToMainChain(block);
+                        return block;
                     }
                 } catch (TimeoutException | InterruptedException e) {
-                    log.debug("从节点{}获取父区块超时或中断，继续尝试", node, e);
+                    log.debug("从节点{}获取区块超时，继续尝试", node, e);
                     Thread.currentThread().interrupt();
                 } catch (Exception e) {
-                    log.debug("从节点{}获取父区块异常，继续尝试", node, e);
+                    log.debug("从节点{}获取区块异常，继续尝试", node, e);
                 }
             }
-
-            // 所有节点都尝试失败
-            log.error("所有候选节点均无法提供父区块，哈希：{}", CryptoUtil.bytesToHex(parentHash));
-            return false;
-
+            return null; // 所有节点均失败
         } catch (Exception e) {
-            log.error("父区块同步过程异常", e);
-            return false;
+            log.error("同步单个区块异常：{}", CryptoUtil.bytesToHex(blockHash), e);
+            return null;
         }
     }
+
+
 
 
     /**
