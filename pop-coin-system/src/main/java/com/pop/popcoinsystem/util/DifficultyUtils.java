@@ -103,6 +103,30 @@ public class DifficultyUtils {
         return difficulty;
     }
 
+
+    public static long targetToDifficulty(String targetHex) {
+        BigInteger target = new BigInteger(targetHex, 16);
+        if (target.compareTo(BigInteger.ZERO) <= 0) {
+            throw new IllegalArgumentException("目标值必须为正数");
+        }
+        // 难度值 = 难度1目标值 / 目标值（向上取整）
+        BigInteger[] divideAndRemainder = DIFFICULTY_1_TARGET.divideAndRemainder(target);
+        long difficulty = divideAndRemainder[0].longValue();
+        if (divideAndRemainder[1].compareTo(BigInteger.ZERO) > 0) {
+            difficulty += 1;
+        }
+        return difficulty;
+    }
+
+    public static long targetToDifficulty(byte[] difficultyTarget) {
+        // 步骤2：byte[]转难度值
+        BigInteger target = DifficultyUtils.compactToTarget(difficultyTarget); // 解析为256位目标值
+        return DifficultyUtils.targetToDifficulty(target);
+    }
+
+
+
+
     /**
      * 计算调整后的新难度（long）
      * @param oldDifficulty 上一周期的难度值（long）
@@ -226,8 +250,58 @@ public class DifficultyUtils {
         return targetToCompact(target);
     }
 
+
+    // 辅助方法：字节数组转16进制字符串
+    private static String bytesToHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
+    }
+
+    // 辅助方法：16进制字符串转字节数组
+    private static byte[] hexToBytes(String hex) {
+        if (hex == null || hex.length() % 2 != 0) {
+            throw new IllegalArgumentException("16进制字符串长度必须为偶数");
+        }
+        // 确保生成32字节的数组
+        byte[] bytes = new byte[32];
+        byte[] hexBytes = CryptoUtil.hexToBytes(hex);
+
+        // 复制到32字节数组（右对齐，左侧补0）
+        int copyLength = Math.min(32, hexBytes.length);
+        System.arraycopy(hexBytes, 0, bytes, 32 - copyLength, copyLength);
+
+        return bytes;
+    }
+
+
+
+
     // 示例测试
     public static void main(String[] args) {
+        String hex = "0000ffffffff0000000000000000000000000000000000000000000000000000";
+        //转字节类型的难度目标 未压缩
+
+
+
+        long l = targetToDifficulty(hex);
+        System.out.println(l);
+
+        // 步骤1：十六进制字符串转byte[]
+        String targetHex = "1e3fffff";
+        byte[] difficultyTarget = CryptoUtil.hexToBytes(targetHex); // 得到4字节数组 [0x1e, 0x3f, 0xff, 0xff]
+
+        // 步骤2：byte[]转难度值
+        BigInteger target = DifficultyUtils.compactToTarget(difficultyTarget); // 解析为256位目标值
+        long difficulty1 = DifficultyUtils.targetToDifficulty(target); // 转换为难度值
+
+        System.out.println("十六进制字符串：" + targetHex);
+        System.out.println("对应的字节数组：" + DifficultyUtils.toHexString(difficultyTarget)); // 输出 "1e3fffff"
+        System.out.println("转换后的难度值：" + difficulty1);
+
+
         // 测试1：难度1对应的目标值
         BigInteger target1 = difficultyToTarget(1L);
         System.out.println("难度1的目标值：" + target1.toString(16));
@@ -296,44 +370,7 @@ public class DifficultyUtils {
         } catch (IllegalArgumentException e) {
             System.out.println("错误: " + e.getMessage());
         }
-
-
-
-
-
-
-
-
-
-
     }
-
-    // 辅助方法：字节数组转16进制字符串
-    private static String bytesToHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            sb.append(String.format("%02x", b));
-        }
-        return sb.toString();
-    }
-
-    // 辅助方法：16进制字符串转字节数组
-    private static byte[] hexToBytes(String hex) {
-        if (hex == null || hex.length() % 2 != 0) {
-            throw new IllegalArgumentException("16进制字符串长度必须为偶数");
-        }
-        // 确保生成32字节的数组
-        byte[] bytes = new byte[32];
-        byte[] hexBytes = CryptoUtil.hexToBytes(hex);
-
-        // 复制到32字节数组（右对齐，左侧补0）
-        int copyLength = Math.min(32, hexBytes.length);
-        System.arraycopy(hexBytes, 0, bytes, 32 - copyLength, copyLength);
-
-        return bytes;
-    }
-
-
 
 
 }

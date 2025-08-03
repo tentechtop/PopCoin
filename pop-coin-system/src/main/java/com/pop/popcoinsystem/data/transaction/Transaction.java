@@ -379,6 +379,8 @@ public class Transaction implements Serializable {
     }
 
 
+
+
     /**
      * 计算VarInt的大小（以字节为单位）
      */
@@ -825,5 +827,11 @@ public class Transaction implements Serializable {
         } catch (IOException e) {
             throw new RuntimeException("计算普通交易签名哈希失败", e);
         }
+    }
+
+
+    public long getWitnessSize() {
+        // 直接调用已实现的见证数据大小计算方法
+        return calculateWitnessSize();
     }
 }

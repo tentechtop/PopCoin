@@ -147,73 +147,102 @@ public class AsyncBlockSynchronizer {
                                     byte[] startHash, byte[] endHash) throws ConnectException, InterruptedException {
         log.info("开始同步区块，从 {} 到 {}",
                 CryptoUtil.bytesToHex(startHash), CryptoUtil.bytesToHex(endHash));
-
         // 检查进度：如果之前同步过，从上次进度开始
         BigInteger nodeId = remoteNode.getId();
-        String lastSyncedHashHex = syncProgress.get(nodeId);
-        byte[] currentStartHash = startHash;
-        if (lastSyncedHashHex != null && !lastSyncedHashHex.isEmpty()) {
-            currentStartHash = CryptoUtil.hexToBytes(lastSyncedHashHex);
-            log.info("检测到历史同步进度，从 {} 继续", lastSyncedHashHex);
-        }
+        try {
+            String lastSyncedHashHex = syncProgress.get(nodeId);
+            byte[] currentStartHash = startHash;
+            if (lastSyncedHashHex != null && !lastSyncedHashHex.isEmpty()) {
+                currentStartHash = CryptoUtil.hexToBytes(lastSyncedHashHex);
+                log.info("检测到历史同步进度，从 {} 继续", lastSyncedHashHex);
+            }
 
-        BlockChainService localChainService = nodeServer.getBlockChainService();
-        Block prevBlock = localChainService.getBlockByHash(currentStartHash);
-        if (prevBlock == null && !Arrays.equals(currentStartHash, CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX))) {
-            log.error("起始区块不存在，同步失败");
-            return;
-        }
-
-        // 循环分批获取区块
-        while (true) {
-            // 1. 分批请求区块（本次最多BATCH_SIZE个）
-            List<Block> remoteBlocks = fetchBlockBatch(remoteNode, currentStartHash, endHash);
-            if (remoteBlocks == null || remoteBlocks.isEmpty()) {
-                log.info("所有区块同步完成");
-                syncProgress.remove(nodeId); // 清除进度
+            BlockChainService localChainService = nodeServer.getBlockChainService();
+            Block prevBlock = localChainService.getBlockByHash(currentStartHash);
+            if (prevBlock == null && !Arrays.equals(currentStartHash, CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX))) {
+                log.error("起始区块不存在，同步失败");
                 return;
             }
 
-            // 2. 处理当前批次区块
-            Block lastProcessedBlock = null;
-            for (Block block : remoteBlocks) {
-                // 验证区块合法性
-                if (!localChainService.verifyBlock(block)) {
-                    log.error("区块验证失败，哈希: {}", CryptoUtil.bytesToHex(block.getHash()));
-                    throw new RuntimeException("无效区块，中断同步");
-                }
-
-                // 检查连续性
-                if (prevBlock != null && !Arrays.equals(block.getPreviousHash(), prevBlock.getHash())) {
-                    log.warn("区块不连续，补充中间区块");
-                    // 递归处理中间缺失的区块（范围小，递归安全）
-                    sendHeadersRequest(nodeServer, remoteNode, prevBlock.getHash(), block.getHash());
-                    prevBlock = localChainService.getBlockByHash(block.getPreviousHash());
-                    if (prevBlock == null) {
-                        throw new RuntimeException("补充区块失败，中断同步");
-                    }
-                }
-
-                // 添加到本地链
-                localChainService.addBlockToMainChain(block);
-                log.info("同步区块[{}]，高度: {}", CryptoUtil.bytesToHex(block.getHash()), block.getHeight());
-                lastProcessedBlock = block;
-                prevBlock = block;
-            }
-
-            // 3. 记录进度，准备下一批
-            if (lastProcessedBlock != null) {
-                String lastHashHex = CryptoUtil.bytesToHex(lastProcessedBlock.getHash());
-                syncProgress.put(nodeId, lastHashHex);
-                currentStartHash = lastProcessedBlock.getHash();
-
-                // 检查是否已达到目标区块
-                if (Arrays.equals(lastProcessedBlock.getHash(), endHash)) {
-                    log.info("已同步到目标区块 {}", lastHashHex);
-                    syncProgress.remove(nodeId);
+            // 循环分批获取区块
+            while (true) {
+                // 1. 分批请求区块（本次最多BATCH_SIZE个）
+                List<Block> remoteBlocks = fetchBlockBatch(remoteNode, currentStartHash, endHash);
+                if (remoteBlocks == null || remoteBlocks.isEmpty()) {
+                    log.info("所有区块同步完成");
+                    syncProgress.remove(nodeId); // 清除进度
                     return;
                 }
+
+                // 2. 处理当前批次区块
+                Block lastProcessedBlock = null;
+                for (Block block : remoteBlocks) {
+                    // 验证区块合法性
+                    if (!localChainService.verifyBlock(block)) {
+                        log.error("区块验证失败，哈希: {}", CryptoUtil.bytesToHex(block.getHash()));
+                        throw new RuntimeException("无效区块，中断同步");
+                    }
+
+                    // 检查连续性
+                    if (prevBlock != null && !Arrays.equals(block.getPreviousHash(), prevBlock.getHash())) {
+                        log.warn("区块不连续，补充中间区块");
+                        // 递归处理中间缺失的区块（范围小，递归安全）
+                        // sendHeadersRequest(nodeServer, remoteNode, prevBlock.getHash(), block.getHash());
+
+                        // 原递归部分改为循环
+                        while (prevBlock != null && !Arrays.equals(block.getPreviousHash(), prevBlock.getHash())) {
+                            log.warn("区块不连续，补充中间区块（从 {} 到 {}）",
+                                    CryptoUtil.bytesToHex(prevBlock.getHash()), CryptoUtil.bytesToHex(block.getPreviousHash()));
+
+                            // 拉取中间缺失的区块（最多BATCH_SIZE个）
+                            List<Block> missingBlocks = fetchBlockBatch(remoteNode, prevBlock.getHash(), block.getPreviousHash());
+                            if (missingBlocks == null || missingBlocks.isEmpty()) {
+                                throw new RuntimeException("补充中间区块失败，中断同步");
+                            }
+
+                            // 处理中间区块
+                            for (Block missingBlock : missingBlocks) {
+                                if (!localChainService.verifyBlock(missingBlock)) {
+                                    throw new RuntimeException("中间区块验证失败，哈希: " + CryptoUtil.bytesToHex(missingBlock.getHash()));
+                                }
+                                localChainService.addBlockToMainChain(missingBlock);
+                                log.info("补充中间区块[{}]，高度: {}", CryptoUtil.bytesToHex(missingBlock.getHash()), missingBlock.getHeight());
+                                prevBlock = missingBlock;
+                            }
+                        }
+
+                        prevBlock = localChainService.getBlockByHash(block.getPreviousHash());
+                        if (prevBlock == null) {
+                            throw new RuntimeException("补充区块失败，中断同步");
+                        }
+                    }
+
+                    // 添加到本地链
+                    localChainService.addBlockToMainChain(block);
+                    log.info("同步区块[{}]，高度: {}", CryptoUtil.bytesToHex(block.getHash()), block.getHeight());
+                    lastProcessedBlock = block;
+                    prevBlock = block;
+                }
+
+                // 3. 记录进度，准备下一批
+                if (lastProcessedBlock != null) {
+                    String lastHashHex = CryptoUtil.bytesToHex(lastProcessedBlock.getHash());
+                    syncProgress.put(nodeId, lastHashHex);
+                    currentStartHash = lastProcessedBlock.getHash();
+
+                    // 检查是否已达到目标区块
+                    if (Arrays.equals(lastProcessedBlock.getHash(), endHash)) {
+                        log.info("已同步到目标区块 {}", lastHashHex);
+                        syncProgress.remove(nodeId);
+                        return;
+                    }
+                }
             }
+
+        } catch (Exception e) {
+            log.error("同步失败，清理进度", e);
+            syncProgress.remove(nodeId); // 异常时移除错误进度
+            throw e; // 向上抛出，中断同步
         }
     }
 
@@ -225,7 +254,6 @@ public class AsyncBlockSynchronizer {
                 // 设置RPC超时
                 proxyFactory.setTimeout(RPC_TIMEOUT);
                 BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
-
                 // 调用支持分批的方法（需在BlockChainService中新增）
                 return remoteService.getBlockByStartHashAndEndHashWithLimit(startHash, endHash, BATCH_SIZE);
             } catch (Exception e) {
@@ -257,7 +285,9 @@ public class AsyncBlockSynchronizer {
             List<byte[]> localHashes = collectKeyHashes(localChainService);
 
             // 2. 远程节点查找分叉点（最后一个共同哈希）
-            byte[] forkPointHash = remoteChainService.findForkPoint(localHashes);
+            //byte[] forkPointHash = remoteChainService.findForkPoint(localHashes);
+            byte[] forkPointHash = findForkPointWithBinarySearch(remoteChainService, localChainService);
+
             if (forkPointHash == null) {
                 forkPointHash = CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX); // 无共同区块，从创世开始
                 log.warn("未找到共同区块，从创世区块同步");
@@ -272,6 +302,32 @@ public class AsyncBlockSynchronizer {
         } catch (Exception e) {
             log.error("发送分叉点查找请求失败", e);
         }
+    }
+
+
+    // 优化分叉点查找逻辑（远程节点实现对应方法）
+    private byte[] findForkPointWithBinarySearch(BlockChainService remoteService, BlockChainService localService) {
+        long localHeight = localService.getMainLatestHeight();
+        long remoteHeight = remoteService.getMainLatestHeight();
+        long low = 0;
+        long high = Math.min(localHeight, remoteHeight);
+        byte[] forkHash = CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX); // 默认创世区块
+
+        while (low <= high) {
+            long mid = (low + high) / 2;
+            Block localBlock = localService.getMainBlockByHeight(mid);
+            Block remoteBlock = remoteService.getMainBlockByHeight(mid);
+
+            if (localBlock != null && remoteBlock != null && Arrays.equals(localBlock.getHash(), remoteBlock.getHash())) {
+                // 中间高度区块相同，尝试更高高度
+                forkHash = localBlock.getHash();
+                low = mid + 1;
+            } else {
+                // 中间高度区块不同，尝试更低高度
+                high = mid - 1;
+            }
+        }
+        return forkHash;
     }
 
     // 辅助方法：收集本地链的关键哈希（用于分叉点查找）

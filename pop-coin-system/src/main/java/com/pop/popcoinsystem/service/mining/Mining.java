@@ -149,7 +149,7 @@ public class Mining {
                 newBlock.setTime(System.currentTimeMillis() /1000);
                 newBlock.setDifficulty(currentDifficulty);
                 newBlock.setDifficultyTarget(DifficultyUtils.difficultyToCompact(currentDifficulty));
-                long medianTime = calculateMedianTime(TIME_WINDOW_SIZE);
+                long medianTime = blockChainService.calculateMedianTime(TIME_WINDOW_SIZE);
                 newBlock.setMedianTime(medianTime);
 
                 //  //表示该区块之前的区块链总工作量，以十六进制表示。它反映了整个区块链的挖矿工作量。
@@ -215,40 +215,6 @@ public class Mining {
     }
 
 
-
-    /**
-     * 计算当前主链的中位数时间
-     * @param windowSize 时间窗口大小（建议为奇数，如11）
-     * @return 中位数时间（单位与区块时间戳一致，如秒）
-     */
-    public long calculateMedianTime(int windowSize) {
-        // 1. 校验窗口大小（必须为正整数，建议奇数）
-        if (windowSize <= 0) {
-            throw new IllegalArgumentException("窗口大小必须为正整数");
-        }
-
-        // 2. 获取主链最新区块高度
-        long latestHeight = blockChainService.getMainLatestHeight();
-        if (latestHeight < windowSize - 1) {
-            // 区块数量不足窗口大小，直接返回最新区块时间
-            return blockChainService.getMainLatestBlock().getTime();
-        }
-
-        // 3. 提取最近windowSize个主链区块的时间戳
-        List<Long> timestamps = new ArrayList<>(windowSize);
-        for (int i = 0; i < windowSize; i++) {
-            long height = latestHeight - i;
-            Block block = blockChainService.getMainBlockByHeight(height);
-            if (block != null) {
-                timestamps.add(block.getTime());
-            }
-        }
-
-        // 4. 排序并取中位数
-        Collections.sort(timestamps);
-        int medianIndex = windowSize / 2; // 对于11个元素，索引为5（0~10）
-        return timestamps.get(medianIndex);
-    }
 
 
 

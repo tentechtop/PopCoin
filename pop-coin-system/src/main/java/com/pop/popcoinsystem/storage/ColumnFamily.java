@@ -14,6 +14,9 @@ public enum ColumnFamily {
     //hash -> 区块高度
     BLOCK_HASH_HEIGHT("CF_BLOCK_HASH_HEIGHT", "blockHashHeight",new ColumnFamilyOptions()),
 
+    BLOCK_HASH_CHAIN_WORK("CF_BLOCK_HASH_CHAIN_WORK", "blockHashChainWork",new ColumnFamilyOptions()),
+
+
     //交易到区块的索引 Map<String, byte[]>   一笔交易只可能存在于一个区块
     TRANSACTION_INDEX("CF_TRANSACTION_INDEX", "transactionIndex", new ColumnFamilyOptions()),
     //主链索引 高度到区块哈希

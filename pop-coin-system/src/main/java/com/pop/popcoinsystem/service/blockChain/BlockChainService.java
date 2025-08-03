@@ -180,5 +180,7 @@ public interface BlockChainService {
 
     byte[] findForkPoint(List<byte[]> localHashes);
 
+
+
     List<Block> getBlockByStartHashAndEndHashWithLimit(byte[] startHash, byte[] endHash, int batchSize);
 }

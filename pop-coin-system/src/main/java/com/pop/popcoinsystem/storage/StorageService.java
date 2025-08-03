@@ -68,6 +68,7 @@ public class StorageService {
             throw new RuntimeException("更新主链当前高度失败", e);
         }
     }
+    //更新主链当前区块hash
     public void updateMainLatestBlockHash(byte[] blockHash) {
         try {
             db.put(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_MAIN_LATEST_BLOCK_HASH, blockHash);
@@ -226,6 +227,11 @@ public class StorageService {
             byte[] heightBytes = ByteUtils.toBytes(block.getHeight());
             db.put(ColumnFamily.BLOCK_HASH_HEIGHT.getHandle(), blockHash, heightBytes);
 
+            // 5. 存储哈希-chainWork映射（到新增BLOCK_HASH_CHAIN_WORK列族）
+            byte[] chainWork = block.getChainWork();
+            db.put(ColumnFamily.BLOCK_HASH_CHAIN_WORK.getHandle(), blockHash, chainWork);
+
+
             //添加交易到区块的索引
             for (int i = 0; i < block.getTransactions().size(); i++) {
                 db.put(ColumnFamily.TRANSACTION_INDEX.getHandle(), block.getTransactions().get(i).getTxId(), blockHash);
@@ -259,6 +265,7 @@ public class StorageService {
                 writeBatch.put(ColumnFamily.BLOCK.getHandle(), blockHash, SerializeUtils.serialize(header));
                 writeBatch.put(ColumnFamily.BLOCK_BODY.getHandle(), blockHash, SerializeUtils.serialize(body));
                 writeBatch.put(ColumnFamily.BLOCK_HASH_HEIGHT.getHandle(), blockHash, ByteUtils.toBytes(block.getHeight()));
+                writeBatch.put(ColumnFamily.BLOCK_HASH_CHAIN_WORK.getHandle(), blockHash, block.getChainWork());
 
                 //交易id到区块hash的索引
                 for (int i = 0; i < block.getTransactions().size(); i++) {
@@ -293,6 +300,7 @@ public class StorageService {
             db.delete(ColumnFamily.BLOCK.getHandle(), hash);
             db.delete(ColumnFamily.BLOCK_BODY.getHandle(), hash);
             db.delete(ColumnFamily.BLOCK_HASH_HEIGHT.getHandle(), hash);
+            db.delete(ColumnFamily.BLOCK_HASH_CHAIN_WORK.getHandle(), hash);
 
         } catch (RocksDBException e) {
             log.error("删除区块失败: blockHash={}", hash, e);
@@ -327,6 +335,7 @@ public class StorageService {
                 writeBatch.delete(ColumnFamily.BLOCK.getHandle(), hash);
                 writeBatch.delete(ColumnFamily.BLOCK_BODY.getHandle(), hash);
                 writeBatch.delete(ColumnFamily.BLOCK_HASH_HEIGHT.getHandle(), hash);
+                writeBatch.delete(ColumnFamily.BLOCK_HASH_CHAIN_WORK.getHandle(), hash);
             }
             // 执行批量删除（原子操作）
             db.write(writeOptions, writeBatch);
@@ -364,12 +373,72 @@ public class StorageService {
             }
             BlockBody body = (BlockBody) SerializeUtils.deSerialize(bodyData);
             // 3. 合并为完整区块
-            return Block.merge(header, body);
+            //获取区块所在高度
+            long blockHeightByHash = getBlockHeightByHash(hash);
+            long medianTime = calculateMedianTime(hash);
+            getBlockHeightByHash(hash);
+            byte[] chainWork = getBlockChainWorkByHash(hash);
+            return Block.merge(header, body,hash,blockHeightByHash,medianTime,chainWork);
         } catch (RocksDBException e) {
             log.error("获取区块失败: blockHash={}", hash, e);
             throw new RuntimeException("获取区块失败", e);
         }
     }
+
+    /**
+     * 根据指定区块哈希，计算该区块及其之前共11个主链区块的中位数时间戳
+     * @param hash 目标区块的哈希
+     * @return 11个区块时间戳的中位数
+     */
+    public long calculateMedianTime(byte[] hash) {
+        // 1. 验证目标区块是否存在
+        Block targetBlock = getBlockByHash(hash);
+        if (targetBlock == null) {
+            log.error("计算中位数时间失败：目标区块不存在，哈希={}", CryptoUtil.bytesToHex(hash));
+            throw new IllegalArgumentException("目标区块不存在");
+        }
+
+        // 2. 获取目标区块的高度
+        long targetHeight = targetBlock.getHeight();
+        log.debug("开始计算中位数时间，目标区块高度={}，哈希={}", targetHeight, CryptoUtil.bytesToHex(hash));
+
+        // 3. 确定需要纳入计算的11个区块的高度范围（目标区块及之前10个主链区块）
+        long startHeight = Math.max(0, targetHeight - 10); // 确保起始高度非负
+        int windowSize = 11; // 固定窗口大小为11个区块
+        List<Long> timestamps = new ArrayList<>(windowSize);
+
+        // 4. 收集11个主链区块的时间戳（从起始高度到目标高度）
+        for (long height = startHeight; height <= targetHeight; height++) {
+            Block block = getMainBlockByHeight(height);
+            if (block != null) {
+                timestamps.add(block.getTime());
+                log.trace("收集到高度={}的区块时间戳={}", height, block.getTime());
+            } else {
+                log.warn("主链中缺失高度={}的区块，可能影响中位数计算结果", height);
+            }
+        }
+
+        // 5. 处理区块数据不完整的情况
+        if (timestamps.size() < windowSize) {
+            log.warn("实际收集到的区块数量={}，不足11个，将基于现有数据计算中位数", timestamps.size());
+            if (timestamps.isEmpty()) {
+                log.error("未收集到任何区块时间戳，无法计算中位数");
+                throw new RuntimeException("无法获取有效区块时间戳");
+            }
+        }
+
+        // 6. 排序并计算中位数（11个元素时取第6个，索引为5）
+        Collections.sort(timestamps);
+        int medianIndex = timestamps.size() / 2; // 对于11个元素，索引为5；不足11个时取中间位置
+        long medianTime = timestamps.get(medianIndex);
+
+        log.debug("中位数时间计算完成，参与计算的区块数量={}，中位数时间戳={}", timestamps.size(), medianTime);
+        return medianTime;
+    }
+
+
+
+
 
     //根据交易id获取区块hash
     public byte[] getBlockHashByTxId(byte[] txId) {
@@ -399,6 +468,21 @@ public class StorageService {
                 return -1; // 哈希不存在
             }
             return ByteUtils.bytesToLong(heightBytes);
+        } catch (RocksDBException e) {
+            log.error("通过哈希获取高度失败: blockHash={}", blockHash, e);
+            throw new RuntimeException("通过哈希获取高度失败", e);
+        }
+    }
+    /**
+     * 通过区块hash获取 这个区块和这个区块之前的工作总量
+     */
+    public byte[] getBlockChainWorkByHash(byte[] blockHash) {
+        try {
+            byte[] chainWork = db.get(ColumnFamily.BLOCK_HASH_CHAIN_WORK.getHandle(), blockHash);
+            if (chainWork == null) {
+                return null; // 哈希不存在
+            }
+            return chainWork;
         } catch (RocksDBException e) {
             log.error("通过哈希获取高度失败: blockHash={}", blockHash, e);
             throw new RuntimeException("通过哈希获取高度失败", e);

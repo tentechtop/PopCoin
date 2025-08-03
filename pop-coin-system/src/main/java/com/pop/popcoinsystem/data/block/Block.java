@@ -2,6 +2,7 @@ package com.pop.popcoinsystem.data.block;
 
 import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.util.CryptoUtil;
+import com.pop.popcoinsystem.util.DifficultyUtils;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -144,6 +145,24 @@ public class Block implements Serializable {
         this.size = headerSize + txCountSize + transactionsSize;
     }
 
+    public static long calculateAndSetSize(Block block) {
+        // 区块头大小固定为80字节
+        long headerSize = 80;
+        // 交易数量的大小（使用VarInt编码）
+        long txCountSize = getVarIntSize(block.getTransactions().size());
+        List<Transaction> transactions = block.getTransactions();
+        // 所有交易的总大小
+        long transactionsSize = 0;
+        if (transactions != null) {
+            for (Transaction tx : transactions) {
+                // 假设 Transaction 类有 getSize() 方法返回交易大小
+                transactionsSize += tx.getSize();
+            }
+        }
+        return headerSize + txCountSize + transactionsSize;
+    }
+
+
     /**
      * 计算区块权重
      * 权重公式: base_size * 3 + total_size
@@ -173,10 +192,38 @@ public class Block implements Serializable {
         this.weight = Math.max(calculatedWeight, 0);
     }
 
+    public static long calculateAndSetWeight(Block block) {
+        // 确保size已正确计算（若未初始化则先计算）
+        long size = block.getSize();
+        if (size <= 0) {
+            size = calculateAndSetSize(block);
+        }
+        long witnessSize = block.getWitnessSize();
+
+        // 1. 验证见证数据大小的合理性（避免负数baseSize）
+        // 见证数据大小不能超过区块总大小（否则baseSize为负）
+        if (witnessSize < 0) {
+            // 修正负数见证大小（无效值，重置为0）
+            witnessSize = 0;
+        } else if (witnessSize > size) {
+            // 见证大小不能超过区块总大小（否则baseSize为负），强制修正为size
+            witnessSize = size;
+        }
+
+        // 2. 计算不含见证数据的基础大小（确保非负）
+        long baseSize = size - witnessSize;
+
+        // 3. 计算权重（BIP141公式），并确保结果非负（理论上此时已不可能为负）
+        long calculatedWeight = baseSize * 3 + size;
+        return Math.max(calculatedWeight, 0);
+    }
+
+
+
     /**
      * 辅助方法：计算VarInt编码的大小（以字节为单位）
      */
-    private long getVarIntSize(int value) {
+    private static long getVarIntSize(int value) {
         if (value < 0xfd) {
             return 1; // 直接用1字节表示
         } else if (value <= 0xffff) {
@@ -354,15 +401,17 @@ public class Block implements Serializable {
         header.setTime(this.time);
         header.setDifficultyTarget(this.difficultyTarget);
         header.setNonce(this.nonce);
+
         // 补充扩展头字段（高度、哈希等）
-        header.setHash(this.hash);
-        header.setHeight(this.height); // 假设BlockHeader新增height字段（原Block的height）
+/*        header.setHash(this.hash);
+        header.setHeight(this.height);
         header.setMedianTime(this.medianTime);
         header.setChainWork(this.chainWork);
         header.setDifficulty(this.difficulty);
         header.setWitnessSize(this.witnessSize);
         header.setSize(this.size);
-        header.setWeight(this.weight);
+        header.setWeight(this.weight);*/
+
         return header;
     }
 
@@ -379,7 +428,7 @@ public class Block implements Serializable {
     /**
      * 从区块头和区块体合并为完整区块
      */
-    public static Block merge(BlockHeader header, BlockBody body) {
+    public static Block merge(BlockHeader header, BlockBody body,byte[] hash,long  height,long medianTime,byte[] chainWork) {
         Block block = new Block();
         // 复制头字段
         block.setVersion(header.getVersion());
@@ -388,18 +437,45 @@ public class Block implements Serializable {
         block.setTime(header.getTime());
         block.setDifficultyTarget(header.getDifficultyTarget());
         block.setNonce(header.getNonce());
-        block.setHash(header.getHash());
-        block.setHeight(header.getHeight());
-        block.setMedianTime(header.getMedianTime());
-        block.setChainWork(header.getChainWork());
-        block.setDifficulty(header.getDifficulty());
-        block.setWitnessSize(header.getWitnessSize());
-        block.setSize(header.getSize());
-        block.setWeight(header.getWeight());
+
+        block.setHash(hash);
+        block.setHeight(height);
+        block.setMedianTime(medianTime);
+        block.setChainWork(chainWork);
+        block.setDifficulty(DifficultyUtils.targetToDifficulty(header.getDifficultyTarget()));//难度目标转值
+        block.setWitnessSize(calculateBlockWitnessSize(body.getTransactions()));
+
+        block.setSize(calculateAndSetSize(block));//区块大小
+        block.setWeight(calculateAndSetWeight(block));//区块权重
+
         // 复制体字段
         block.setTransactions(body.getTransactions());
         block.setTxCount(body.getTxCount());
         return block;
+    }
+
+    // 计算区块的总见证数据大小
+    /**
+     * 计算区块中所有交易的总见证数据大小（以字节为单位）
+     * 见证数据是隔离见证（SegWit）协议中与交易验证相关的附加数据（如签名）
+     * @param transactions 区块中的交易列表
+     * @return 总见证数据大小（字节）
+     */
+    public static long calculateBlockWitnessSize(List<Transaction> transactions) {
+        // 若交易列表为null，直接返回0（无见证数据）
+        if (transactions == null) {
+            return 0;
+        }
+        long totalWitnessSize = 0;
+        // 遍历所有交易，累加每个交易的见证数据大小
+        for (Transaction transaction : transactions) {
+            // 跳过null交易（避免空指针异常）
+            if (transaction != null) {
+                // 假设Transaction类有getWitnessSize()方法返回当前交易的见证数据大小
+                totalWitnessSize += transaction.getWitnessSize();
+            }
+        }
+        return totalWitnessSize;
     }
 
 

@@ -17,17 +17,15 @@ public class BlockHeader {
     private int nonce;//随机数
 
 
-    private long height;
+
+    //非核心字段
+/*    private long height;
     private byte[] hash;
-
-
     private long medianTime;
     private byte[] chainWork;
     private long difficulty;
     private int txCount;
     private long witnessSize;
     private long size;
-    private long weight;
-
-
+    private long weight;*/
 }
