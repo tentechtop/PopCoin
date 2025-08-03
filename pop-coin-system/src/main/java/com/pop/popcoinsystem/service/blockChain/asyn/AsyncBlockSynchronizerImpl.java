@@ -447,7 +447,7 @@ public class AsyncBlockSynchronizerImpl implements AsyncBlockSynchronizer{
             // 循环分批获取区块
             while (true) {
                 // 1. 分批请求区块（本次最多BATCH_SIZE个）
-                List<Block> remoteBlocks = fetchBlockBatch(remoteNode, currentStartHash, endHash);
+                List<Block> remoteBlocks = fetchBlockBatch(remoteNode, currentStartHash, endHash,BASE_BATCH_SIZE);
                 if (remoteBlocks == null || remoteBlocks.isEmpty()) {
                     log.info("所有区块同步完成");
                     syncProgress.remove(nodeId); // 清除进度
@@ -475,7 +475,7 @@ public class AsyncBlockSynchronizerImpl implements AsyncBlockSynchronizer{
                                     CryptoUtil.bytesToHex(prevBlock.getHash()), CryptoUtil.bytesToHex(block.getPreviousHash()));
 
                             // 拉取中间缺失的区块（最多BATCH_SIZE个）
-                            List<Block> missingBlocks = fetchBlockBatch(remoteNode, prevBlock.getHash(), block.getPreviousHash());
+                            List<Block> missingBlocks = fetchBlockBatch(remoteNode, prevBlock.getHash(), block.getPreviousHash(),BASE_BATCH_SIZE);
                             if (missingBlocks == null || missingBlocks.isEmpty()) {
                                 throw new RuntimeException("补充中间区块失败，中断同步");
                             }
@@ -527,27 +527,7 @@ public class AsyncBlockSynchronizerImpl implements AsyncBlockSynchronizer{
     }
 
     // 新增：分批获取区块（带重试和超时）
-    private List<Block> fetchBlockBatch(NodeInfo remoteNode, byte[] startHash, byte[] endHash) throws InterruptedException {
-        for (int retry = 0; retry < MAX_RETRY; retry++) {
-            try {
-                RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
-                // 设置RPC超时
-                proxyFactory.setTimeout(RPC_TIMEOUT);
-                BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
-                // 调用支持分批的方法（需在BlockChainService中新增）
-                return remoteService.getBlockByStartHashAndEndHashWithLimit(startHash, endHash, BATCH_SIZE);
-            } catch (Exception e) {
-                log.warn("第{}次获取区块失败（节点:{}），重试...", retry + 1, remoteNode, e);
-                if (retry == MAX_RETRY - 1) {
-                    log.error("达到最大重试次数，获取区块失败", e);
-                    return null;
-                }
-                // 指数退避重试（1s, 2s, 4s...）
-                Thread.sleep((long) (1000 * Math.pow(2, retry)));
-            }
-        }
-        return null;
-    }
+
 
     /**
      * 发送分叉点查找请求（异步执行）
