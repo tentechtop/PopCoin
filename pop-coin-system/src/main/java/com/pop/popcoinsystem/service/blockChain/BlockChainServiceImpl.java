@@ -120,6 +120,12 @@ public class BlockChainServiceImpl implements BlockChainService {
         if (!validateTransactionAuthorization(transaction, utxoMap)) {
             return false;
         }
+        //是否双花 已经存在于区块中
+        if (isDoubleSpend(transaction)) {
+            log.error("交易已经存在");
+            return false;
+        }
+
         // 验证交易权重
         if (transaction.getWeight() > MAX_BLOCK_WEIGHT) {
             log.error("SegWit交易重量超过限制");
@@ -133,6 +139,11 @@ public class BlockChainServiceImpl implements BlockChainService {
             return false;
         }
         return true;
+    }
+
+    private boolean isDoubleSpend(Transaction transaction) {
+        byte[] blockHashByTxId = getBlockHashByTxId(transaction.getTxId());
+        return blockHashByTxId != null;
     }
 
     private boolean validateTransactionAuthorization(Transaction transaction, Map<String, UTXO> utxoMap) {
@@ -336,7 +347,7 @@ public class BlockChainServiceImpl implements BlockChainService {
         if (verifyTransaction(transaction)) {
             byte[] blockHashByTxId = getBlockHashByTxId(transaction.getTxId());
             if (blockHashByTxId == null){
-                //不存在双花
+                //防止双花
                 mining.addTransaction(transaction);
             }
             if (kademliaNodeServer.isRunning()){
