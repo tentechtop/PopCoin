@@ -1,5 +1,7 @@
 package com.pop.popcoinsystem.service;
 
+import com.pop.popcoinsystem.data.block.Block;
+import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.network.rpc.RpcProxyFactory;
@@ -7,6 +9,7 @@ import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.messageData.RpcRequestData;
 import com.pop.popcoinsystem.service.blockChain.BlockChainService;
 import com.pop.popcoinsystem.service.transaction.TransactionService;
+import com.pop.popcoinsystem.util.CryptoUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
@@ -66,5 +69,20 @@ public class SyncBlockChainServiceImpl {
         BlockChainService blockChainService = proxyFactory.createProxy(BlockChainService.class);
         Result blockByRange = blockChainService.getBlockByRange(1, 102);
         return blockByRange;
+    }
+
+    public Result getBlockByHash(String hash) {
+        // 1. 准备目标服务节点信息
+        NodeInfo nodeInfo = new NodeInfo();
+        nodeInfo.setId(BigInteger.ONE);
+        nodeInfo.setIpv4("192.168.137.102");
+        nodeInfo.setTcpPort(8334);
+        nodeInfo.setUdpPort(8333);
+
+        RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer,nodeInfo);
+        BlockChainService blockChainService = proxyFactory.createProxy(BlockChainService.class);
+        Block blockByHash = blockChainService.getBlockByHash(CryptoUtil.hexToBytes(hash));
+        BlockDTO blockDto = blockChainService.getBlockDto(blockByHash);
+        return Result.ok(blockDto);
     }
 }

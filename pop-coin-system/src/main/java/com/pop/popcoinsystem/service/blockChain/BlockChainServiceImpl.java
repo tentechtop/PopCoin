@@ -29,6 +29,7 @@ import com.pop.popcoinsystem.network.protocol.message.TransactionMessage;
 import com.pop.popcoinsystem.util.*;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -1134,6 +1135,13 @@ public class BlockChainServiceImpl implements BlockChainService {
         if (block == null){
             return Result.error("区块不存在");
         }
+        BlockDTO blockDTO = getBlockDto(block);
+        return Result.ok(blockDTO);
+    }
+
+    @NotNull
+    @Override
+    public BlockDTO getBlockDto(Block block) {
         BlockDTO blockDTO = BeanCopyUtils.copyObject(block, BlockDTO.class);
         List<Transaction> transactions = block.getTransactions();
         if (transactions != null){
@@ -1183,8 +1191,9 @@ public class BlockChainServiceImpl implements BlockChainService {
         long height1 = blockDTO.getHeight();
         //计算出确认数量
         blockDTO.setConfirmations(mainLatestHeight - height1 + 1);
-        return Result.ok(blockDTO);
+        return blockDTO;
     }
+
 
     @Override
     public Result<BlockDTO> getBlock(long height) {
@@ -1192,55 +1201,7 @@ public class BlockChainServiceImpl implements BlockChainService {
         if (block == null){
             return Result.error("区块不存在");
         }
-        BlockDTO blockDTO = BeanCopyUtils.copyObject(block, BlockDTO.class);
-        List<Transaction> transactions = block.getTransactions();
-        if (transactions != null){
-            ArrayList<TransactionDTO> transactionDTOS = new ArrayList<>();
-            for (Transaction transaction : transactions) {
-                TransactionDTO transactionDTO = BeanCopyUtils.copyObject(transaction, TransactionDTO.class);
-                //交易输入
-                List<TXInput> inputs = transaction.getInputs();
-                if (inputs != null){
-                    ArrayList<TXInputDTO> transactionInputDTOS = new ArrayList<>();
-                    for (TXInput input : inputs) {
-                        TXInputDTO transactionInputDTO = new TXInputDTO();
-                        transactionInputDTO.setTxId(input.getTxId());
-                        transactionInputDTO.setVout(input.getVout());
-                        transactionInputDTO.setScriptSig(input.getScriptSig());
-                        transactionInputDTO.setSequence(input.getSequence());
-                        transactionInputDTOS.add(transactionInputDTO);
-                    }
-                    transactionDTO.setInputs(transactionInputDTOS);
-                }
-                //交易输出
-                List<TXOutput> outputs = transaction.getOutputs();
-                if (outputs != null){
-                    ArrayList<TXOutputDTO> transactionOutputDTOS = new ArrayList<>();
-                    for (TXOutput output : outputs) {
-                        TXOutputDTO transactionOutputDTO = BeanCopyUtils.copyObject(output, TXOutputDTO.class);
-                        transactionOutputDTOS.add(transactionOutputDTO);
-                    }
-                    transactionDTO.setOutputs(transactionOutputDTOS);
-                }
-                //见证数据
-                List<Witness> witnesses = transaction.getWitnesses();
-                if (witnesses != null){
-                    ArrayList<WitnessDTO> witnessDTOS = new ArrayList<>();
-                    for (Witness witness : witnesses) {
-                        WitnessDTO witnessDTO = BeanCopyUtils.copyObject(witness, WitnessDTO.class);
-                        witnessDTOS.add(witnessDTO);
-                    }
-                    transactionDTO.setWitnesses(witnessDTOS);
-                }
-                transactionDTOS.add(transactionDTO);
-            }
-            blockDTO.setTransactions(transactionDTOS);
-        }
-        //获取主链最新高度
-        long mainLatestHeight = getMainLatestHeight();
-        long height1 = blockDTO.getHeight();
-        //计算出确认数量
-        blockDTO.setConfirmations(mainLatestHeight - height1 + 1);
+        BlockDTO blockDTO = getBlockDto(block);
         return Result.ok(blockDTO);
     }
 

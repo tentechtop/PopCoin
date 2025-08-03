@@ -25,6 +25,11 @@ public class TestMessageController {
         return syncBlockChainService.findNode();
     }
 
+    @GetMapping("/getBlockByHash/{hash}")
+    public Result getBlockByHash(@PathVariable("hash") String  hash) throws Exception {
+        return syncBlockChainService.getBlockByHash(hash);
+    }
+
 
 
 
