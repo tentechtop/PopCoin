@@ -22,7 +22,9 @@ import static com.pop.popcoinsystem.util.TypeUtils.reverseBytes;
 public class Block implements Serializable {
 
     //表示该区块在区块链中的高度，即它是第几个区块。这里的高度为 1，表示它是区块链中的第一个区块（创世块是高度 0）。
-    private long height;//区块高度 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18.........................
+    //区块高度 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18.........................
+    //区块不存储高度 这里显示是为了携带和计算方便
+    private long height;
     //唯一的标识
     private byte[] hash;
     //前一个区块的哈希值

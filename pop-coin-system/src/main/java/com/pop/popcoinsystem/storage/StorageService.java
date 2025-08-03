@@ -37,9 +37,20 @@ public class StorageService {
 
     //这些KEY都保存在BLOCK_CHAIN 中 因为他们单独特殊
     private static final byte[] KEY_UTXO_COUNT = "key_utxo_count".getBytes();//UTXO总数
-    private static final byte[] KEY_GENESIS_BLOCK_HASH = "key_genesis_block_hash".getBytes();//创世区块hash
     private static final byte[] KEY_MAIN_LATEST_HEIGHT = "key_main_latest_height".getBytes();//主链当前高度 最新高度
     private static final byte[] KEY_MAIN_LATEST_BLOCK_HASH = "key_main_latest_block_hash".getBytes();
+
+    //区块链当前工作总量chainWork
+    private static final byte[] KEY_CHAIN_WORK = "key_chain_work".getBytes();
+
+    //最新区块难度值
+    private static final byte[] KEY_BLOCK_DIFFICULTY = "key_block_difficulty".getBytes();
+
+
+
+
+
+    /*节点相关设置*/
     private static final byte[] KEY_NODE_SETTING = "key_node_setting".getBytes();
     private static final byte[] KEY_MINER = "key_miner".getBytes();
 

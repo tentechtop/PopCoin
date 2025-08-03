@@ -8,17 +8,17 @@ import java.util.List;
 @Data
 public class BlockHeader {
 
+    /*核心字段*/
     private int version;
-    private byte[] previousHash;
-    private byte[] merkleRoot;
-    private long time;
-    private byte[] difficultyTarget;
-    private int nonce;
+    private byte[] previousHash;//前序hash
+    private byte[] merkleRoot;//默克尔树 验证交易
+    private long time;//时间
+    private byte[] difficultyTarget;//难度目标
+    private int nonce;//随机数
 
 
     private long height;
     private byte[] hash;
-
 
 
     private long medianTime;
