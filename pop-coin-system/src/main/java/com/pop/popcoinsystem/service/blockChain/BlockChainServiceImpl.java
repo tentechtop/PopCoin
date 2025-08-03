@@ -51,8 +51,6 @@ import static com.pop.popcoinsystem.data.transaction.Transaction.calculateBlockR
 public class BlockChainServiceImpl implements BlockChainService {
     // 新增：父区块同步超时时间（毫秒）
     private static final int PARENT_BLOCK_SYNC_TIMEOUT = 30000; // 30秒
-    // 新增：最大同步深度（防止无限递归）
-    private static final int MAX_SYNC_DEPTH = 100;
 
     @Autowired
     private StorageService popStorage;
@@ -357,7 +355,7 @@ public class BlockChainServiceImpl implements BlockChainService {
         if (parentBlock == null) {
             log.warn("父区块不存在，触发同步，哈希：{}", CryptoUtil.bytesToHex(block.getPreviousHash()));
             // 同步父区块（递归处理所有缺失的祖先）
-            boolean parentSynced = syncMissingParentBlocks(block.getPreviousHash(), 99);
+            boolean parentSynced = syncMissingParentBlocks(block.getPreviousHash());
             if (!parentSynced) {
                 log.error("父区块同步失败，无法验证当前区块，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
                 return false;
@@ -399,23 +397,13 @@ public class BlockChainServiceImpl implements BlockChainService {
     }
 
 
-
-
-
-
     /**
      * 递归同步缺失的父区块（包括所有祖先区块）
      * @param parentHash 待同步的父区块哈希
-     * @param depth 当前同步深度（防止无限递归）
      * @return 同步是否成功
      */
-    private boolean syncMissingParentBlocks(byte[] parentHash, int depth) {
-        // 检查同步深度，防止恶意区块导致无限递归
-        if (depth >= MAX_SYNC_DEPTH) {
-            log.error("提示:同步深度超过（{}），可能存在循环依赖", MAX_SYNC_DEPTH);
-            return true;
-        }
-
+    // 修改方法定义，移除depth参数
+    private boolean syncMissingParentBlocks(byte[] parentHash) {
         // 检查父区块是否已存在（可能其他线程已同步）
         if (getBlockByHash(parentHash) != null) {
             log.info("父区块已存在，无需同步，哈希：{}", CryptoUtil.bytesToHex(parentHash));
@@ -428,10 +416,10 @@ public class BlockChainServiceImpl implements BlockChainService {
             return false;
         }
 
-        log.info("开始同步父区块（深度：{}），哈希：{}", depth, CryptoUtil.bytesToHex(parentHash));
+        log.info("开始同步父区块，哈希：{}", CryptoUtil.bytesToHex(parentHash));
 
         try {
-            // 1. 查找拥有该父区块的节点（从Kademlia网络获取邻居节点） candidateNodes
+            // 1. 查找拥有该父区块的节点（从Kademlia网络获取邻居节点）
             List<ExternalNodeInfo> closest = kademliaNodeServer.getRoutingTable().findClosest(new BigInteger(1, parentHash));
             if (closest.isEmpty()) {
                 log.error("未找到可提供父区块的节点");
@@ -447,9 +435,8 @@ public class BlockChainServiceImpl implements BlockChainService {
                     blockSynchronizer.syncExecutor.submit(() -> {
                         try {
                             RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, node);
-                            proxyFactory.setTimeout(RPC_TIMEOUT); // 复用RPC_TIMEOUT常量
+                            proxyFactory.setTimeout(RPC_TIMEOUT);
                             BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
-                            // 调用远程节点的getBlock方法（需确保该方法支持通过哈希查询）
                             Block result = remoteService.getBlockByHash(parentHash);
                             if (result!= null) {
                                 blockFuture.complete(result);
@@ -464,8 +451,8 @@ public class BlockChainServiceImpl implements BlockChainService {
                     // 3. 验证同步到的父区块
                     if (parentBlock != null && Arrays.equals(parentBlock.getHash(), parentHash)) {
                         log.info("成功同步父区块，哈希：{}", CryptoUtil.bytesToHex(parentHash));
-                        // 递归同步父区块的父区块（确保整个链条完整）
-                        boolean grandparentSynced = syncMissingParentBlocks(parentBlock.getPreviousHash(), depth + 1);
+                        // 递归同步父区块的父区块（移除depth参数）
+                        boolean grandparentSynced = syncMissingParentBlocks(parentBlock.getPreviousHash());
                         if (!grandparentSynced) {
                             log.error("父区块的父区块同步失败，中断链条");
                             return false;
@@ -988,7 +975,7 @@ public class BlockChainServiceImpl implements BlockChainService {
 
         log.info("区块A的父哈希: {}", CryptoUtil.bytesToHex(currentA.getPreviousHash()));
         log.info("区块B的父哈希: {}", CryptoUtil.bytesToHex(currentA.getPreviousHash()));
-        log.info("高度9的区块哈希: {}", CryptoUtil.bytesToHex(getMainBlockHashByHeight(block.getHeight()-1)));
+        log.info("高度{},的区块哈希: {}",block.getHeight(), CryptoUtil.bytesToHex(getMainBlockHashByHeight(block.getHeight()-1)));
 
         // 循环条件：当两个区块不相等时继续追溯
         while (!Arrays.equals(currentA.getHash(), currentB.getHash())) {
