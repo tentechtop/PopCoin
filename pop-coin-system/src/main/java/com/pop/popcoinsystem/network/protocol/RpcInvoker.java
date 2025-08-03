@@ -33,26 +33,18 @@ public class RpcInvoker {
         if (serviceName == null || methodName == null) {
             throw new IllegalArgumentException("服务名和方法名不能为空");
         }
-
-        // 获取注册的服务实例
-        Map<String, Object> serviceList = rpcServiceRegistry.getService();
-        log.info("服务实例: {}", serviceList);
-
         Object service = rpcServiceRegistry.getService(serviceName);
+        log.info("服务:{}", service);
         if (service == null) {
             throw new RuntimeException("未找到服务: " + serviceName);
         }
-
         // 查找方法
         Method method = findMethod(service, methodName, paramTypes);
-
         // 执行方法调用并计时
         long startTime = System.currentTimeMillis();
         Object result = method.invoke(service, parameters);
         long endTime = System.currentTimeMillis();
-
         log.info("RPC调用成功 -> 请求ID: {}, 耗时: {}ms", requestId, (endTime - startTime));
-
         return result;
     }
 

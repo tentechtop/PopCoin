@@ -29,26 +29,18 @@ public class RpcRequestMessageHandler implements MessageHandler {
     protected RpcResponseMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull RpcRequestMessage rpcRequest) throws InterruptedException {
         NodeInfo me = kademliaNodeServer.getNodeInfo();
         NodeInfo sender = rpcRequest.getSender();
-
         long requestId = rpcRequest.getRequestId();//响应消息必须保持一致
         log.info("收到RPC,{}",rpcRequest.isResponse()? "响应" : "请求");
-
         RpcResponseMessage response = new RpcResponseMessage();
         response.setRequestId(requestId);
         response.setSender(me);
         response.setReceiver(sender);
-
         try {
-            // 从 RpcRequestData 中获取调用信息
             String serviceName = rpcRequest.getServiceName();
             String methodName = rpcRequest.getMethodName();
             Class<?>[] paramTypes = rpcRequest.getParamTypes();
             Object[] parameters = rpcRequest.getParameters();
             RpcServiceRegistry rpcServiceRegistry = kademliaNodeServer.getRpcServiceRegistry();
-            // 注册TransactionService接口及其实现类
-            Map<String, Object> service = rpcServiceRegistry.getService();
-            Object transactionService = rpcServiceRegistry.getService("TransactionService");
-            log.info("测试获取:{}", transactionService);
             RpcInvoker rpcInvoker = new RpcInvoker(rpcServiceRegistry);
             Object invoke = rpcInvoker.invoke(serviceName, methodName, paramTypes, parameters, rpcRequest.getRequestId());
             log.info("调用结果:{}", invoke);
