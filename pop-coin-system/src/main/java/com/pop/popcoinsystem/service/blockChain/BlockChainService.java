@@ -33,7 +33,7 @@ public interface BlockChainService {
     /**
      * 验证交易并添加到交易池（验证成功后广播）
      */
-    boolean verifyAndAddTradingPool(Transaction transaction);
+    boolean verifyAndAddTradingPool(Transaction transaction,boolean broadcastMessage);
 
     /**
      * 验证区块合法性（包括交易、PoW、链连续性等）

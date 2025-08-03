@@ -317,20 +317,17 @@ public class BlockChainServiceImpl implements BlockChainService {
      * 交易验证成功后 广播交易 如果本节点是矿工节点 则再添加到交易池 由矿工打包
      */
     @Override
-    public boolean verifyAndAddTradingPool(Transaction transaction) {
+    public boolean verifyAndAddTradingPool(Transaction transaction, boolean broadcastMessage) {
         log.info("您的交易已提交,正在验证交易...");
         if (verifyTransaction(transaction)) {
-            //广播交易
-            new Thread(() -> {
-                mining.addTransaction(transaction);
-                if (kademliaNodeServer.isRunning()){
-                    log.info("交易验证成功,广播交易");
-                    TransactionMessage transactionKademliaMessage = new TransactionMessage();
-                    transactionKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());
-                    transactionKademliaMessage.setData(transaction);
-                    kademliaNodeServer.broadcastMessage(transactionKademliaMessage);
-                }
-            }).start();
+            mining.addTransaction(transaction);
+            if (kademliaNodeServer.isRunning()){
+                log.info("交易验证成功,广播交易");
+                TransactionMessage transactionKademliaMessage = new TransactionMessage();
+                transactionKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());
+                transactionKademliaMessage.setData(transaction);
+                kademliaNodeServer.broadcastMessage(transactionKademliaMessage);
+            }
         }
         return true;
     }
@@ -386,15 +383,13 @@ public class BlockChainServiceImpl implements BlockChainService {
         processValidBlock(block);
         //广播区块
         if (broadcastMessage){
-            new Thread(() -> {
-                if (kademliaNodeServer.isRunning()){
-                    log.info("区块验证成功,广播区块");
-                    BlockMessage blockMessage = new BlockMessage();
-                    blockMessage.setSender(kademliaNodeServer.getNodeInfo());
-                    blockMessage.setData(block);
-                    kademliaNodeServer.broadcastMessage(blockMessage);
-                }
-            }).start();
+            if (kademliaNodeServer.isRunning()){
+                log.info("区块验证成功,广播区块");
+                BlockMessage blockMessage = new BlockMessage();
+                blockMessage.setSender(kademliaNodeServer.getNodeInfo());
+                blockMessage.setData(block);
+                kademliaNodeServer.broadcastMessage(blockMessage);
+            }
         }
         return true;
     }

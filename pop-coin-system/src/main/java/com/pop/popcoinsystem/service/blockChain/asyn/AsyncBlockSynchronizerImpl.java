@@ -153,16 +153,6 @@ public class AsyncBlockSynchronizerImpl implements AsyncBlockSynchronizer{
     }
 
 
-
-
-
-
-
-
-
-
-
-
     /**
      * 异步比较并同步区块，不阻塞主线程
      *

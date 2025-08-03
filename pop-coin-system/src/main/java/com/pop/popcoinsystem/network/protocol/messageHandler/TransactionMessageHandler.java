@@ -32,7 +32,8 @@ public class TransactionMessageHandler implements MessageHandler {
         }else {
             // 记录：标记为已处理
             kademliaNodeServer.getBroadcastMessages().put(txMessageId, Boolean.TRUE);
-            kademliaNodeServer.getBlockChainService().verifyAndAddTradingPool(data);
+            kademliaNodeServer.getBlockChainService().verifyAndAddTradingPool(data,false);
+            kademliaNodeServer.broadcastMessage(message);
         }
         return null;
     }

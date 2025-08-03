@@ -30,7 +30,8 @@ public class BlockMessageHandler implements MessageHandler {
         }else {
             // 记录：标记为已处理
             kademliaNodeServer.getBroadcastMessages().put(blockMessageId, Boolean.TRUE);
-            kademliaNodeServer.getBlockChainService().verifyBlock(data,true);
+            kademliaNodeServer.getBlockChainService().verifyBlock(data,false);
+            kademliaNodeServer.broadcastMessage(message);
         }
         return null;
     }

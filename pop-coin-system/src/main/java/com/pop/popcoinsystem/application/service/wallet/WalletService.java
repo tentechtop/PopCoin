@@ -455,7 +455,7 @@ public class WalletService {
             String toAddress = transferVO.getToAddress();
             // 统一创建交易，不再区分地址类型
             Transaction transaction = createUniversalTransaction(transferVO, toAddress, walletUTXOs);
-            boolean b = blockChainService.verifyAndAddTradingPool(transaction);
+            boolean b = blockChainService.verifyAndAddTradingPool(transaction,true);
             if (!b) {
                 return Result.error("交易创建失败");
             }
