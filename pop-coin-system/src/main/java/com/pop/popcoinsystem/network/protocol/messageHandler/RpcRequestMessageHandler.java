@@ -30,7 +30,7 @@ public class RpcRequestMessageHandler implements MessageHandler {
         NodeInfo me = kademliaNodeServer.getNodeInfo();
         NodeInfo sender = rpcRequest.getSender();
         long requestId = rpcRequest.getRequestId();//响应消息必须保持一致
-        log.info("收到RPC,{}",rpcRequest.isResponse()? "响应" : "请求");
+        log.debug("收到RPC,{}",rpcRequest.isResponse()? "响应" : "请求");
         RpcResponseMessage response = new RpcResponseMessage();
         response.setRequestId(requestId);
         response.setSender(me);
@@ -43,7 +43,7 @@ public class RpcRequestMessageHandler implements MessageHandler {
             RpcServiceRegistry rpcServiceRegistry = kademliaNodeServer.getRpcServiceRegistry();
             RpcInvoker rpcInvoker = new RpcInvoker(rpcServiceRegistry);
             Object invoke = rpcInvoker.invoke(serviceName, methodName, paramTypes, parameters, rpcRequest.getRequestId());
-            log.info("调用结果:{}", invoke);
+            log.debug("调用结果:{}", invoke);
             response.setResponse(true);//这是一个响应
             response.setResult(invoke);
         } catch (Exception e) {
