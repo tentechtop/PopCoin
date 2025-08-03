@@ -39,7 +39,7 @@ public class RpcInvoker {
         }
         // 查找方法
         Method method = findMethod(service, methodName, paramTypes);
-        log.info("服务:{} 方法{} 参数{}", service, methodName,paramTypes);
+        log.info("服务:{} 方法{} 参数{}", service, methodName,parameters);
         // 执行方法调用并计时
         long startTime = System.currentTimeMillis();
         Object result = method.invoke(service, parameters);
