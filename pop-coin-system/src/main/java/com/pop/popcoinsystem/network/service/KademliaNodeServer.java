@@ -145,21 +145,11 @@ public class KademliaNodeServer {
         this.registerMessageHandler(MessageType.PONG.getCode(), new PongMessageHandler());
         this.registerMessageHandler(MessageType.FIND_NODE_REQ.getCode(), new FindNodeRequestMessageHandler());
         this.registerMessageHandler(MessageType.FIND_NODE_RES.getCode(), new FindNodeResponseMessageHandler());
-
         this.registerMessageHandler(MessageType.HANDSHAKE_RES.getCode(), new HandshakeResponseMessageHandle());
         this.registerMessageHandler(MessageType.HANDSHAKE_REQ.getCode(), new HandshakeRequestMessageHandle());
         this.registerMessageHandler(MessageType.TRANSACTION.getCode(), new TransactionMessageHandler());
         this.registerMessageHandler(MessageType.BLOCK.getCode(), new BlockMessageHandler());
         this.registerMessageHandler(MessageType.SHUTDOWN.getCode(), new ShutdownMessageHandler());
-
-        this.registerMessageHandler(MessageType.GET_BLOCK_HEADERS_RES.getCode(), new GetHeadersResponseMessageHandle());
-        this.registerMessageHandler(MessageType.GET_BLOCK_HEADERS_REQ.getCode(), new GetHeadersRequestMessageHandle());
-
-        this.registerMessageHandler(MessageType.GET_FORK_POINT_REQ.getCode(), new FindForkPointRequestMessageHandle());
-        this.registerMessageHandler(MessageType.GET_FORK_POINT_RES.getCode(), new FindForkPointResponseMessageHandle());
-
-        this.registerMessageHandler(MessageType.GET_BLOCK_BY_HEIGHT_REQ.getCode(), new GetBlockHashByHeightRequestMessageHandle());
-        this.registerMessageHandler(MessageType.GET_BLOCK_BY_HEIGHT_RES.getCode(), new GetBlockHashByHeightResponseMessageHandle());
 
         this.registerMessageHandler(MessageType.RPC_REQUEST.getCode(), new RpcRequestMessageHandler());
         this.registerMessageHandler(MessageType.RPC_RESPONSE.getCode(), new RpcResponseMessageHandler());

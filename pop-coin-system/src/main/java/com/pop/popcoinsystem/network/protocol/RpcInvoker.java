@@ -44,7 +44,8 @@ public class RpcInvoker {
         long startTime = System.currentTimeMillis();
         Object result = method.invoke(service, parameters);
         long endTime = System.currentTimeMillis();
-        log.info("RPC调用成功 -> 请求ID: {}, 耗时: {}ms 结果{}", requestId, (endTime - startTime),result);
+        log.info("RPC调用成功 -> 请求ID: {}, 耗时: {}ms", requestId, (endTime - startTime));
+        log.debug("RPC调用成功 -> 请求ID: {}, 耗时: {}ms 结果{}", requestId, (endTime - startTime),result);
         return result;
     }
 
