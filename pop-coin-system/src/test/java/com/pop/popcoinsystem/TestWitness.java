@@ -236,4 +236,23 @@ public class TestWitness {
     //                }, 5, TimeUnit.SECONDS); // 超时时间设为3秒（可调整）
     //            }
 
+
+
+
+
+
+
+    //            // 同步父区块（递归处理所有缺失的祖先）
+    //            boolean parentSynced = syncMissingParentBlocks(block.getPreviousHash());
+    //            if (!parentSynced) {
+    //                log.error("父区块同步失败，无法验证当前区块，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
+    //                return false;
+    //            }
+    //            // 同步成功后重新获取父区块
+    //            parentBlock = getBlockByHash(block.getPreviousHash());
+    //            if (parentBlock == null) {
+    //                log.error("同步后父区块仍不存在，验证失败");
+    //                return false;
+    //            }
+
 }

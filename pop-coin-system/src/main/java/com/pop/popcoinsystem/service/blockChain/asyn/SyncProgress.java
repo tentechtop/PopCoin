@@ -3,6 +3,8 @@ package com.pop.popcoinsystem.service.blockChain.asyn;
 
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import lombok.Data;
+
+import java.io.Serializable;
 import java.math.BigInteger;
 import java.time.LocalDateTime;
 
@@ -10,7 +12,7 @@ import java.time.LocalDateTime;
  * 同步进度跟踪实体
  */
 @Data
-public class SyncProgress {
+public class SyncProgress implements Serializable {
     // 远程节点ID
     private BigInteger nodeId;
     // 远程节点信息
@@ -20,9 +22,9 @@ public class SyncProgress {
     // 同步状态：INIT(初始化), RUNNING(运行中), PAUSED(暂停), COMPLETED(完成), FAILED(失败)
     private SyncStatus status;
     // 起始区块哈希
-    private String startHash;
+    private byte[] startHash;
     // 目标区块哈希
-    private String endHash;
+    private byte[] endHash;
     // 起始高度
     private long startHeight;
     // 目标高度
@@ -40,7 +42,5 @@ public class SyncProgress {
     // 错误信息（失败时）
     private String errorMsg;
 
-    public enum SyncStatus {
-        INIT, RUNNING, PAUSED, COMPLETED, FAILED
-    }
+
 }

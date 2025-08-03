@@ -39,6 +39,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static com.pop.popcoinsystem.constant.BlockChainConstants.TRANSACTION_VERSION_1;
 import static com.pop.popcoinsystem.constant.BlockChainConstants.*;
@@ -52,6 +53,12 @@ import static com.pop.popcoinsystem.data.transaction.Transaction.calculateBlockR
 public class BlockChainServiceImpl implements BlockChainService {
     // 新增：父区块同步超时时间（毫秒）
     private static final int PARENT_BLOCK_SYNC_TIMEOUT = 30000; // 30秒
+    // 可重入锁，支持中断和超时，兼容同步任务和广播处理
+    // 拆分锁：主链操作锁和同步锁，避免死锁
+    private final ReentrantLock mainChainLock = new ReentrantLock(true); // 主链操作锁
+    private final ReentrantLock syncLock = new ReentrantLock(true); // 同步操作锁
+
+
 
     @Autowired
     private StorageService popStorage;
@@ -380,7 +387,20 @@ public class BlockChainServiceImpl implements BlockChainService {
         }
 
         // 处理区块（保存、更新UTXO等）  只要区块通过验证就 保存区块 保存区块产生的UTXO
-        processValidBlock(block);
+        try {
+            if (!mainChainLock.tryLock(5, TimeUnit.SECONDS)) {
+                log.warn("获取区块验证锁超时，可能存在并发冲突");
+                return false;
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+        try {
+            processValidBlock(block);
+        } finally {
+            mainChainLock.unlock(); // 确保锁释放
+        }
         //广播区块
         if (broadcastMessage){
             if (kademliaNodeServer.isRunning()){
@@ -457,15 +477,17 @@ public class BlockChainServiceImpl implements BlockChainService {
      */
     private Block syncSingleBlock(byte[] blockHash) {
         try {
+            NodeInfo nodeInfo = kademliaNodeServer.getNodeInfo();
+            BigInteger me = nodeInfo.getId();
             // 1. 查找候选节点
-            List<ExternalNodeInfo> closestNodes = kademliaNodeServer.getRoutingTable()
-                    .findClosest(new BigInteger(1, blockHash));
+            List<ExternalNodeInfo> closestNodes = kademliaNodeServer.getRoutingTable().findClosest(me);//查询离我最近的节点
+            //去除自己
+            closestNodes.removeIf(node -> node.getId().equals(me));
             if (closestNodes.isEmpty()) {
                 log.error("无候选节点提供区块：{}", CryptoUtil.bytesToHex(blockHash));
                 return null;
             }
             List<NodeInfo> candidateNodes = BeanCopyUtils.copyList(closestNodes, NodeInfo.class);
-
             // 2. 向节点请求区块
             CompletableFuture<Block> blockFuture = new CompletableFuture<>();
             for (NodeInfo node : candidateNodes) {

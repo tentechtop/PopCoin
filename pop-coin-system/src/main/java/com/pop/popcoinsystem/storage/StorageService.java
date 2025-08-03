@@ -9,11 +9,13 @@ import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.data.transaction.UTXO;
 import com.pop.popcoinsystem.data.transaction.UTXOSearch;
 import com.pop.popcoinsystem.data.vo.result.AnyResult;
-import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.data.vo.result.TPageResult;
 import com.pop.popcoinsystem.data.vo.result.ListPageResult;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeSettings;
+import com.pop.popcoinsystem.service.blockChain.asyn.SyncProgress;
+import com.pop.popcoinsystem.service.blockChain.asyn.SyncTaskRecord;
+import com.pop.popcoinsystem.service.blockChain.asyn.SyncStatus;
 import com.pop.popcoinsystem.util.ByteUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.SerializeUtils;
@@ -484,7 +486,7 @@ public class StorageService {
             throw new RuntimeException("无有效时间戳数据");
         }
         if (collectedCount < 11) {
-            log.warn("实际收集到{}个有效时间戳（不足11个），基于现有数据计算", collectedCount);
+            log.debug("实际收集到{}个有效时间戳（不足11个），基于现有数据计算", collectedCount);
         }
 
         // 5. 排序并计算中位数
@@ -1413,7 +1415,110 @@ public class StorageService {
 
 
 
+    //同步........................................................................................................
+    public void saveSyncTaskRecord(SyncTaskRecord syncTaskRecord){
+        try {
+            byte[] valueBytes = SerializeUtils.serialize(syncTaskRecord);
+            db.put(ColumnFamily.SYNC_TASK.getHandle(), syncTaskRecord.getTaskId().getBytes(), valueBytes);
+        } catch (RocksDBException e) {
+            log.error("保存同步任务失败: key={}", syncTaskRecord.getTaskId(), e);
+            throw new RuntimeException("保存同步任务失败", e);
+        }
+    }
 
+    public void saveSyncProgress(SyncProgress nodeProgress) {
+        try {
+            byte[] valueBytes = SerializeUtils.serialize(nodeProgress);
+            db.put(ColumnFamily.SYNC_PROGRESS.getHandle(), nodeProgress.getNodeId().toByteArray(), valueBytes);
+        } catch (RocksDBException e) {
+            log.error("保存节点同步进度失败: nodeId={}", nodeProgress.getNodeId(), e);
+            throw new RuntimeException("保存节点同步进度失败", e);
+        }
+    }
+    //获取
+    public SyncProgress getSyncProgress(BigInteger nodeId) {
+        try {
+            byte[] valueBytes = db.get(ColumnFamily.SYNC_PROGRESS.getHandle(), nodeId.toByteArray() );
+            if (valueBytes == null) {
+                log.debug("未找到节点同步进度: nodeId={}", nodeId);
+                return null;
+            }
+            return (SyncProgress) SerializeUtils.deSerialize(valueBytes);
+        } catch (RocksDBException e) {
+            log.error("获取节点同步进度失败: nodeId={}", nodeId, e);
+            throw new RuntimeException("获取节点同步进度失败", e);
+        }
+    }
+
+
+    /**
+     * 根据任务ID获取同步任务记录
+     * @param taskId 同步任务ID
+     * @return 对应的同步任务记录，若不存在则返回null
+     */
+    public SyncTaskRecord getSyncTaskRecord(String taskId) {
+        // 参数校验
+        if (taskId == null || taskId.isEmpty()) {
+            log.warn("获取同步任务记录失败：任务ID为空");
+            return null;
+        }
+        try {
+            // 将任务ID转换为字节数组作为查询键
+            byte[] keyBytes = taskId.getBytes();
+            // 从SYNC_TASK列族查询对应记录
+            byte[] valueBytes = db.get(ColumnFamily.SYNC_TASK.getHandle(), keyBytes);
+            if (valueBytes == null) {
+                log.debug("未找到同步任务记录：taskId={}", taskId);
+                return null;
+            }
+            // 反序列化任务记录并返回
+            return (SyncTaskRecord) SerializeUtils.deSerialize(valueBytes);
+        } catch (RocksDBException e) {
+            log.error("获取同步任务记录失败：taskId={}", taskId, e);
+            throw new RuntimeException("获取同步任务记录失败", e);
+        }
+    }
+
+
+    // 恢复运行中的任务
+    /**
+     * 获取所有处于运行状态的同步任务记录
+     * @return 运行中的同步任务列表（无运行中任务时返回空列表）
+     */
+    public List<SyncTaskRecord> getRunningSyncTasks() {
+        rwLock.readLock().lock();
+        RocksIterator iterator = null;
+        try {
+            // 获取同步任务列族的迭代器
+            iterator = db.newIterator(ColumnFamily.SYNC_TASK.getHandle());
+            List<SyncTaskRecord> runningTasks = new ArrayList<>();
+
+            // 遍历所有同步任务记录
+            iterator.seekToFirst();
+            while (iterator.isValid()) {
+                byte[] valueBytes = iterator.value();
+                if (valueBytes != null) {
+                    // 反序列化任务记录
+                    SyncTaskRecord task = (SyncTaskRecord) SerializeUtils.deSerialize(valueBytes);
+                    // 判断任务是否处于运行中状态（假设SyncTaskRecord有isRunning()方法判断状态）
+                    if (task != null && task.getStatus().equals(SyncStatus.RUNNING)) {
+                        runningTasks.add(task);
+                    }
+                }
+                iterator.next();
+            }
+            return runningTasks;
+        } catch (Exception e) {
+            log.error("获取运行中的同步任务失败", e);
+            throw new RuntimeException("获取运行中的同步任务失败", e);
+        } finally {
+            // 释放迭代器资源
+            if (iterator != null) {
+                iterator.close();
+            }
+            rwLock.readLock().unlock();
+        }
+    }
 
 
 
@@ -1604,7 +1709,6 @@ public class StorageService {
     //..................................................................................................................
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final RocksDB db;
-
 
 
 

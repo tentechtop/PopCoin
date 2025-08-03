@@ -1,13 +1,18 @@
 package com.pop.popcoinsystem.service.blockChain.asyn;
 
 import com.pop.popcoinsystem.data.block.Block;
+import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.rpc.RpcProxyFactory;
 import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.service.blockChain.BlockChainService;
+import com.pop.popcoinsystem.storage.StorageService;
+import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.DifficultyUtils;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.math.BigInteger;
@@ -25,6 +30,12 @@ import static com.pop.popcoinsystem.constant.BlockChainConstants.GENESIS_BLOCK_H
 @Slf4j
 @Component
 public class AsyncBlockSynchronizerImpl implements AsyncBlockSynchronizer{
+    // 同步进度跟踪（线程安全）
+    private final ConcurrentHashMap<String, SyncProgress> globalSyncProgress = new ConcurrentHashMap<>();
+    // 节点ID与任务ID映射（用于断点续传）
+    private final ConcurrentHashMap<BigInteger, String> nodeTaskMap = new ConcurrentHashMap<>();
+
+    private final KademliaNodeServer kademliaNodeServer;
     // 基础批次大小（可动态调整）
     public static final int BATCH_SIZE = 100;
     // 基础批次大小（可动态调整）
@@ -42,12 +53,129 @@ public class AsyncBlockSynchronizerImpl implements AsyncBlockSynchronizer{
     private final AtomicInteger activeTaskCount = new AtomicInteger(0);
 
 
-
+    @Autowired
+    private StorageService popStorage; // 复用现有存储服务
 
     // 新增：最大重试次数
     public static final int MAX_RETRY = 3;
     // 新增：记录同步进度（key：远程节点ID，value：最近同步到的区块哈希）
     public final ConcurrentHashMap<BigInteger, String> syncProgress = new ConcurrentHashMap<>();
+
+
+
+    // 初始化：节点启动时恢复未完成的同步任务
+    @PostConstruct
+    public void init() {
+        try {
+            // 恢复运行中的任务
+            List<SyncTaskRecord> runningTasks = popStorage.getRunningSyncTasks();
+            for (SyncTaskRecord task : runningTasks) {
+                // 根据任务记录查找节点
+                ExternalNodeInfo node = kademliaNodeServer.getRoutingTable().findNode(task.getNodeId());// 从Kademlia路由表获取节点
+                if (node != null) {
+                    log.info("恢复同步任务[{}]：节点{}，从高度{}继续",
+                            task.getTaskId(), task.getNodeId(), task.getCurrentHeight());
+                    // 从上次进度重启任务
+                    NodeInfo nodeInfo = BeanCopyUtils.copyObject(node, NodeInfo.class);
+                    resumeSyncTask(nodeInfo, task);
+                } else {
+                    log.warn("任务[{}]关联的节点不存在，标记为失败", task.getTaskId());
+                    task.setStatus(SyncStatus.FAILED);
+                    task.setErrorMsg("节点已离线");
+                    popStorage.saveSyncTaskRecord(task);
+                }
+            }
+        } catch (Exception e) {
+            log.error("初始化同步任务失败", e);
+        }
+    }
+
+    private void resumeSyncTask(NodeInfo node, SyncTaskRecord task) {
+
+        // 1. 从任务记录中提取核心信息
+        String taskId = task.getTaskId();
+        long localHeight = task.getCurrentHeight(); // 上次同步中断时的本地高度
+        long remoteHeight = task.getTargetHeight(); // 目标同步高度
+        BigInteger nodeId = node.getId();
+
+
+
+        try {
+            // 2. 验证本地链状态（确保中断点区块存在）
+            BlockChainService localChainService = kademliaNodeServer.getBlockChainService();
+            Block localBlock = localChainService.getMainBlockByHeight(localHeight);
+            if (localBlock == null) {
+                // 本地缺失中断点区块，从创世区块重新同步
+                log.warn("任务[{}]本地缺失高度{}的区块，从创世区块重新开始", taskId, localHeight);
+                localHeight = 0;
+                localBlock = localChainService.getMainBlockByHeight(0); // 获取创世区块
+                if (localBlock == null) {
+                    throw new IllegalStateException("本地创世区块不存在，无法恢复同步");
+                }
+            }
+            byte[] localHash = localBlock.getHash();
+            byte[] localWork = localBlock.getChainWork();
+
+            // 3. 获取远程节点目标高度的区块信息（哈希和工作量）
+            RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, node);
+            proxyFactory.setTimeout(RPC_TIMEOUT);
+            BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
+
+            Block remoteTargetBlock = remoteService.getMainBlockByHeight(remoteHeight);
+            if (remoteTargetBlock == null) {
+                // 远程节点目标高度区块已变更，重新获取最新高度
+                log.warn("任务[{}]远程目标高度{}区块不存在，获取最新高度", taskId, remoteHeight);
+                remoteHeight = remoteService.getMainLatestHeight();
+                remoteTargetBlock = remoteService.getMainBlockByHeight(remoteHeight);
+                if (remoteTargetBlock == null) {
+                    throw new ConnectException("远程节点无有效区块数据");
+                }
+            }
+            byte[] remoteHash = remoteTargetBlock.getHash();
+            byte[] remoteWork = remoteTargetBlock.getChainWork();
+
+            // 4. 初始化同步进度对象（复用原有任务ID）
+            SyncProgress progress = initSyncProgress(
+                    taskId,
+                    node,
+                    localHash,
+                    remoteHash,
+                    localHeight,
+                    remoteHeight
+            );
+            progress.setStatus(SyncStatus.RUNNING);
+            progress.setSyncedBlocks(task.getSyncedBlocks()); // 恢复已同步区块计数
+            progress.setProgressPercent(task.getProgressPercent()); // 恢复进度百分比
+            progress.setLastSyncTime(LocalDateTime.now());
+
+            // 5. 更新内存中的进度跟踪
+            globalSyncProgress.put(taskId, progress);
+            nodeTaskMap.put(nodeId, taskId);
+
+            // 6. 提交恢复的同步任务（复用现有提交逻辑）
+            submitSyncTask(
+                    kademliaNodeServer,
+                    node,
+                    localHeight,
+                    localHash,
+                    localWork,
+                    remoteHeight,
+                    remoteHash,
+                    remoteWork
+            );
+            log.info("任务[{}]恢复成功，从高度{}继续同步至{}", taskId, localHeight, remoteHeight);
+        } catch (Exception e) {
+            log.error("任务[{}]恢复失败", taskId, e);
+            // 更新任务状态为失败并保存
+            task.setStatus(SyncStatus.FAILED);
+            task.setErrorMsg(e.getMessage());
+            task.setUpdateTime(LocalDateTime.now());
+            popStorage.saveSyncTaskRecord(task);
+            // 清理内存跟踪
+            globalSyncProgress.remove(taskId);
+            nodeTaskMap.remove(nodeId);
+        }
+    }
 
 
     // 线程池用于执行异步任务
@@ -66,13 +194,7 @@ public class AsyncBlockSynchronizerImpl implements AsyncBlockSynchronizer{
             new ThreadPoolExecutor.AbortPolicy() // 任务满时拒绝，避免OOM
     );
 
-    // 同步进度跟踪（线程安全）
-    private final ConcurrentHashMap<String, SyncProgress> globalSyncProgress = new ConcurrentHashMap<>();
-    // 节点ID与任务ID映射（用于断点续传）
-    private final ConcurrentHashMap<BigInteger, String> nodeTaskMap = new ConcurrentHashMap<>();
 
-
-    private final KademliaNodeServer kademliaNodeServer;
 
     public AsyncBlockSynchronizerImpl(KademliaNodeServer kademliaNodeServer) {
         this.kademliaNodeServer = kademliaNodeServer;
@@ -93,7 +215,7 @@ public class AsyncBlockSynchronizerImpl implements AsyncBlockSynchronizer{
         // 检查并发任务数
         if (activeTaskCount.get() >= MAX_CONCURRENT_TASKS) {
             SyncProgress progress = new SyncProgress();
-            progress.setStatus(SyncProgress.SyncStatus.FAILED);
+            progress.setStatus(SyncStatus.FAILED);
             progress.setErrorMsg("超出最大并发同步任务数（" + MAX_CONCURRENT_TASKS + "）");
             return CompletableFuture.completedFuture(progress);
         }
@@ -110,15 +232,15 @@ public class AsyncBlockSynchronizerImpl implements AsyncBlockSynchronizer{
         CompletableFuture<SyncProgress> future = CompletableFuture.supplyAsync(() -> {
             activeTaskCount.incrementAndGet();
             try {
-                progress.setStatus(SyncProgress.SyncStatus.RUNNING);
+                progress.setStatus(SyncStatus.RUNNING);
                 performCompareAndSync(nodeServer, remoteNode, progress,
                         localHeight, localHash, localWork,
                         remoteHeight, remoteHash, remoteWork);
-                progress.setStatus(SyncProgress.SyncStatus.COMPLETED);
+                progress.setStatus(SyncStatus.COMPLETED);
                 return progress;
             } catch (Exception e) {
                 log.error("同步任务失败", e);
-                progress.setStatus(SyncProgress.SyncStatus.FAILED);
+                progress.setStatus(SyncStatus.FAILED);
                 progress.setErrorMsg(e.getMessage());
                 return progress;
             } finally {
@@ -139,15 +261,15 @@ public class AsyncBlockSynchronizerImpl implements AsyncBlockSynchronizer{
         progress.setTaskId(taskId);
         progress.setNodeId(node.getId());
         progress.setNodeInfo(node);
-        progress.setStartHash(CryptoUtil.bytesToHex(startHash));
-        progress.setEndHash(CryptoUtil.bytesToHex(endHash));
+        progress.setStartHash(startHash);
+        progress.setEndHash(endHash);
         progress.setStartHeight(startHeight);
         progress.setTargetHeight(targetHeight);
         progress.setTotalBlocks(targetHeight - startHeight);
         progress.setCurrentHeight(startHeight);
         progress.setSyncedBlocks(0);
         progress.setProgressPercent(0.0);
-        progress.setStatus(SyncProgress.SyncStatus.INIT);
+        progress.setStatus(SyncStatus.INIT);
         progress.setLastSyncTime(LocalDateTime.now());
         return progress;
     }
@@ -245,9 +367,7 @@ public class AsyncBlockSynchronizerImpl implements AsyncBlockSynchronizer{
             long localHeight, byte[] localHash, byte[] localWork,
             long remoteHeight, byte[] remoteHash, byte[] remoteWork)
             throws ConnectException, InterruptedException {
-
         log.info("开始同步任务[{}]，远程节点: {}", progress.getTaskId(), remoteNode);
-
         // 远程链更优（工作量更大）
         if (DifficultyUtils.compare(localWork, remoteWork) <= 0) {
             BlockChainService localChainService = nodeServer.getBlockChainService();
@@ -259,11 +379,10 @@ public class AsyncBlockSynchronizerImpl implements AsyncBlockSynchronizer{
                 log.info("检测到全新节点，从创世区块开始全量同步");
                 effectiveStartHash = CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX);
                 effectiveStartHeight = 0;
-                progress.setStartHash(GENESIS_BLOCK_HASH_HEX);
+                progress.setStartHash(CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX));
                 progress.setStartHeight(0);
                 progress.setTotalBlocks(remoteHeight); // 预估总区块数
             }
-
             // 执行同步
             sendHeadersRequest(nodeServer, remoteNode, progress, effectiveStartHash, remoteHash);
         }
@@ -418,6 +537,10 @@ public class AsyncBlockSynchronizerImpl implements AsyncBlockSynchronizer{
         log.info("开始同步区块，从 {} 到 {}",
                 CryptoUtil.bytesToHex(startHash), CryptoUtil.bytesToHex(endHash));
         // 检查进度：如果之前同步过，从上次进度开始
+
+
+
+
         BigInteger nodeId = remoteNode.getId();
         try {
             String lastSyncedHashHex = syncProgress.get(nodeId);
@@ -630,7 +753,7 @@ public class AsyncBlockSynchronizerImpl implements AsyncBlockSynchronizer{
         SyncProgress progress = globalSyncProgress.get(taskId);
         if (progress == null) return false;
 
-        progress.setStatus(SyncProgress.SyncStatus.PAUSED);
+        progress.setStatus(SyncStatus.PAUSED);
         progress.setErrorMsg("任务已取消");
         // 从节点映射中移除
         nodeTaskMap.remove(progress.getNodeId());
@@ -641,9 +764,65 @@ public class AsyncBlockSynchronizerImpl implements AsyncBlockSynchronizer{
      * 关闭资源
      */
     public void shutdown() {
+        // 保存所有运行中任务的状态为“暂停”
+        for (SyncProgress progress : globalSyncProgress.values()) {
+            if (progress.getStatus() == SyncStatus.RUNNING) {
+                progress.setStatus(SyncStatus.PAUSED);
+                updateSyncProgress(progress); // 触发存储
+            }
+        }
         syncExecutor.shutdownNow();
         globalSyncProgress.clear();
         nodeTaskMap.clear();
+    }
+
+    // 存储同步进度
+    private void updateSyncProgress(SyncProgress progress) {
+        // 更新内存中的进度（原有逻辑）
+        globalSyncProgress.put(progress.getTaskId(), progress);
+        // 同步保存到存储
+        SyncTaskRecord taskRecord = popStorage.getSyncTaskRecord(progress.getTaskId());
+        if (taskRecord != null) {
+            taskRecord.setCurrentHeight(progress.getCurrentHeight());
+            taskRecord.setProgressPercent(progress.getProgressPercent());
+            taskRecord.setStatus(convertStatus(progress.getStatus())); // 状态转换
+            taskRecord.setUpdateTime(LocalDateTime.now());
+            popStorage.saveSyncTaskRecord(taskRecord);
+        }
+        // 同时更新节点同步进度
+        SyncProgress nodeProgress = new SyncProgress();
+        nodeProgress.setNodeId(progress.getNodeId());
+        nodeProgress.setCurrentHeight(progress.getCurrentHeight());
+        nodeProgress.setStatus(convertStatus(progress.getStatus()));
+        nodeProgress.setLastSyncTime(LocalDateTime.now());
+        popStorage.saveSyncProgress(nodeProgress);
+    }
+
+
+
+    /**
+     * 将SyncProgress中的状态转换为SyncTaskRecord的状态
+     * 保持两种状态枚举的映射关系
+     */
+    private SyncStatus convertStatus(SyncStatus status) {
+        switch (status) {
+            case INIT:
+                return SyncStatus.INIT;
+            case RUNNING:
+                return SyncStatus.RUNNING;
+            case PAUSED:
+                return SyncStatus.PAUSED;
+            case COMPLETED:
+                return SyncStatus.COMPLETED;
+            case FAILED:
+                return SyncStatus.FAILED;
+            case CANCELLED:
+                return SyncStatus.CANCELLED;
+            default:
+                // 处理未定义的状态，避免转换异常
+                log.warn("未定义的同步进度状态: {}", status);
+                return SyncStatus.FAILED;
+        }
     }
 
 

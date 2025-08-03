@@ -42,6 +42,11 @@ public enum ColumnFamily {
     ROUTING_TABLE("CF_BLOCK_CHAIN", "RoutingTable",new ColumnFamilyOptions()),
 
     MINER_INFO("CF_MINER_INFO", "minerInfo",new ColumnFamilyOptions()),
+
+
+    SYNC_TASK("CF_SYNC_TASK", "syncTask",new ColumnFamilyOptions()),
+
+    SYNC_PROGRESS("CF_SYNC_PROGRESS", "syncProgress",new ColumnFamilyOptions()),
     ;
     final String logicalName;
     final String actualName;
