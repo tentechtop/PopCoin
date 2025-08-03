@@ -430,6 +430,9 @@ public class Block implements Serializable {
      */
     public static Block merge(BlockHeader header, BlockBody body,byte[] hash,long  height,long medianTime,byte[] chainWork) {
         Block block = new Block();
+        // 复制体字段
+        block.setTransactions(body.getTransactions());
+        block.setTxCount(body.getTxCount());
         // 复制头字段
         block.setVersion(header.getVersion());
         block.setPreviousHash(header.getPreviousHash());
@@ -437,20 +440,14 @@ public class Block implements Serializable {
         block.setTime(header.getTime());
         block.setDifficultyTarget(header.getDifficultyTarget());
         block.setNonce(header.getNonce());
-
         block.setHash(hash);
         block.setHeight(height);
         block.setMedianTime(medianTime);
         block.setChainWork(chainWork);
         block.setDifficulty(DifficultyUtils.targetToDifficulty(header.getDifficultyTarget()));//难度目标转值
         block.setWitnessSize(calculateBlockWitnessSize(body.getTransactions()));
-
         block.setSize(calculateAndSetSize(block));//区块大小
         block.setWeight(calculateAndSetWeight(block));//区块权重
-
-        // 复制体字段
-        block.setTransactions(body.getTransactions());
-        block.setTxCount(body.getTxCount());
         return block;
     }
 

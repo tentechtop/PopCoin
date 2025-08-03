@@ -26,9 +26,7 @@ import java.util.*;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-
-import static com.pop.popcoinsystem.constant.BlockChainConstants.NET_VERSION;
-import static com.pop.popcoinsystem.constant.BlockChainConstants.STORAGE_PATH;
+import static com.pop.popcoinsystem.constant.BlockChainConstants.*;
 
 @Slf4j
 public class StorageService {
@@ -375,9 +373,10 @@ public class StorageService {
             // 3. 合并为完整区块
             //获取区块所在高度
             long blockHeightByHash = getBlockHeightByHash(hash);
-            long medianTime = calculateMedianTime(hash);
             getBlockHeightByHash(hash);
             byte[] chainWork = getBlockChainWorkByHash(hash);
+
+            long medianTime = calculateMedianTime(header, blockHeightByHash,hash);
             return Block.merge(header, body,hash,blockHeightByHash,medianTime,chainWork);
         } catch (RocksDBException e) {
             log.error("获取区块失败: blockHash={}", hash, e);
@@ -385,59 +384,124 @@ public class StorageService {
         }
     }
 
-    /**
-     * 根据指定区块哈希，计算该区块及其之前共11个主链区块的中位数时间戳
-     * @param hash 目标区块的哈希
-     * @return 11个区块时间戳的中位数
-     */
-    public long calculateMedianTime(byte[] hash) {
-        // 1. 验证目标区块是否存在
-        Block targetBlock = getBlockByHash(hash);
-        if (targetBlock == null) {
-            log.error("计算中位数时间失败：目标区块不存在，哈希={}", CryptoUtil.bytesToHex(hash));
-            throw new IllegalArgumentException("目标区块不存在");
+    public BlockHeader getBlockHeaderByHash(byte[] hash) {
+        if (hash == null){
+            return null;
         }
-
-        // 2. 获取目标区块的高度
-        long targetHeight = targetBlock.getHeight();
-        log.debug("开始计算中位数时间，目标区块高度={}，哈希={}", targetHeight, CryptoUtil.bytesToHex(hash));
-
-        // 3. 确定需要纳入计算的11个区块的高度范围（目标区块及之前10个主链区块）
-        long startHeight = Math.max(0, targetHeight - 10); // 确保起始高度非负
-        int windowSize = 11; // 固定窗口大小为11个区块
-        List<Long> timestamps = new ArrayList<>(windowSize);
-
-        // 4. 收集11个主链区块的时间戳（从起始高度到目标高度）
-        for (long height = startHeight; height <= targetHeight; height++) {
-            Block block = getMainBlockByHeight(height);
-            if (block != null) {
-                timestamps.add(block.getTime());
-                log.trace("收集到高度={}的区块时间戳={}", height, block.getTime());
-            } else {
-                log.warn("主链中缺失高度={}的区块，可能影响中位数计算结果", height);
+        try {
+            // 1. 获取区块头
+            byte[] headerData = db.get(ColumnFamily.BLOCK.getHandle(), hash);
+            if (headerData == null) {
+                return null; // 区块头不存在，返回空
             }
+            return (BlockHeader)SerializeUtils.deSerialize(headerData);
+        } catch (RocksDBException e) {
+            log.error("获取区块失败: blockHash={}", hash, e);
+            throw new RuntimeException("获取区块失败", e);
         }
-
-        // 5. 处理区块数据不完整的情况
-        if (timestamps.size() < windowSize) {
-            log.warn("实际收集到的区块数量={}，不足11个，将基于现有数据计算中位数", timestamps.size());
-            if (timestamps.isEmpty()) {
-                log.error("未收集到任何区块时间戳，无法计算中位数");
-                throw new RuntimeException("无法获取有效区块时间戳");
-            }
-        }
-
-        // 6. 排序并计算中位数（11个元素时取第6个，索引为5）
-        Collections.sort(timestamps);
-        int medianIndex = timestamps.size() / 2; // 对于11个元素，索引为5；不足11个时取中间位置
-        long medianTime = timestamps.get(medianIndex);
-
-        log.debug("中位数时间计算完成，参与计算的区块数量={}，中位数时间戳={}", timestamps.size(), medianTime);
-        return medianTime;
     }
 
 
 
+    /**
+     * 基于区块头计算当前区块及其之前最多10个主链区块的时间戳中位数（共11个区块）
+     * 若区块数量不足11个（如创世区块附近），则基于现有数据计算
+     * @param currentHeader 当前目标区块的区块头（非空）
+     * @param blockHeightByHash 当前区块在主链上的高度
+     * @param hash 当前区块的哈希
+     * @return 时间戳中位数（毫秒级Unix时间戳）
+     * @throws IllegalArgumentException 若输入区块头为空
+     * @throws RuntimeException 若无法获取有效区块时间戳
+     */
+    public long calculateMedianTime(BlockHeader currentHeader, long blockHeightByHash, byte[] hash) {
+        //如果是创世区块
+        if (blockHeightByHash == 0) {
+            return currentHeader.getTime();
+        }
+
+        // 1. 校验输入参数
+        if (currentHeader == null) {
+            throw new IllegalArgumentException("输入区块头不能为空");
+        }
+
+        // 2. 初始化参数：收集主链上当前区块及前序区块的时间戳
+        List<Long> timestamps = new ArrayList<>(11); // 固定容量11（最多11个区块）
+        BlockHeader current = currentHeader;
+        int collectedCount = 0;
+        long currentHeight = blockHeightByHash; // 从当前区块高度开始
+        log.debug("开始计算中位数时间，起始区块哈希={}，高度={}",
+                CryptoUtil.bytesToHex(hash), currentHeight);
+
+        // 3. 循环收集最多11个主链区块的时间戳
+        while (collectedCount < 11 && current != null) {
+            // 3.1 收集当前区块的时间戳（校验有效性）
+            long blockTime = current.getTime();
+            if (blockTime <= 0) {
+                log.warn("区块高度={}的时间戳无效（{}），跳过", currentHeight, blockTime);
+            } else {
+                timestamps.add(blockTime);
+                collectedCount++;
+                log.trace("已收集高度={}的时间戳：{}，累计数量：{}",
+                        currentHeight, blockTime, collectedCount);
+            }
+
+            if (isGenesisPrevHash(current.getPreviousHash())) {
+                log.debug("已到达创世区块（高度={}），停止向前追溯", currentHeight);
+                break;
+            }
+
+            // 3.2 准备获取前序区块（主链上的前一高度区块）
+            currentHeight--;
+            if (currentHeight < 0) {
+                log.debug("已遍历至创世区块之前，停止收集（累计收集{}个）", collectedCount);
+                break;
+            }
+
+            // 3.3 通过高度获取主链上前一区块的区块头（核心修改：确保从主链获取）
+            current = getBlockHeaderByHeight(currentHeight);
+            if (current == null) {
+                log.warn("主链上高度={}的区块不存在，停止收集", currentHeight);
+                break;
+            }
+        }
+
+        // 4. 处理收集结果
+        if (timestamps.isEmpty()) {
+            log.error("未收集到任何有效时间戳，无法计算中位数");
+            throw new RuntimeException("无有效时间戳数据");
+        }
+        if (collectedCount < 11) {
+            log.warn("实际收集到{}个有效时间戳（不足11个），基于现有数据计算", collectedCount);
+        }
+
+        // 5. 排序并计算中位数
+        Collections.sort(timestamps);
+        int medianIndex = timestamps.size() / 2;
+        long medianTime = timestamps.get(medianIndex);
+        log.debug("中位数时间计算完成，参与计算的时间戳：{}，中位数：{}", timestamps, medianTime);
+        return medianTime;
+    }
+
+    private BlockHeader getBlockHeaderByHeight(long height) {
+        // 1. 校验高度合法性（高度不能为负数）
+        if (height < 0) {
+            log.warn("获取区块头失败：高度不能为负数，height={}", height);
+            return null;
+        }
+        // 2. 通过高度获取主链区块哈希（依赖已实现的索引方法）
+        byte[] blockHash = getMainBlockHashByHeight(height);
+        if (blockHash == null) {
+            log.debug("主链中不存在高度为{}的区块，无法获取区块头", height);
+            return null;
+        }
+        // 3. 通过哈希获取区块头（复用已实现的哈希查询方法）
+        return getBlockHeaderByHash(blockHash);
+    }
+
+
+    private boolean isGenesisPrevHash(byte[] prevHash) {
+        return Arrays.equals(prevHash, GENESIS_PREV_BLOCK_HASH);
+    }
 
 
     //根据交易id获取区块hash

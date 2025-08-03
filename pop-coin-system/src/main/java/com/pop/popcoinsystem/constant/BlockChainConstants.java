@@ -37,6 +37,10 @@ public class BlockChainConstants {
 
     public static final String GENESIS_BLOCK_HASH_HEX = "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f";
 
+    //创世区块前序hash不是NUll
+    public static final byte[] GENESIS_PREV_BLOCK_HASH = new byte[32];
+
+
     //难度目标 0000ffffffff0000000000000000000000000000000000000000000000000000
     public static final String INIT_DIFFICULTY_TARGET_HEX = "0000ffffffff0000000000000000000000000000000000000000000000000000";
 
