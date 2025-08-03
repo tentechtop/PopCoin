@@ -318,7 +318,7 @@ public class AsyncBlockSynchronizerImpl implements AsyncBlockSynchronizer{
             Block lastProcessed = null;
             for (Block block : remoteBlocks) {
                 // 验证并添加区块（同步逻辑复用原有验证）
-                if (!localChainService.verifyBlock(block)) {
+                if (!localChainService.verifyBlock(block,false)) {
                     throw new RuntimeException("区块验证失败: " + CryptoUtil.bytesToHex(block.getHash()));
                 }
                 lastProcessed = block;
@@ -458,7 +458,7 @@ public class AsyncBlockSynchronizerImpl implements AsyncBlockSynchronizer{
                 Block lastProcessedBlock = null;
                 for (Block block : remoteBlocks) {
                     // 验证区块合法性
-                    if (!localChainService.verifyBlock(block)) {
+                    if (!localChainService.verifyBlock(block,false)) {
                         log.error("区块验证失败，哈希: {}", CryptoUtil.bytesToHex(block.getHash()));
                         throw new RuntimeException("无效区块，中断同步");
                     }
@@ -482,7 +482,7 @@ public class AsyncBlockSynchronizerImpl implements AsyncBlockSynchronizer{
 
                             // 处理中间区块
                             for (Block missingBlock : missingBlocks) {
-                                if (!localChainService.verifyBlock(missingBlock)) {
+                                if (!localChainService.verifyBlock(missingBlock,false)) {
                                     throw new RuntimeException("中间区块验证失败，哈希: " + CryptoUtil.bytesToHex(missingBlock.getHash()));
                                 }
                                 localChainService.addBlockToMainChain(missingBlock);

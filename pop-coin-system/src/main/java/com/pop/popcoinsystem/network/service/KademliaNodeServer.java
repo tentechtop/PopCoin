@@ -349,7 +349,7 @@ public class KademliaNodeServer {
         List<ExternalNodeInfo> closest = this.getRoutingTable().findClosest(this.nodeInfo.getId());
         //去除自己
         closest.removeIf(node -> node.getId().equals(this.nodeInfo.getId()));
-        log.info("广播消息: {}",closest);
+        log.debug("广播消息: {}",closest);
         for (ExternalNodeInfo externalNodeInfo: closest) {
             try {
                 kademliaMessage.setReceiver(BeanCopyUtils.copyObject(externalNodeInfo, NodeInfo.class));

@@ -20,12 +20,6 @@ public class RpcResponseMessageHandler implements MessageHandler {
 
     protected EmptyKademliaMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull RpcResponseMessage rpcRequest) throws InterruptedException {
         long requestId = rpcRequest.getRequestId();//响应消息必须保持一致
-        log.info("收到RPC,{}",rpcRequest.isResponse()? "响应" : "请求");
-
-
-
-
-
 
         return null;
     }

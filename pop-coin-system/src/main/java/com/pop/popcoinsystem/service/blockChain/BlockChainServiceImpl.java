@@ -340,7 +340,7 @@ public class BlockChainServiceImpl implements BlockChainService {
      * UTXO 并非仅在交易验证成功后产生，而是在交易被成功打包进区块并经过网络确认后，才成为有效的 UTXO。
      */
     @Override
-    public boolean verifyBlock(Block block) {
+    public boolean verifyBlock(Block block, boolean broadcastMessage) {
         // 验证区块合法性
         if (!validateBlock(block)) {
             log.warn("区块验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
@@ -385,17 +385,23 @@ public class BlockChainServiceImpl implements BlockChainService {
         // 处理区块（保存、更新UTXO等）  只要区块通过验证就 保存区块 保存区块产生的UTXO
         processValidBlock(block);
         //广播区块
-        new Thread(() -> {
-            if (kademliaNodeServer.isRunning()){
-                log.info("区块验证成功,广播区块");
-                BlockMessage blockMessage = new BlockMessage();
-                blockMessage.setSender(kademliaNodeServer.getNodeInfo());
-                blockMessage.setData(block);
-                kademliaNodeServer.broadcastMessage(blockMessage);
-            }
-        }).start();
+        if (broadcastMessage){
+            new Thread(() -> {
+                if (kademliaNodeServer.isRunning()){
+                    log.info("区块验证成功,广播区块");
+                    BlockMessage blockMessage = new BlockMessage();
+                    blockMessage.setSender(kademliaNodeServer.getNodeInfo());
+                    blockMessage.setData(block);
+                    kademliaNodeServer.broadcastMessage(blockMessage);
+                }
+            }).start();
+        }
         return true;
     }
+
+
+
+
 
 
     /**
@@ -1514,11 +1520,11 @@ public class BlockChainServiceImpl implements BlockChainService {
     }
 
     public void addBlockToMainChain(Block validBlock) {
-        verifyBlock(validBlock);
+        verifyBlock(validBlock,false);
     }
 
     public void addBlockToAltChain(Block validBlock) {
-        verifyBlock(validBlock);
+        verifyBlock(validBlock,false);
     }
 
     /**

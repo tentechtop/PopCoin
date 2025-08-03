@@ -178,9 +178,6 @@ public class MiningServiceImpl {
                 log.info("\n开始挖矿新区块 #" + newBlock.getHeight() +
                         " (难度: " + newBlock.getDifficulty() + ", 交易数: " + transactions.size() + ", 手续费: "+ totalFee+  ")");
 
-
-
-
                 MiningResult result = mineBlock(newBlock);
                 if (result != null && result.found) {
                     newBlock.setNonce(result.nonce);
@@ -192,7 +189,7 @@ public class MiningServiceImpl {
                         removeTransaction(tx.getTxId()); // 直接传入byte[]类型的txId
                     }
                     //将区块提交到区块链
-                    blockChainService.verifyBlock(newBlock);
+                    blockChainService.verifyBlock(newBlock,true);
                 } else {
                     // 未找到有效哈希，将交易放回交易池（避免丢失）
                     log.info("区块 #" + newBlock.getHeight() + " 挖矿失败，重新尝试...");

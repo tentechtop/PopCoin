@@ -82,7 +82,9 @@ public class SyncBlockChainServiceImpl {
         RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer,nodeInfo);
         BlockChainService blockChainService = proxyFactory.createProxy(BlockChainService.class);
         Block blockByHash = blockChainService.getBlockByHash(CryptoUtil.hexToBytes(hash));
-        BlockDTO blockDto = blockChainService.getBlockDto(blockByHash);
-        return Result.ok(blockDto);
+
+        log.info("获取区块成功{}", blockByHash);
+
+        return Result.ok();
     }
 }

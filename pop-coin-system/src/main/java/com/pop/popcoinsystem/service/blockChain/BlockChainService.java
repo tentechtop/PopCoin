@@ -38,7 +38,7 @@ public interface BlockChainService {
     /**
      * 验证区块合法性（包括交易、PoW、链连续性等）
      */
-    boolean verifyBlock(Block block);
+    boolean verifyBlock(Block block, boolean broadcastMessage);
 
     /**
      * 创建隔离见证交易的签名哈希
