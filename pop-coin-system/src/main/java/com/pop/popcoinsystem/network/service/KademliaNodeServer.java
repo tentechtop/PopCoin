@@ -98,7 +98,7 @@ public class KademliaNodeServer {
     // 消息过期时间（毫秒）
     public static final long MESSAGE_EXPIRATION_TIME = 30000;
     // 节点过期时间（毫秒）
-    public static final long NODE_EXPIRATION_TIME = 300000;
+    public static final long NODE_EXPIRATION_TIME = 600000;//5分钟心跳一次 10分钟过期
 
     //UDP服务
     private EventLoopGroup udpGroup;
