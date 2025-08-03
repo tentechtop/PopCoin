@@ -8,10 +8,8 @@ import com.pop.popcoinsystem.data.script.*;
 import com.pop.popcoinsystem.exception.UnsupportedAddressException;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeInfo;
-import com.pop.popcoinsystem.network.protocol.message.FindForkPointRequestMessage;
-import com.pop.popcoinsystem.network.protocol.message.GetHeadersRequestMessage;
-import com.pop.popcoinsystem.network.protocol.messageData.HeadersRequestParam;
 import com.pop.popcoinsystem.network.rpc.RpcProxyFactory;
+import com.pop.popcoinsystem.service.blockChain.asyn.AsyncBlockSynchronizerImpl;
 import com.pop.popcoinsystem.service.mining.Mining;
 import com.pop.popcoinsystem.service.blockChain.strategy.ScriptVerificationStrategy;
 import com.pop.popcoinsystem.service.blockChain.strategy.ScriptVerifierFactory;
@@ -43,7 +41,7 @@ import java.util.concurrent.TimeoutException;
 
 import static com.pop.popcoinsystem.constant.BlockChainConstants.TRANSACTION_VERSION_1;
 import static com.pop.popcoinsystem.constant.BlockChainConstants.*;
-import static com.pop.popcoinsystem.service.blockChain.AsyncBlockSynchronizer.RPC_TIMEOUT;
+import static com.pop.popcoinsystem.service.blockChain.asyn.AsyncBlockSynchronizerImpl.RPC_TIMEOUT;
 import static com.pop.popcoinsystem.storage.StorageService.getUTXOKey;
 import static com.pop.popcoinsystem.data.transaction.Transaction.calculateBlockReward;
 
@@ -64,7 +62,7 @@ public class BlockChainServiceImpl implements BlockChainService {
     private Mining mining;
 
     @Autowired
-    private AsyncBlockSynchronizer blockSynchronizer; // 复用异步同步器
+    private AsyncBlockSynchronizerImpl blockSynchronizer; // 复用异步同步器
 
     @PostConstruct
     private void initBlockChain() throws Exception {
@@ -86,6 +84,7 @@ public class BlockChainServiceImpl implements BlockChainService {
     /**
      * 验证交易
      */
+    @Override
     public boolean verifyTransaction(Transaction transaction) {
         // 基础验证
         if (!validateTransactionBasics(transaction)) {
@@ -267,6 +266,7 @@ public class BlockChainServiceImpl implements BlockChainService {
      * 3. 仅包含一笔CoinBase交易（挖矿奖励）
      * 4. 时间戳通常设置为项目启动时间
      */
+    @Override
     public Block createGenesisBlock() {
         // 1. 初始化区块基本信息
         Block genesisBlock = new Block();
@@ -317,6 +317,7 @@ public class BlockChainServiceImpl implements BlockChainService {
      * 验证交易并提交到交易池
      * 交易验证成功后 广播交易 如果本节点是矿工节点 则再添加到交易池 由矿工打包
      */
+    @Override
     public boolean verifyAndAddTradingPool(Transaction transaction) {
         log.info("您的交易已提交,正在验证交易...");
         if (verifyTransaction(transaction)) {
@@ -339,6 +340,7 @@ public class BlockChainServiceImpl implements BlockChainService {
      * 验证区块
      * UTXO 并非仅在交易验证成功后产生，而是在交易被成功打包进区块并经过网络确认后，才成为有效的 UTXO。
      */
+    @Override
     public boolean verifyBlock(Block block) {
         // 验证区块合法性
         if (!validateBlock(block)) {
@@ -406,8 +408,8 @@ public class BlockChainServiceImpl implements BlockChainService {
     private boolean syncMissingParentBlocks(byte[] parentHash, int depth) {
         // 检查同步深度，防止恶意区块导致无限递归
         if (depth >= MAX_SYNC_DEPTH) {
-            log.error("同步深度超过限制（{}），可能存在循环依赖", MAX_SYNC_DEPTH);
-            return false;
+            log.error("提示:同步深度超过限制（{}），可能存在循环依赖", MAX_SYNC_DEPTH);
+            return true;
         }
 
         // 检查父区块是否已存在（可能其他线程已同步）
@@ -432,7 +434,6 @@ public class BlockChainServiceImpl implements BlockChainService {
                 return false;
             }
             List<NodeInfo> candidateNodes = BeanCopyUtils.copyList(closest, NodeInfo.class);
-
 
             // 2. 向候选节点发送区块请求（逐个尝试，直到成功）
             CompletableFuture<Block> blockFuture = new CompletableFuture<>();
@@ -496,6 +497,7 @@ public class BlockChainServiceImpl implements BlockChainService {
      * @param sigHashType 签名哈希类型  sigHashType（如ALL、NONE、SINGLE）决定交易的哪些部分（输入、输出）会被纳入哈希计算（例如ALL表示包含所有输入和输出，防止任何部分被篡改）。
      * @return 签名哈希
      */
+    @Override
     public byte[] createWitnessSignatureHash(Transaction tx, int inputIndex, long amount, SigHashType sigHashType) {
         // 1. 复制交易对象，避免修改原交易
         Transaction txCopy = Transaction.copyWithoutWitness(tx);
@@ -603,6 +605,7 @@ public class BlockChainServiceImpl implements BlockChainService {
     }
 
     //输入 = 输出 + 手续费
+    @Override
     public long getFee(Transaction transaction) {
         // 特殊处理：CoinBase交易没有输入，手续费由区块中其他交易决定
         if (isCoinBaseTransaction(transaction)) {
@@ -653,6 +656,7 @@ public class BlockChainServiceImpl implements BlockChainService {
      * @param tx
      * @return
      */
+    @Override
     public double getFeePerByte(Transaction tx) {
         return getFee(tx) / (double) tx.getSize();
     }
@@ -773,6 +777,7 @@ public class BlockChainServiceImpl implements BlockChainService {
     }
 
 
+    @Override
     public Block getMainLatestBlock() {
         return getBlockByHash(getMainLatestBlockHash());
     }
@@ -812,6 +817,7 @@ public class BlockChainServiceImpl implements BlockChainService {
     /**
      * 主链 通过高度获取区块hash
      */
+    @Override
     public byte[] getMainBlockHashByHeight(long height) {
         // 从数据库中获取区块
         return popStorage.getMainBlockHashByHeight(height);
@@ -1012,6 +1018,7 @@ public class BlockChainServiceImpl implements BlockChainService {
      * 获取创世区块hash
      * @return
      */
+    @Override
     public byte[] getGenesisBlockHash() {
         return GENESIS_BLOCK_HASH;
     }
@@ -1020,6 +1027,7 @@ public class BlockChainServiceImpl implements BlockChainService {
      * 获取创世区块
      * @return
      */
+    @Override
     public Block getGenesisBlock() {
         return popStorage.getBlockByHash(GENESIS_BLOCK_HASH);
     }
@@ -1067,6 +1075,7 @@ public class BlockChainServiceImpl implements BlockChainService {
 
 
     //根据hash获取区块
+    @Override
     public Block getBlockByHash(byte[] hash) {
         // 从数据库中获取区块
         return popStorage.getBlockByHash(hash);
@@ -1077,6 +1086,7 @@ public class BlockChainServiceImpl implements BlockChainService {
      * 获取当前区块信息
      * @return
      */
+    @Override
     public Result<BlockChain> getBlockChainInfo() {
         BlockChain blockChain = new BlockChain();
         Block mainLatestBlock = getMainLatestBlock();
@@ -1101,6 +1111,7 @@ public class BlockChainServiceImpl implements BlockChainService {
      * @param blockHashHex
      * @return
      */
+    @Override
     public Result<BlockDTO> getBlock(String blockHashHex) {
         Block block = popStorage.getBlockByHash(CryptoUtil.hexToBytes(blockHashHex));
         if (block == null){
@@ -1158,6 +1169,7 @@ public class BlockChainServiceImpl implements BlockChainService {
         return Result.ok(blockDTO);
     }
 
+    @Override
     public Result<BlockDTO> getBlock(long height) {
         Block block = popStorage.getMainBlockByHeight(height);
         if (block == null){
@@ -1218,6 +1230,7 @@ public class BlockChainServiceImpl implements BlockChainService {
     /**
      * 获取UTXO
      */
+    @Override
     public UTXO getUTXO(byte[] txId, int vout) {
         return popStorage.getUTXO(txId, vout);
     }
@@ -1230,6 +1243,7 @@ public class BlockChainServiceImpl implements BlockChainService {
     /**
      * 主链最新高度
      */
+    @Override
     public long getMainLatestHeight() {
         return popStorage.getMainLatestHeight();
     }
@@ -1536,8 +1550,8 @@ public class BlockChainServiceImpl implements BlockChainService {
                                long localHeight, byte[] localHash, byte[] localWork,
                                long remoteHeight, byte[] remoteHash, byte[] remoteWork
     ) throws ConnectException, InterruptedException {
-        AsyncBlockSynchronizer blockSynchronizer = new AsyncBlockSynchronizer(nodeServer);
-        blockSynchronizer.compareAndSyncAsync(nodeServer,remoteNode,localHeight,localHash,localWork,remoteHeight,remoteHash,remoteWork);
+        AsyncBlockSynchronizerImpl blockSynchronizer = new AsyncBlockSynchronizerImpl(nodeServer);
+        blockSynchronizer.submitSyncTask(nodeServer,remoteNode,localHeight,localHash,localWork,remoteHeight,remoteHash,remoteWork);
     }
 
     @Override

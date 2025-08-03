@@ -183,4 +183,6 @@ public interface BlockChainService {
 
 
     List<Block> getBlockByStartHashAndEndHashWithLimit(byte[] startHash, byte[] endHash, int batchSize);
+
+    byte[] getMainBlockHashByHeight(long batchEndHeight);
 }
