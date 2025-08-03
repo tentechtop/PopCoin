@@ -118,16 +118,6 @@ public class KademliaServiceStart {
                 kademliaNodeServer.setRpcServiceRegistry(registry);
                 kademliaNodeServer.start();  // 启动服务器
 
-                RpcServiceRegistry rpcServiceRegistry1 = kademliaNodeServer.getRpcServiceRegistry();
-
-                // 注册TransactionService接口及其实现类
-                Map<String, Object> service = rpcServiceRegistry1.getService();
-                //遍历这些服务
-                service.forEach((interfaceName, implInstance) -> {log.info("遍历RPC服务:{}", interfaceName);});
-                Object transactionService = rpcServiceRegistry1.getService("TransactionService");
-                log.info("测试获取:{}", transactionService);
-
-
                 // 连接所有引导节点（从配置文件读取）
                 log.info("正在连接引导节点......:{}",bootstrap);
                 if (bootstrap != null && !bootstrap.isEmpty()) {
