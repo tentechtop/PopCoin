@@ -1743,7 +1743,20 @@ public class BlockChainServiceImpl implements BlockChainService {
         return Result.ok(typeBalance);
     }
 
+    @Override
+    public Result startSync() {
+        return null;
+    }
 
+    @Override
+    public Result getSyncProgress() {
+        return null;
+    }
+
+    @Override
+    public Result stopSync() {
+        return null;
+    }
 
 
 }

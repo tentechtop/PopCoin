@@ -390,7 +390,6 @@ public class KademliaNodeServer {
             log.debug("路由表为空，无需检查节点活性");
             return;
         }
-
         for (ExternalNodeInfo node : allNodes) {
             // 跳过自身节点
             if (node.getId().equals(nodeInfo.getId())) continue;

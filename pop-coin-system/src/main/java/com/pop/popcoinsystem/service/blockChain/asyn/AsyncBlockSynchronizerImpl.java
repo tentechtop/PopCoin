@@ -201,7 +201,196 @@ public class AsyncBlockSynchronizerImpl implements AsyncBlockSynchronizer{
     }
 
 
+    public CompletableFuture<SyncProgress> submitRangeSyncTask(KademliaNodeServer kademliaNodeServer, NodeInfo remoteNode, long startHeight, long endHeight) {
+        // 1. 参数合法性校验
+        if (startHeight < 0) {
+            throw new IllegalArgumentException("起始高度不能为负数: " + startHeight);
+        }
+        if (endHeight < startHeight) {
+            throw new IllegalArgumentException("结束高度不能小于起始高度: start=" + startHeight + ", end=" + endHeight);
+        }
+        if (remoteNode == null || remoteNode.getId() == null) {
+            throw new IllegalArgumentException("远程节点信息无效");
+        }
+        // 2. 并发任务控制
+        if (activeTaskCount.get() >= MAX_CONCURRENT_TASKS) {
+            SyncProgress progress = new SyncProgress();
+            progress.setStatus(SyncStatus.FAILED);
+            progress.setErrorMsg("超出最大并发同步任务数（" + MAX_CONCURRENT_TASKS + "）");
+            return CompletableFuture.completedFuture(progress);
+        }
+        // 3. 初始化任务标识与进度跟踪
+        String taskId = UUID.randomUUID().toString();
+        BigInteger nodeId = remoteNode.getId();
+        nodeTaskMap.put(nodeId, taskId); // 关联节点与任务
 
+        // 初始化同步进度对象
+        SyncProgress progress = new SyncProgress();
+        progress.setTaskId(taskId);
+        progress.setNodeId(nodeId);
+        progress.setNodeInfo(remoteNode);
+        progress.setStartHeight(startHeight);
+        progress.setTargetHeight(endHeight);
+        progress.setTotalBlocks(endHeight - startHeight);
+        progress.setCurrentHeight(startHeight);
+        progress.setSyncedBlocks(0);
+        progress.setProgressPercent(0.0);
+        progress.setStatus(SyncStatus.INIT);
+        progress.setLastSyncTime(LocalDateTime.now());
+        globalSyncProgress.put(taskId, progress);
+
+        // 4. 提交异步同步任务
+        CompletableFuture<SyncProgress> future = CompletableFuture.supplyAsync(() -> {
+            activeTaskCount.incrementAndGet();
+            try {
+                progress.setStatus(SyncStatus.RUNNING);
+                // 执行范围同步核心逻辑
+                performRangeSync(kademliaNodeServer, remoteNode, progress, startHeight, endHeight);
+                progress.setStatus(SyncStatus.COMPLETED);
+                return progress;
+            } catch (Exception e) {
+                log.error("范围同步任务[{}]失败", taskId, e);
+                progress.setStatus(SyncStatus.FAILED);
+                progress.setErrorMsg(e.getMessage());
+                return progress;
+            } finally {
+                activeTaskCount.decrementAndGet();
+                progress.setLastSyncTime(LocalDateTime.now());
+                updateSyncProgress(progress); // 持久化最终状态
+            }
+        }, syncExecutor);
+        return future;
+    }
+
+
+    /**
+     * 执行指定高度范围的区块同步核心逻辑
+     */
+    private void performRangeSync(
+            KademliaNodeServer nodeServer,
+            NodeInfo remoteNode,
+            SyncProgress progress,
+            long startHeight,
+            long endHeight) throws Exception {
+
+        BlockChainService localChainService = nodeServer.getBlockChainService();
+        long localLatestHeight = localChainService.getMainLatestHeight();
+        log.info("开始范围同步任务[{}]：节点={}，范围=[{}~{}]，本地最新高度={}",
+                progress.getTaskId(), remoteNode.getId(), startHeight, endHeight, localLatestHeight);
+
+        // 5. 验证本地起始高度区块是否存在（确保同步起点有效）
+        Block startBlock = localChainService.getMainBlockByHeight(startHeight);
+        if (startBlock == null) {
+            // 本地缺失起始高度区块，检查是否需要从更早高度开始
+            if (startHeight == 0) {
+                throw new IllegalStateException("本地创世区块不存在，无法同步");
+            }
+            // 尝试从本地最新高度同步到起始高度（补全前置区块）
+            log.warn("本地缺失高度{}的区块，先同步前置区块[0~{}]", startHeight, startHeight);
+            performRangeSync(nodeServer, remoteNode, progress, 0, startHeight);
+            // 重新检查起始区块
+            startBlock = localChainService.getMainBlockByHeight(startHeight);
+            if (startBlock == null) {
+                throw new IllegalStateException("前置区块同步失败，无法获取起始高度" + startHeight + "的区块");
+            }
+        }
+
+        // 6. 验证远程节点目标高度区块是否存在（动态调整结束高度）
+        RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
+        proxyFactory.setTimeout(RPC_TIMEOUT);
+        BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
+        long remoteLatestHeight = remoteService.getMainLatestHeight();
+        long actualEndHeight = Math.min(endHeight, remoteLatestHeight); // 若远程高度不足，调整结束高度
+        if (actualEndHeight < startHeight) {
+            log.warn("远程节点最新高度{}小于起始高度{}，无需同步", remoteLatestHeight, startHeight);
+            progress.setTargetHeight(actualEndHeight);
+            progress.setTotalBlocks(0);
+            progress.setProgressPercent(100.0);
+            return;
+        }
+        if (actualEndHeight < endHeight) {
+            log.warn("远程节点高度不足，同步范围调整为[{}~{}]", startHeight, actualEndHeight);
+            progress.setTargetHeight(actualEndHeight);
+            progress.setTotalBlocks(actualEndHeight - startHeight);
+        }
+
+        // 7. 分批次同步区块（复用动态批次逻辑）
+        long currentHeight = startHeight;
+        byte[] currentHash = startBlock.getHash();
+        Block prevBlock = startBlock;
+
+        while (currentHeight < actualEndHeight) {
+            // 动态计算当前批次大小（根据内存情况）
+            int batchSize = calculateDynamicBatchSize();
+            long batchEndHeight = Math.min(currentHeight + batchSize, actualEndHeight);
+            log.debug("任务[{}]：当前批次同步[{}~{}]，批次大小={}",
+                    progress.getTaskId(), currentHeight, batchEndHeight, batchSize);
+
+            // 拉取当前批次区块
+            List<Block> remoteBlocks = fetchBlockBatch(remoteNode, currentHash,
+                    remoteService.getMainBlockHashByHeight(batchEndHeight), batchSize);
+            if (remoteBlocks == null || remoteBlocks.isEmpty()) {
+                log.warn("任务[{}]：未获取到区块，终止同步", progress.getTaskId());
+                break;
+            }
+
+            // 处理批次内区块
+            Block lastProcessed = null;
+            for (Block block : remoteBlocks) {
+                // 验证区块合法性
+                if (!localChainService.verifyBlock(block, false)) {
+                    throw new RuntimeException("区块验证失败: " + CryptoUtil.bytesToHex(block.getHash()));
+                }
+
+                // 检查区块连续性（与上一个区块的哈希关联）
+                if (!Arrays.equals(block.getPreviousHash(), prevBlock.getHash())) {
+                    log.warn("任务[{}]：区块不连续，补充中间缺失区块", progress.getTaskId());
+                    // 补全中间缺失的区块
+                    List<Block> missingBlocks = fetchBlockBatch(remoteNode, prevBlock.getHash(), block.getPreviousHash(), batchSize);
+                    if (missingBlocks == null || missingBlocks.isEmpty()) {
+                        throw new RuntimeException("无法获取中间缺失区块，中断同步");
+                    }
+                    // 处理缺失区块
+                    for (Block missing : missingBlocks) {
+                        if (!localChainService.verifyBlock(missing, false)) {
+                            throw new RuntimeException("中间区块验证失败: " + CryptoUtil.bytesToHex(missing.getHash()));
+                        }
+                        localChainService.addBlockToMainChain(missing);
+                        log.info("任务[{}]：补充中间区块，高度={}", progress.getTaskId(), missing.getHeight());
+                        prevBlock = missing;
+                    }
+                }
+
+                // 添加区块到本地链
+                localChainService.addBlockToMainChain(block);
+                log.info("任务[{}]：同步区块，高度={}，哈希={}",
+                        progress.getTaskId(), block.getHeight(), CryptoUtil.bytesToHex(block.getHash()));
+                lastProcessed = block;
+                prevBlock = block;
+            }
+
+            // 更新进度
+            if (lastProcessed != null) {
+                currentHeight = lastProcessed.getHeight();
+                currentHash = lastProcessed.getHash();
+                progress.setCurrentHeight(currentHeight);
+                progress.setSyncedBlocks((int) (currentHeight - startHeight));
+                progress.setProgressPercent(calculateProgress(progress));
+                progress.setLastSyncTime(LocalDateTime.now());
+                updateSyncProgress(progress); // 实时持久化进度
+                log.info("任务[{}]：进度={}%（{} / {}）",
+                        progress.getTaskId(), progress.getProgressPercent(), currentHeight, actualEndHeight);
+            }
+
+            // 内存保护：若内存不足，暂停同步
+            if (shouldPauseForMemory()) {
+                log.warn("任务[{}]：内存使用率过高，暂停10秒", progress.getTaskId());
+                Thread.sleep(10000);
+            }
+        }
+
+        log.info("任务[{}]：范围同步完成，最终同步到高度={}", progress.getTaskId(), currentHeight);
+    }
 
 
     /**
@@ -822,6 +1011,7 @@ public class AsyncBlockSynchronizerImpl implements AsyncBlockSynchronizer{
                 return SyncStatus.FAILED;
         }
     }
+
 
 
 }

@@ -228,6 +228,73 @@ public class RoutingTable {
         }
     }
 
+
+    public List<ExternalNodeInfo> findClosest() {
+        BigInteger destinationId = localNodeId;
+        // 用于存储结果的列表
+        ArrayList<ExternalNodeInfo> closestNodeList = new ArrayList<>(nodeSettings.getBucketSize());
+        // 获取目标ID所在的桶
+        Bucket targetBucket = this.findBucket(destinationId);
+
+        // 使用优先队列（最大堆）来维护当前最近的K个节点
+        PriorityQueue<ExternalNodeInfo> closestNodes = new PriorityQueue<>(
+                nodeSettings.getBucketSize(),
+                (a, b) -> getDistance(b.getId()).compareTo(getDistance(a.getId()))
+        );
+
+        // 计算目标ID的前缀
+        int targetPrefix = findBucket(destinationId).getId();
+
+        // 首先检查目标桶
+        lock.readLock().lock();
+        try {
+            // 处理目标桶中的所有节点
+            for (BigInteger nodeId : targetBucket.getNodeIds()) {
+                ExternalNodeInfo node = targetBucket.getNode(nodeId);
+                addIfCloser(node, destinationId, closestNodes);
+            }
+
+            // 然后扩展搜索到相邻的桶
+            int left = targetPrefix - 1;
+            int right = targetPrefix + 1;
+
+            // 交替向两边扩展搜索
+            while ((left >= 0 || right < buckets.size()) && closestNodes.size() < nodeSettings.getBucketSize()) {
+                if (left >= 0) {
+                    Bucket bucket = buckets.get(left);
+                    for (BigInteger nodeId : bucket.getNodeIds()) {
+                        ExternalNodeInfo node = bucket.getNode(nodeId);
+                        addIfCloser(node, destinationId, closestNodes);
+                    }
+                    left--;
+                }
+
+                if (right < buckets.size()) {
+                    Bucket bucket = buckets.get(right);
+                    for (BigInteger nodeId : bucket.getNodeIds()) {
+                        ExternalNodeInfo node = bucket.getNode(nodeId);
+                        addIfCloser(node, destinationId, closestNodes);
+                    }
+                    right++;
+                }
+            }
+
+            // 将优先队列中的节点转移到结果列表中
+            while (!closestNodes.isEmpty()) {
+                closestNodeList.add(closestNodes.poll());
+            }
+
+            // 结果需要按距离从小到大排序
+            closestNodeList.sort(Comparator.comparing(node -> getDistance(node.getId())));
+            //去除自己
+            closestNodeList.removeIf(node -> node.getId().equals(localNodeId));
+            return closestNodeList;
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+
     /**
      * 辅助方法：如果节点比当前队列中的最远节点更近，则添加到队列中
      */

@@ -88,9 +88,9 @@ public class KademliaServiceStart {
             if (bytes.length != 20) {
                 throw new IllegalArgumentException("RIPEMD-160 输出必须是 20 字节");
             }
-            BigInteger bigInteger = new BigInteger(1, bytes);
+            BigInteger id = new BigInteger(1, bytes);
             //生成节点ID
-            nodeSetting.setId(bigInteger);
+            nodeSetting.setId(id);
         }
         storageService.addOrUpdateNodeSetting(nodeSetting);
         log.info("节点信息:{}", nodeSetting);
@@ -102,7 +102,17 @@ public class KademliaServiceStart {
                 .build();
         KademliaNodeServer server = new KademliaNodeServer();
         server.setNodeInfo(nodeInfo);
-        server.setExternalNodeInfo(BeanCopyUtils.copyObject(nodeInfo, ExternalNodeInfo.class));
+        ExternalNodeInfo externalNodeInfo = storageService.getRouteTableNode(nodeSetting.getId());
+        if (externalNodeInfo == null){
+            externalNodeInfo.setScore(60);
+        }
+        externalNodeInfo.setId(nodeSetting.getId());
+        externalNodeInfo.setIpv4(nodeSetting.getIpv4());
+        externalNodeInfo.setTcpPort(nodeSetting.getTcpPort());
+        externalNodeInfo.setUdpPort(nodeSetting.getUdpPort());
+        externalNodeInfo.setNodeType(nodeSetting.getNodeType());
+
+        server.setExternalNodeInfo(externalNodeInfo);
         server.setNodeSettings(NodeSettings.Default.build());
         server.init();
         return server;

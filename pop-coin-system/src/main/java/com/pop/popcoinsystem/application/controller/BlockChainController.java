@@ -135,9 +135,17 @@ public class BlockChainController {
     /**
      * 启动节点数据同步
      */
-    @PostMapping("/startSync")
-    public String startSync() {
-        return "";
+    @GetMapping("/startSync")
+    public Result startSync() {
+        return blockChainService.startSync();
+    }
+
+    /**
+     * 停止节点数据同步
+     */
+    @PostMapping("/stopSync")
+    public Result stopSync() {
+        return blockChainService.stopSync();
     }
 
 
@@ -145,17 +153,10 @@ public class BlockChainController {
      * 获取同步进度
      */
     @PostMapping("/getSyncProgress")
-    public String getSyncProgress() {
-        return "";
+    public Result getSyncProgress() {
+        return blockChainService.getSyncProgress();
     }
 
-    /**
-     * 停止节点数据同步
-     */
-    @PostMapping("/stopSync")
-    public String stopSync() {
-        return "";
-    }
 
 
 

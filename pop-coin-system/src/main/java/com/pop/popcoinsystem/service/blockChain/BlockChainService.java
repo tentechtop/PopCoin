@@ -196,4 +196,10 @@ public interface BlockChainService {
     BlockDTO getBlockDto(Block block);
 
     Result getBalance(String address);
+
+    Result startSync();
+
+    Result getSyncProgress();
+
+    Result stopSync();
 }
