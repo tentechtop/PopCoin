@@ -1,5 +1,7 @@
 package com.pop.popcoinsystem.service.blockChain;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.blockChain.BlockChain;
@@ -36,9 +38,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigInteger;
 import java.net.ConnectException;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static com.pop.popcoinsystem.constant.BlockChainConstants.TRANSACTION_VERSION_1;
@@ -339,6 +339,17 @@ public class BlockChainServiceImpl implements BlockChainService {
         return true;
     }
 
+
+
+
+    //孤儿区块池  key是父区块hash   value是一个 hashMap
+    private final Cache<byte[], ConcurrentHashMap<byte[],Block>> orphanBlocks = CacheBuilder.newBuilder()
+            .maximumSize(10000) // 最大缓存1000个区块（防止内存溢出）
+            .expireAfterWrite(30, TimeUnit.MINUTES) // 写入后30秒自动过期（无需手动清理）
+            .concurrencyLevel(Runtime.getRuntime().availableProcessors()) // 并发级别（默认4，可设为CPU核心数）
+            .build();
+
+
     /**
      * 验证区块
      * UTXO 并非仅在交易验证成功后产生，而是在交易被成功打包进区块并经过网络确认后，才成为有效的 UTXO。
@@ -358,19 +369,37 @@ public class BlockChainServiceImpl implements BlockChainService {
 
         Block parentBlock = getBlockByHash(block.getPreviousHash());
         if (parentBlock == null) {
-            log.warn("父区块不存在，触发同步，哈希：{}", CryptoUtil.bytesToHex(block.getPreviousHash()));
-            // 同步父区块（递归处理所有缺失的祖先）
-            boolean parentSynced = syncMissingParentBlocks(block.getPreviousHash());
-            if (!parentSynced) {
-                log.error("父区块同步失败，无法验证当前区块，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
+            log.warn("父区块不存在，存入孤儿区块，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
+            // 1. 获取当前区块的父哈希（作为孤儿区块池的key）
+            byte[] parentHash = block.getPreviousHash();
+            if (parentHash == null || parentHash.length != 32) {
+                log.error("区块父哈希格式无效，无法存入孤儿池，区块哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
+                return false; // 父哈希无效，直接拒绝该区块
+            }
+
+            // 2. 从缓存中获取或创建父哈希对应的孤儿区块集合
+            ConcurrentHashMap<byte[], Block> orphanMap;
+            try {
+                // 尝试获取已存在的集合，不存在则创建新的ConcurrentHashMap
+                orphanMap = orphanBlocks.get(parentHash, ConcurrentHashMap::new);
+            } catch (ExecutionException e) {
+                log.error("获取孤儿区块集合失败", e);
                 return false;
             }
-            // 同步成功后重新获取父区块
-            parentBlock = getBlockByHash(block.getPreviousHash());
-            if (parentBlock == null) {
-                log.error("同步后父区块仍不存在，验证失败");
+            // 3. 将当前区块存入孤儿集合（key为区块自身哈希，避免重复存储）
+            byte[] blockHash = block.getHash();
+            if (orphanMap.containsKey(blockHash)) {
+                log.info("孤儿区块已存在于缓存中，无需重复存储，哈希：{}", CryptoUtil.bytesToHex(blockHash));
                 return false;
             }
+            orphanMap.put(blockHash, block);
+            log.info("孤儿区块存入成功，父区块哈希：{}，区块哈希：{}，当前该父哈希下的孤儿区块数量：{}",
+                    CryptoUtil.bytesToHex(parentHash),
+                    CryptoUtil.bytesToHex(blockHash),
+                    orphanMap.size());
+            // 4. 自动触发父区块同步（关键步骤：主动拉取父区块以处理孤儿区块）
+            triggerParentBlockSync(parentHash);
+            return false;
         }
         if (parentBlock.getHeight() + 1 != block.getHeight()) {
             log.warn("区块高度不连续，父区块高度：{}，当前区块高度：{}", parentBlock.getHeight(), block.getHeight());
@@ -416,61 +445,105 @@ public class BlockChainServiceImpl implements BlockChainService {
 
 
 
+    /**
+     * 触发父区块同步，当父区块同步成功后自动处理其对应的孤儿区块
+     */
+    private void triggerParentBlockSync(byte[] parentHash) {
+        // 避免重复同步：如果父区块已存在，直接处理孤儿区块
+        if (getBlockByHash(parentHash) != null) {
+            log.info("父区块已存在，直接处理对应的孤儿区块，哈希：{}", CryptoUtil.bytesToHex(parentHash));
+            processOrphanBlocksForParent(parentHash);
+            return;
+        }
 
+        // 使用同步线程池提交父区块同步任务
+        CompletableFuture.runAsync(() -> {
+                    log.info("开始同步父区块，哈希：{}", CryptoUtil.bytesToHex(parentHash));
+                    Block parentBlock = syncSingleBlock(parentHash); // 调用已有的单区块同步方法
+
+                    if (parentBlock != null) {
+                        log.info("父区块同步成功，哈希：{}，高度：{}",
+                                CryptoUtil.bytesToHex(parentHash),
+                                parentBlock.getHeight());
+                        // 父区块同步后，立即处理其对应的孤儿区块
+                        processOrphanBlocksForParent(parentHash);
+                    } else {
+                        log.warn("父区块同步失败，哈希：{}，将在后续区块同步中重试", CryptoUtil.bytesToHex(parentHash));
+                    }
+                }, blockSynchronizer.syncExecutor) // 使用已有的同步线程池，避免创建新线程
+                .exceptionally(e -> {
+                    log.error("父区块同步任务异常，哈希：{}", CryptoUtil.bytesToHex(parentHash), e);
+                    return null;
+                });
+    }
 
 
     /**
-     * 迭代方式同步缺失的父区块（替代递归，避免栈溢出）
+     * 处理指定父区块对应的所有孤儿区块（父区块已同步时调用）
      */
-    private boolean syncMissingParentBlocks(byte[] targetParentHash) {
-        // 用栈存储待同步的区块哈希（模拟递归调用栈）
-        Stack<byte[]> hashStack = new Stack<>();
-        hashStack.push(targetParentHash);
+    private void processOrphanBlocksForParent(byte[] parentHash) {
+        // 1. 从缓存中获取该父区块对应的孤儿区块集合
+        ConcurrentHashMap<byte[], Block> orphanMap = orphanBlocks.getIfPresent(parentHash);
+        if (orphanMap == null || orphanMap.isEmpty()) {
+            log.info("父区块哈希：{} 无对应的孤儿区块，无需处理", CryptoUtil.bytesToHex(parentHash));
+            return;
+        }
 
-        // 记录已处理的哈希，避免循环同步（如恶意区块形成环）
-        Set<String> processedHashes = new HashSet<>();
+        // 2. 验证父区块是否存在（双重检查，避免并发问题）
+        Block parentBlock = getBlockByHash(parentHash);
+        if (parentBlock == null) {
+            log.error("父区块不存在，无法处理孤儿区块，哈希：{}", CryptoUtil.bytesToHex(parentHash));
+            return;
+        }
 
-        while (!hashStack.isEmpty()) {
-            byte[] currentHash = hashStack.pop();
-            String currentHashHex = CryptoUtil.bytesToHex(currentHash);
+        log.info("开始处理父区块哈希：{} 对应的 {} 个孤儿区块",
+                CryptoUtil.bytesToHex(parentHash),
+                orphanMap.size());
 
-            // 检查是否已处理过（防环）
-            if (processedHashes.contains(currentHashHex)) {
-                log.warn("检测到循环依赖的区块哈希：{}，跳过", currentHashHex);
+        // 3. 遍历孤儿区块，逐个验证并加入主链
+        List<byte[]> processedHashes = new ArrayList<>();
+        for (Map.Entry<byte[], Block> entry : orphanMap.entrySet()) {
+            byte[] orphanHash = entry.getKey();
+            Block orphanBlock = entry.getValue();
+
+            // 验证孤儿区块的父哈希是否匹配当前父区块（避免缓存混乱）
+            if (!Arrays.equals(orphanBlock.getPreviousHash(), parentHash)) {
+                log.warn("孤儿区块父哈希不匹配，跳过处理，区块哈希：{}", CryptoUtil.bytesToHex(orphanHash));
                 continue;
             }
-            processedHashes.add(currentHashHex);
 
-            // 检查区块是否已存在，存在则无需同步
-            if (getBlockByHash(currentHash) != null) {
-                log.info("区块已存在，无需同步：{}", currentHashHex);
-                continue;
-            }
-
-            // 若为创世区块且不存在，同步失败
-            if (Arrays.equals(currentHash, getGenesisBlockHash())) {
-                log.error("创世区块不存在，同步失败");
-                return false;
-            }
-
-            // 同步当前区块
-            Block currentBlock = syncSingleBlock(currentHash);
-            if (currentBlock == null) {
-                log.error("同步区块失败：{}，中断链条", currentHashHex);
-                return false;
-            }
-
-            // 将当前区块的父哈希压入栈，继续同步（模拟递归）
-            byte[] parentHash = currentBlock.getPreviousHash();
-            hashStack.push(parentHash);
-
-            // 每同步10个区块，手动触发一次GC（可选，根据内存情况调整）
-            if (processedHashes.size() % 10 == 0) {
-                System.gc(); // 提示JVM回收内存（非强制）
+            // 验证并添加区块到主链（此时父区块已存在，应能通过验证）
+            try {
+                log.info("尝试处理孤儿区块：{}，高度：{}",
+                        CryptoUtil.bytesToHex(orphanHash),
+                        orphanBlock.getHeight());
+                if (verifyBlock(orphanBlock, true)) { // 验证并广播
+                    processedHashes.add(orphanHash);
+                    log.info("孤儿区块处理成功，已加入主链：{}", CryptoUtil.bytesToHex(orphanHash));
+                } else {
+                    log.warn("孤儿区块验证失败，哈希：{}", CryptoUtil.bytesToHex(orphanHash));
+                }
+            } catch (Exception e) {
+                log.error("处理孤儿区块时发生异常，哈希：{}", CryptoUtil.bytesToHex(orphanHash), e);
             }
         }
-        return true;
+
+        // 4. 清理已处理的孤儿区块
+        for (byte[] hash : processedHashes) {
+            orphanMap.remove(hash);
+        }
+
+        // 5. 若集合已空，从缓存中移除父哈希条目（释放内存）
+        if (orphanMap.isEmpty()) {
+            orphanBlocks.invalidate(parentHash);
+            log.info("父区块哈希：{} 对应的孤儿区块已全部处理，移除缓存条目", CryptoUtil.bytesToHex(parentHash));
+        } else {
+            log.info("父区块哈希：{} 仍有 {} 个孤儿区块未处理（验证失败或重复）",
+                    CryptoUtil.bytesToHex(parentHash),
+                    orphanMap.size());
+        }
     }
+
 
     /**
      * 同步单个区块（提取为独立方法，便于复用和控制）

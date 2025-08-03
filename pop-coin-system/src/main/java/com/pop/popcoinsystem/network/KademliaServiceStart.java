@@ -129,7 +129,6 @@ public class KademliaServiceStart {
                                 .udpPort(bootstrapNode.getUdpPort())
                                 .build();
                         kademliaNodeServer.connectToBootstrapNodes(nodeInfo); // 假设存在单个节点连接方法
-                        log.info("已连接引导节点: {}", bootstrapNode.getIp());
                     }
                 } else {
                     log.warn("未配置任何引导节点");

@@ -131,6 +131,13 @@ public class BlockChainController {
     }
 
 
+    /**
+     * 控制节点区块同步
+     */
+    @PostMapping("/controlSync")
+    public String controlSync() {
+        return "";
+    }
 
 
 
