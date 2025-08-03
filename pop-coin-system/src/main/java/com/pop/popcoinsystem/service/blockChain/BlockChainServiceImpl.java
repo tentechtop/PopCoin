@@ -58,7 +58,12 @@ public class BlockChainServiceImpl implements BlockChainService {
     private final ReentrantLock mainChainLock = new ReentrantLock(true); // 主链操作锁
     private final ReentrantLock syncLock = new ReentrantLock(true); // 同步操作锁
 
-
+    //孤儿区块池  key是父区块hash   value是一个 hashMap
+    private final Cache<byte[], ConcurrentHashMap<byte[],Block>> orphanBlocks = CacheBuilder.newBuilder()
+            .maximumSize(10000) // 最大缓存1000个区块（防止内存溢出）
+            .expireAfterWrite(30, TimeUnit.MINUTES) // 写入后30秒自动过期（无需手动清理）
+            .concurrencyLevel(Runtime.getRuntime().availableProcessors()) // 并发级别（默认4，可设为CPU核心数）
+            .build();
 
     @Autowired
     private StorageService popStorage;
@@ -340,16 +345,6 @@ public class BlockChainServiceImpl implements BlockChainService {
     }
 
 
-
-
-    //孤儿区块池  key是父区块hash   value是一个 hashMap
-    private final Cache<byte[], ConcurrentHashMap<byte[],Block>> orphanBlocks = CacheBuilder.newBuilder()
-            .maximumSize(10000) // 最大缓存1000个区块（防止内存溢出）
-            .expireAfterWrite(30, TimeUnit.MINUTES) // 写入后30秒自动过期（无需手动清理）
-            .concurrencyLevel(Runtime.getRuntime().availableProcessors()) // 并发级别（默认4，可设为CPU核心数）
-            .build();
-
-
     /**
      * 验证区块
      * UTXO 并非仅在交易验证成功后产生，而是在交易被成功打包进区块并经过网络确认后，才成为有效的 UTXO。
@@ -444,7 +439,6 @@ public class BlockChainServiceImpl implements BlockChainService {
     }
 
 
-
     /**
      * 触发父区块同步，当父区块同步成功后自动处理其对应的孤儿区块
      */
@@ -476,7 +470,6 @@ public class BlockChainServiceImpl implements BlockChainService {
                     return null;
                 });
     }
-
 
     /**
      * 处理指定父区块对应的所有孤儿区块（父区块已同步时调用）
@@ -511,7 +504,6 @@ public class BlockChainServiceImpl implements BlockChainService {
                 log.warn("孤儿区块父哈希不匹配，跳过处理，区块哈希：{}", CryptoUtil.bytesToHex(orphanHash));
                 continue;
             }
-
             // 验证并添加区块到主链（此时父区块已存在，应能通过验证）
             try {
                 log.info("尝试处理孤儿区块：{}，高度：{}",
@@ -527,7 +519,6 @@ public class BlockChainServiceImpl implements BlockChainService {
                 log.error("处理孤儿区块时发生异常，哈希：{}", CryptoUtil.bytesToHex(orphanHash), e);
             }
         }
-
         // 4. 清理已处理的孤儿区块
         for (byte[] hash : processedHashes) {
             orphanMap.remove(hash);
@@ -556,6 +547,9 @@ public class BlockChainServiceImpl implements BlockChainService {
             List<ExternalNodeInfo> closestNodes = kademliaNodeServer.getRoutingTable().findClosest(me);//查询离我最近的节点
             //去除自己
             closestNodes.removeIf(node -> node.getId().equals(me));
+            //还要去除和自己IP端口一致的节点
+            closestNodes.removeIf(node -> ( node.getIpv4().equals(nodeInfo.getIpv4()) && node.getTcpPort() == nodeInfo.getTcpPort() )   );
+
             if (closestNodes.isEmpty()) {
                 log.error("无候选节点提供区块：{}", CryptoUtil.bytesToHex(blockHash));
                 return null;

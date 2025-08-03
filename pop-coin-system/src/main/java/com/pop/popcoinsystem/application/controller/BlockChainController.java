@@ -139,6 +139,14 @@ public class BlockChainController {
         return "";
     }
 
+    /**
+     * 获取本节点与网络的高度差
+     */
+    @PostMapping("/getHeightDiff")
+    public String getHeightDiff() {
+        return "";
+    }
+
 
 
 

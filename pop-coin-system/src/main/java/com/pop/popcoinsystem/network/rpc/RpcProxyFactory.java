@@ -40,11 +40,14 @@ public class RpcProxyFactory {
 
     public RpcProxyFactory(KademliaNodeServer server) {
         this.kademliaNodeServer = server;
+        NodeInfo nodeInfo = server.getNodeInfo();
         RoutingTable routingTable = server.getRoutingTable();
         //TODO 未来实现查找全节点
         List<ExternalNodeInfo> closest = routingTable.findClosest(server.getNodeInfo().getId());
         //去除自己
-        closest.removeIf(node -> node.getId().equals(server.getNodeInfo().getId()));
+        closest.removeIf(node -> node.getId().equals(nodeInfo.getId()));
+        closest.removeIf(node -> ( node.getIpv4().equals(nodeInfo.getIpv4()) && node.getTcpPort() == nodeInfo.getTcpPort()));
+
         if (closest.isEmpty()){
             throw new RuntimeException("没有可用的节点");
         }
