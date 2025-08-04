@@ -1117,6 +1117,8 @@ public class BlockChainServiceImpl implements BlockChainService {
                 verifyAndAddTradingPool(tx, true);  // 广播有效交易
             }
         }
+        //TODO 添加是否开启修建
+
     }
 
     // 切换完成后调用
