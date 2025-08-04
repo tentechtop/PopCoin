@@ -399,7 +399,7 @@ public class BlockChainServiceImpl implements BlockChainService {
             log.warn("区块验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
             return false;
         }
-        if (!Block.validateBlockPoW(block)){
+        if (!block.validatePoW()){
             log.warn("区块 PoW 验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
             return false;
         }

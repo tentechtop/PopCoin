@@ -212,16 +212,7 @@ public class Block implements Serializable {
 
 
 
-    /**
-     * 验证区块的工作量证明（PoW）是否符合难度要求
-     * 工作量证明验证核心：区块哈希必须小于等于难度目标值
-     * @param block 待验证的区块
-     * @return 验证结果：true-符合PoW要求，false-不符合
-     */
-    public static boolean validateBlockPoW(Block block) {
-        BlockHeader blockHeader = BeanCopyUtils.copyObject(block, BlockHeader.class);
-        return validateBlockHeaderPoW(blockHeader);
-    }
+
 
 
 
