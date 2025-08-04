@@ -13,6 +13,7 @@ import com.pop.popcoinsystem.storage.StorageService;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.DifficultyUtils;
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -88,9 +89,7 @@ public class SynchronizedBlocksImpl {
     private final Map<String, SyncTaskRecord> activeTasks = new ConcurrentHashMap<>();
     Map<String, CompletableFuture<SyncTaskRecord>> taskFutureMap = new ConcurrentHashMap<>();
     private ScheduledExecutorService scheduler; // 合并为一个调度器，减少线程资源占用
-
     private ExecutorService detectExecutor; // 用于并发探测节点的线程池
-
 
     // 线程池优化：限制最大线程数，避免资源耗尽
     public final ExecutorService syncExecutor = new ThreadPoolExecutor(
@@ -104,7 +103,8 @@ public class SynchronizedBlocksImpl {
                 thread.setDaemon(true);
                 return thread;
             },
-            new ThreadPoolExecutor.AbortPolicy() // 任务满时拒绝，避免OOM
+            new ThreadPoolExecutor.CallerRunsPolicy() // 队列满时让提交者执行，避免任务丢失 new ThreadPoolExecutor.AbortPolicy() // 任务满时拒绝，避免OOM
+
     );
 
 
@@ -144,8 +144,8 @@ public class SynchronizedBlocksImpl {
         scheduler.scheduleAtFixedRate(
                 this::detectAndSync, 0, fastSyncInterval, TimeUnit.SECONDS);
         // 稳态同步任务
-        scheduler.scheduleAtFixedRate(
-                this::steadyStateSync, 0, steadySyncInterval, TimeUnit.SECONDS);
+/*        scheduler.scheduleAtFixedRate(
+                this::steadyStateSync, 0, steadySyncInterval, TimeUnit.SECONDS);*/
     }
 
     /**
@@ -158,7 +158,7 @@ public class SynchronizedBlocksImpl {
      *    检查全部下载完就开始从开始位置慢慢补充到主链
      *
      */
-    public CompletableFuture<SyncTaskRecord> SubmitDifference(KademliaNodeServer nodeServer,
+    public CompletableFuture<SyncTaskRecord> SubmitDifference(
             long localHeight, byte[] localHash, byte[] localWork,
             long remoteHeight, byte[] remoteHash, byte[] remoteWork) {
 
@@ -168,21 +168,32 @@ public class SynchronizedBlocksImpl {
             log.warn("远程高度({})不大于本地高度({})，无需同步", remoteHeight, localHeight);
             return CompletableFuture.completedFuture(null);
         }
-        // 2. 检查是否已有覆盖该范围的任务
-        String newTaskId = String.format("Task[%d-%d]", localHeight + 1, remoteHeight);
-        boolean isDuplicate = activeTasks.values().stream()
-                .anyMatch(task -> task.getStartHeight() <= localHeight + 1
-                        && task.getTargetHeight() >= remoteHeight);
-        if (isDuplicate) {
-            log.info("已有覆盖范围的同步任务，无需创建新任务");
-            return CompletableFuture.completedFuture(
-                    activeTasks.values().stream()
-                            .filter(task -> task.getStartHeight() <= localHeight + 1
-                                    && task.getTargetHeight() >= remoteHeight)
-                            .findFirst()
-                            .orElse(null)
-            );
+
+        long newTaskStart = localHeight + 1;
+        long newTaskEnd = remoteHeight;
+
+        // 2. 检查并处理与已有任务的重叠
+        List<SyncTaskRecord> overlappingTasks = findOverlappingTasks(newTaskStart, newTaskEnd);
+
+        // 计算需要修剪的起始高度（取所有重叠任务的最大结束高度 + 1）
+        long adjustedStart = newTaskStart;
+        if (!overlappingTasks.isEmpty()) {
+            long maxEndHeight = overlappingTasks.stream()
+                    .mapToLong(SyncTaskRecord::getTargetHeight)
+                    .max()
+                    .orElse(newTaskStart - 1);
+
+            adjustedStart = maxEndHeight + 1;
+            log.info("检测到与{}个任务重叠，调整新任务起始高度从{}到{}",
+                    overlappingTasks.size(), newTaskStart, adjustedStart);
         }
+
+        // 如果调整后起始高度超过结束高度，说明无需创建新任务
+        if (adjustedStart > newTaskEnd) {
+            log.info("新任务范围已被已有任务完全覆盖，无需创建新任务");
+            return CompletableFuture.completedFuture(null);
+        }
+
         // 3. 筛选高评分节点（评分>40）
         List<ExternalNodeInfo> validNodes = candidateNodes.stream()
                 .filter(node -> getNodeScore(node.getId()) > 40)
@@ -192,8 +203,12 @@ public class SynchronizedBlocksImpl {
             log.error("无可用高评分节点，同步任务创建失败");
             return CompletableFuture.failedFuture(new IllegalStateException("无可用同步节点"));
         }
-        // 4. 创建同步任务
-        SyncTaskRecord task = createSyncProgresses(localHeight + 1, remoteHeight, validNodes);
+
+        // 4. 创建修剪后的新任务
+        SyncTaskRecord task = createSyncProgresses(adjustedStart, newTaskEnd, validNodes);
+        activeTasks.put(task.getTaskId(), task);
+        popStorage.saveSyncTaskRecord(task);
+
         activeTasks.put(task.getTaskId(), task);
         // 5. 检查并发限制，提交任务执行
         if (activeTaskCount.get() >= MAX_CONCURRENT_TASKS) {
@@ -217,14 +232,25 @@ public class SynchronizedBlocksImpl {
     }
 
 
-
+    /**
+     * 查找与指定范围重叠的所有活跃任务
+     */
+    private List<SyncTaskRecord> findOverlappingTasks(long start, long end) {
+        return activeTasks.values().stream()
+                .filter(task ->
+                        // 任务状态为运行中或未完成
+                        task.getStatus() != SyncStatus.COMPLETED &&
+                                task.getStatus() != SyncStatus.CANCELLED &&
+                                // 范围存在重叠
+                                !(task.getTargetHeight() < start || task.getStartHeight() > end)
+                )
+                .collect(Collectors.toList());
+    }
 
     private void detectAndSync() {
-        log.info("高频自治");
+        printRunningSyncTasks();
         long localHeight = localBlockChainService.getMainLatestHeight();
-        byte[] localHash = localBlockChainService.getMainLatestBlockHash();
         byte[] localWork = localBlockChainService.getMainLatestBlock().getChainWork();
-
         // 获取所有邻居节点，筛选健康节点（评分>60分）
         List<ExternalNodeInfo> allNodes = kademliaNodeServer.getRoutingTable().findClosest();
         // 对每个健康节点发起同步（并发控制由syncService保证）
@@ -235,10 +261,8 @@ public class SynchronizedBlocksImpl {
                 RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, node);
                 BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
                 long remoteHeight = remoteService.getMainLatestHeight();
-                byte[] remoteHash = remoteService.getMainLatestBlockHash();
                 byte[] remoteWork = remoteService.getMainLatestBlock().getChainWork();
                 log.info("自治 节点{}最新高度为: {}", node.getId(), remoteHeight);
-
                 // 记录节点性能（探测延迟）
                 long start = System.currentTimeMillis();
                 boolean success = remoteHeight > 0; // 简单判断探测是否成功
@@ -246,13 +270,51 @@ public class SynchronizedBlocksImpl {
                 // 若远程链更优，触发同步
                 if (DifficultyUtils.compare(localWork, remoteWork) < 0 || remoteHeight > localHeight) {
 
-
-
                 }
             } catch (Exception e) {
                 // 记录失败，降低节点评分
                 log.warn("节点{}探测失败，降低评分", node.getId());
             }
+        }
+    }
+
+
+    /**
+     * 打印所有正在同步的任务（状态为RUNNING的任务）
+     */
+    public void printRunningSyncTasks() {
+        // 筛选出状态为运行中的任务
+        List<SyncTaskRecord> runningTasks = activeTasks.values().stream()
+                .filter(task -> task.getStatus() == SyncStatus.RUNNING)
+                .toList();
+
+        if (runningTasks.isEmpty()) {
+            log.info("当前没有正在同步的任务");
+            return;
+        }
+
+        log.info("===== 正在同步的任务列表（共{}个） =====", runningTasks.size());
+        for (SyncTaskRecord task : runningTasks) {
+            // 计算任务整体进度（基于所有分片的完成情况）
+            double totalProgress = calculateTaskTotalProgress(task);
+
+            // 打印任务基本信息
+            log.info("任务ID: {}", task.getTaskId());
+            log.info("  同步范围: 从高度{}到{}", task.getStartHeight(), task.getTargetHeight());
+            log.info("  整体进度: {}%", totalProgress);
+            log.info("  开始时间: {}", task.getCreateTime());
+            log.info("  最后更新时间: {}", task.getUpdateTime());
+
+            // 打印各分片进度详情
+            log.info("  分片任务详情:");
+            for (SyncProgress shard : task.getSyncProgressList()) {
+                log.info("    分片ID: {} (节点: {})", shard.getProgressId(), shard.getNodeId().toString().substring(0, 8));
+                log.info("      分片范围: {} - {}", shard.getStartHeight(), shard.getTargetHeight());
+                log.info("      分片进度: {}% (已同步{}个区块)",
+                        shard.getProgressPercent(), shard.getSyncedBlocks());
+                log.info("      分片状态: {}", shard.getStatus());
+            }
+            log.info("----------------------------------------");
         }
     }
 
@@ -661,14 +723,14 @@ public class SynchronizedBlocksImpl {
 
         List<SyncProgress> progressList = new ArrayList<>();
         long totalBlocks = targetHeight - startHeight + 1;
-        int totalShards = (int) Math.ceil((double) totalBlocks / MAX_BATCH_SIZE);
+        int totalShards = (int) Math.ceil((double) totalBlocks / BASE_BATCH_SIZE);
 
         for (int i = 0; i < totalShards; i++) {
             ExternalNodeInfo assignedNode = nodeInfoList.get(i % nodeInfoList.size());
             NodeInfo nodeInfo = BeanCopyUtils.copyObject(assignedNode, NodeInfo.class);
 
-            long shardStart = startHeight + (long) i * MAX_BATCH_SIZE;
-            long shardTarget = Math.min(shardStart + MAX_BATCH_SIZE - 1, targetHeight);
+            long shardStart = startHeight + (long) i * BASE_BATCH_SIZE;
+            long shardTarget = Math.min(shardStart + BASE_BATCH_SIZE - 1, targetHeight);
 
             SyncProgress progress = new SyncProgress();
             progress.setProgressId(String.format("%s_PROGRESS_[%d-%d]", taskId, shardStart, shardTarget));
@@ -721,6 +783,25 @@ public class SynchronizedBlocksImpl {
     }
 
 
+    /**
+     * 计算任务的整体进度（基于所有分片的平均进度）
+     */
+    private double calculateTaskTotalProgress(SyncTaskRecord task) {
+        if (task.getSyncProgressList() == null || task.getSyncProgressList().isEmpty()) {
+            return 0.0;
+        }
+        // 计算所有分片的平均进度
+        double totalProgress = task.getSyncProgressList().stream()
+                .mapToDouble(SyncProgress::getProgressPercent)
+                .average()
+                .orElse(0.0);
+        return Math.min(totalProgress, 100.0); // 进度不超过100%
+    }
 
-
+    @PreDestroy
+    public void destroy() {
+        scheduler.shutdown();
+        detectExecutor.shutdown();
+        syncExecutor.shutdown();
+    }
 }

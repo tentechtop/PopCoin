@@ -13,7 +13,6 @@ public enum ColumnFamily {
     BLOCK_BODY("CF_BLOCK_BODY", "blockBody",new ColumnFamilyOptions()),
     //hash -> 区块高度
     BLOCK_HASH_HEIGHT("CF_BLOCK_HASH_HEIGHT", "blockHashHeight",new ColumnFamilyOptions()),
-
     BLOCK_HASH_CHAIN_WORK("CF_BLOCK_HASH_CHAIN_WORK", "blockHashChainWork",new ColumnFamilyOptions()),
 
 

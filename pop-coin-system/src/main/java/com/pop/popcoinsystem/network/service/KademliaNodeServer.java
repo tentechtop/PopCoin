@@ -58,6 +58,11 @@ import static com.pop.popcoinsystem.constant.BlockChainConstants.NET_VERSION;
 @NoArgsConstructor
 @Scope("singleton") // 显式指定单例
 public class KademliaNodeServer {
+
+    // 消息过期时间（毫秒）
+    public static final long MESSAGE_EXPIRATION_TIME = 30000;
+    // 节点过期时间（毫秒）
+    public static final long NODE_EXPIRATION_TIME = 60000;//5分钟心跳一次 10分钟过期
     //节点信息
     private NodeInfo nodeInfo;
 
@@ -95,10 +100,7 @@ public class KademliaNodeServer {
 
 
 
-    // 消息过期时间（毫秒）
-    public static final long MESSAGE_EXPIRATION_TIME = 30000;
-    // 节点过期时间（毫秒）
-    public static final long NODE_EXPIRATION_TIME = 600000;//5分钟心跳一次 10分钟过期
+
 
     //UDP服务
     private EventLoopGroup udpGroup;
@@ -174,7 +176,7 @@ public class KademliaNodeServer {
             running = true;
             scheduler = Executors.newSingleThreadScheduledExecutor();
             //维护网络 首次执行立即开始，之后每 delay  秒执行一次 maintainNetwork 方法  单位秒
-            long delay = 60 * 5;
+            long delay = 30;
             scheduler.scheduleAtFixedRate(this::maintainNetwork, delay, delay, TimeUnit.SECONDS);
         } catch (Exception e) {
             log.error("KademliaNode start error", e);
@@ -395,7 +397,7 @@ public class KademliaNodeServer {
             }
 
             // 2. 节点即将过期（接近阈值阈值），发送Ping确认活性
-            if (inactiveTime > NODE_EXPIRATION_TIME * 0.8) { // 80%阈值时提前检查
+            if (inactiveTime > NODE_EXPIRATION_TIME * 0.8) {
                 log.debug("节点 {} 即将过期，发送Ping确认活性", node.getId());
                 sendPingCheckPing(node);
             }

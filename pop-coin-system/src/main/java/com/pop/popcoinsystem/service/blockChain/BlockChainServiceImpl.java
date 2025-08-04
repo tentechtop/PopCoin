@@ -1616,9 +1616,8 @@ public class BlockChainServiceImpl implements BlockChainService {
                                long localHeight, byte[] localHash, byte[] localWork,
                                long remoteHeight, byte[] remoteHash, byte[] remoteWork
     ) throws ConnectException, InterruptedException {
-
-
-
+        log.info("比较本地与远程节点的区块差异");
+        blockSynchronizer.SubmitDifference(localHeight, localHash, localWork,remoteHeight,remoteHash,remoteWork);
     }
 
 
@@ -1724,6 +1723,10 @@ public class BlockChainServiceImpl implements BlockChainService {
         return popStorage.getBlockHeaderByHeight(height);
     }
 
+    /**
+     * 将区块头合并到主链
+     * @param header
+     */
     @Override
     public void addBlockHeader(BlockHeader header) {
 

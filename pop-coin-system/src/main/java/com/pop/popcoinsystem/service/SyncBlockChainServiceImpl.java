@@ -28,15 +28,6 @@ public class SyncBlockChainServiceImpl {
     private KademliaNodeServer kademliaNodeServer;
 
 
-
-
-
-
-
-
-
-
-
     public Result sendTextMessage(String message) throws Exception {
         RpcRequestData rpcRequestData = new RpcRequestData();
 
