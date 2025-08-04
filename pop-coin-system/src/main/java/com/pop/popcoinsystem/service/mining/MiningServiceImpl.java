@@ -317,7 +317,6 @@ public class MiningServiceImpl {
     private void removeLowestPriorityTransaction(Transaction tx) {
         // 1. 获取传入交易的手续费率作为基准（避免重复计算）
         double targetFeePerByte = blockChainService.getFeePerByte(tx);
-
         byte[] lowestPriorityTxId = null;
         double lowestFeePerByte = Double.MAX_VALUE;
         // 2. 遍历交易池，筛选出手续费率低于基准的交易

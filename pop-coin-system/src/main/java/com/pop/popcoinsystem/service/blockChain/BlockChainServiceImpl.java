@@ -50,6 +50,30 @@ import static com.pop.popcoinsystem.storage.StorageService.getUTXOKey;
 import static com.pop.popcoinsystem.data.transaction.Transaction.calculateBlockReward;
 import static com.pop.popcoinsystem.util.CryptoUtil.ECDSASigner.getLockingScriptByAddress;
 
+/**
+ * 验证新区块时，先加锁检查区块是否已存在，再执行添加逻辑；
+ * 链状态锁
+ * 这是最核心的锁，保护区块链的主链状态，包括：
+ *
+ * 主链的最新区块、高度、链工作（chain work）；
+ * 区块索引（block index，记录所有区块的元数据）；
+ *
+ * UTXO 集的内存缓存（chainstate）。
+ * 所有修改主链状态的操作（如添加新区块、处理分叉、回滚区块）都必须持有cs_main，确保这些操作的原子性。例如：
+ *
+ *
+ * 验证新区块时，先加锁检查区块是否已存在，再执行添加逻辑；
+ *
+ * 处理分叉切换时，整个 “回滚旧链→应用新链” 的过程被cs_main包裹，避免中途被其他线程打断。
+ * 交易池锁（cs_mempool）
+ * 保护内存中的交易池（mempool），防止并发添加 / 删除交易导致的不一致：
+ * 新交易进入时，加锁检查是否已存在、是否双花；
+ * 区块打包交易后，加锁从交易池移除已确认的交易。
+ * 其他细粒度锁
+ * 如验证脚本时的临时锁、网络消息处理的锁等，仅保护特定范围的资源，避免全局锁导致的性能瓶颈。
+ *
+ */
+
 
 @Slf4j
 @Service
@@ -1025,9 +1049,10 @@ public class BlockChainServiceImpl implements BlockChainService {
         updateMainChainHeight(newTipBlock.getHeight());
         updateMainLatestBlockHash(newTipBlock.getHash());
 
-        //处理孤块池
+
         cleanOrphanBlocksAfterSwitch(commonAncestor);
-        // 7. 清理备选链
+        //清理备选链的区块 只要存在则都删除
+
         log.info("成功切换到新链，新高度: {}, 新哈希: {}", getMainLatestHeight(), CryptoUtil.bytesToHex(newTipBlock.getHash()));
     }
 
