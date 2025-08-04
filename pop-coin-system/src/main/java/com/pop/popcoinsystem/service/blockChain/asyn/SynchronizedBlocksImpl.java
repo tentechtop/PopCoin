@@ -58,7 +58,9 @@ public class SynchronizedBlocksImpl {
     @Value("${system.blockchain.sync.rpc-timeout-ms:3000}")
     private int rpcTimeoutMs; // 远程调用超时时间
 
-
+    // 新增：高度到节点ID的映射（记录每个高度由哪个节点同步）
+    // 键：区块高度，值：负责该高度的节点ID
+    private final ConcurrentMap<Long, BigInteger> heightToNodeMap = new ConcurrentHashMap<>();
 
     // 节点评分管理器：维护节点可信度评分（1-100，默认60）
     private final ConcurrentMap<BigInteger, Integer> nodeScores = new ConcurrentHashMap<>();
@@ -160,7 +162,6 @@ public class SynchronizedBlocksImpl {
      *
      */
     public CompletableFuture<SyncTaskRecord> SubmitDifference(long localHeight, long remoteHeight) {
-
         List<ExternalNodeInfo> candidateNodes = kademliaNodeServer.getRoutingTable().getAllNodes();
         // 1. 验证差异有效性
         if (remoteHeight <= localHeight) {
@@ -258,18 +259,23 @@ public class SynchronizedBlocksImpl {
                 long remoteHeight = remoteService.getMainLatestHeight();
                 byte[] remoteWork = remoteService.getMainLatestBlock().getChainWork();
                 long mainLatestHeight = localBlockChainService.getMainLatestHeight();
-                log.info("自治 节点{}最新高度为: {}", node.getId(), remoteHeight);
+                log.info("探测 节点{}最新高度为: {}", node.getId(), remoteHeight);
                 // 记录节点性能（探测延迟）
                 long start = System.currentTimeMillis();
                 boolean success = remoteHeight > 0; // 简单判断探测是否成功
                 long latency = System.currentTimeMillis() - start;
                 // 若远程链更优，触发同步
                 if (DifficultyUtils.compare(localWork, remoteWork) < 0 || remoteHeight > localHeight) {
+                    log.info("探测 节点{}链更优，开始同步", node.getId());
                     SubmitDifference(remoteHeight,mainLatestHeight);
                 }
             } catch (Exception e) {
                 // 记录失败，降低节点评分
                 log.warn("节点{}探测失败，降低评分", node.getId());
+
+                //删除
+                kademliaNodeServer.removeNode(node.getId());
+
             }
         }
     }
@@ -326,52 +332,7 @@ public class SynchronizedBlocksImpl {
 
     // 同步最新区块（增量同步）
     private void syncLatestBlocks() {
-        log.info("低频自治");
-        try {
-            long localHeight = localBlockChainService.getMainLatestHeight();
-            long networkMaxHeight = getNetworkMaxHeight();
 
-            // 计算需要同步的区块范围
-            long startHeight = localHeight + 1;
-            long endHeight = networkMaxHeight;
-
-            // 限制单次同步数量，防止过载
-            if (endHeight - startHeight + 1 > BASE_BATCH_SIZE) {
-                endHeight = startHeight + BASE_BATCH_SIZE - 1;
-                log.warn("同步区块数量超过上限，本次同步: {} - {}", startHeight, endHeight);
-            }
-
-            if (startHeight > endHeight) {
-                log.debug("无需同步最新区块，本地高度已同步: {}", localHeight);
-                return;
-            }
-
-            log.info("开始增量同步最新区块，范围: {} - {}", startHeight, endHeight);
-
-            // 获取健康节点并选择最优节点
-            List<ExternalNodeInfo> allNodes = kademliaNodeServer.getRoutingTable().findClosest();
-            // 选择最合适的同步节点
-            // TODO: 根据节点评分、延迟、网络状态等因素选择最合适的节点
-            ExternalNodeInfo bestNode = allNodes.get(0);
-
-            if (bestNode == null) {
-                log.warn("未找到合适的同步节点");
-                return;
-            }
-            NodeInfo node = BeanCopyUtils.copyObject(bestNode, NodeInfo.class);
-            // 提交增量同步任务
-/*            syncService.submitRangeSyncTask(
-                    kademliaNodeServer,
-                    node,
-                    startHeight,
-                    endHeight
-            );*/
-            log.info("已提交区块同步任务，节点: {}, 范围: {} - {}",
-                    node.getId(), startHeight, endHeight);
-
-        } catch (Exception e) {
-            log.error("同步最新区块失败", e);
-        }
     }
 
 
@@ -433,7 +394,7 @@ public class SynchronizedBlocksImpl {
 
                     if (allCompleted) {
                         // 合并暂存区块到主链
-                        mergeDownloadedBlocks(task.getStartHeight(), task.getTargetHeight());
+                        mergeDownloadedBlocksBatch(task.getStartHeight(), task.getTargetHeight());
                         task.setStatus(SyncStatus.COMPLETED);
                     } else {
                         task.setStatus(SyncStatus.PARTIALLY_COMPLETED);
@@ -749,7 +710,6 @@ public class SynchronizedBlocksImpl {
                         progress.setErrorMsg("主任务已终止");
                         return progress;
                     }
-
                     // 获取区块头（带重试）
                     BlockHeader header = null;
                     try {
@@ -816,7 +776,9 @@ public class SynchronizedBlocksImpl {
         RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
         proxyFactory.setTimeout(RPC_TIMEOUT);
         BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
-        return remoteService.getBlockHeader(currentHeight);
+        BlockHeader blockHeader = remoteService.getBlockHeader(currentHeight);
+        log.debug("获取区块[{}]成功", currentHeight);
+        return blockHeader;
     }
 
     /**
@@ -906,6 +868,13 @@ public class SynchronizedBlocksImpl {
     }
 
 
+    /**
+     * 通过区块高度获取负责同步该区块的节点ID
+     * （基于分片任务时记录的映射关系）
+     */
+    private BigInteger getNodeIdByHeight(long height) {
+        return heightToNodeMap.get(height);
+    }
 
 
     /**
@@ -939,6 +908,11 @@ public class SynchronizedBlocksImpl {
             long shardStart = startHeight + (long) i * BASE_BATCH_SIZE;
             long shardTarget = Math.min(shardStart + BASE_BATCH_SIZE - 1, targetHeight);
 
+            // 核心修改：记录当前分片所有高度与节点的映射
+            for (long h = shardStart; h <= shardTarget; h++) {
+                heightToNodeMap.put(h, assignedNode.getId());
+            }
+
             SyncProgress progress = new SyncProgress();
             progress.setProgressId(String.format("%s_PROGRESS_[%d-%d]", taskId, shardStart, shardTarget));
             progress.setTaskId(taskId);
@@ -963,6 +937,7 @@ public class SynchronizedBlocksImpl {
 
     /**
      * 将下载的区块合并到主链
+     * TODO 批量下载
      */
     private void mergeDownloadedBlocks(long startHeight, long targetHeight) {
         log.info("开始合并区块: {} - {}", startHeight, targetHeight);
@@ -983,7 +958,13 @@ public class SynchronizedBlocksImpl {
                     localBlockChainService.verifyBlock(blockByHash,false);
                     //localBlockChainService.addBlockHeader(header,height);
                     popStorage.deleteDownloadedHeader(height); // 合并后删除暂存
-                    log.debug("区块[{}]已合并到主链", height);
+                    log.info("区块[{}]已合并到主链", height);
+                    //休眠
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                 } else {
                     log.error("区块[{}]验证失败，拒绝合并", height);
                 }
@@ -994,6 +975,167 @@ public class SynchronizedBlocksImpl {
             throw new RuntimeException("区块合并异常", e);
         }
     }
+
+
+
+    /**
+     * 批量下载并合并区块到主链（优化版）
+     * 1. 批量读取暂存的区块头
+     * 2. 批量验证区块头有效性
+     * 3. 并发批量下载完整区块
+     * 4. 批量验证完整区块并合并到主链
+     * 5. 批量清理暂存的区块头
+     */
+    private void mergeDownloadedBlocksBatch(long startHeight, long targetHeight) {
+        log.info("开始批量合并区块: 范围[{} - {}]", startHeight, targetHeight);
+        if (startHeight > targetHeight) {
+            log.warn("无效的区块范围: 起始高度[{}] > 目标高度[{}]", startHeight, targetHeight);
+            return;
+        }
+
+        // 批量处理大小（可配置，平衡内存与效率）
+        int BATCH_SIZE = 500;
+        long totalBlocks = targetHeight - startHeight + 1;
+        int totalBatches = (int) Math.ceil((double) totalBlocks / BATCH_SIZE);
+        log.info("区块合并总数量: {}, 分{}批处理，每批最多{}个", totalBlocks, totalBatches, BATCH_SIZE);
+
+        try {
+            for (int batchNum = 0; batchNum < totalBatches; batchNum++) {
+                // 1. 计算当前批次的高度范围（严格连续）
+                long batchStart = startHeight + (long) batchNum * BATCH_SIZE;
+                long batchEnd = Math.min(batchStart + BATCH_SIZE - 1, targetHeight);
+                log.info("处理第{}批区块: 范围[{} - {}]", batchNum + 1, batchStart, batchEnd);
+
+                // 2. 批量读取暂存的区块头（按高度范围）
+                Map<Long, BlockHeader> heightToHeaderMap = popStorage.getDownloadedHeadersInBatch(batchStart, batchEnd);
+                if (heightToHeaderMap.isEmpty()) {
+                    log.info("第{}批无暂存区块头，跳过处理", batchNum + 1);
+                    continue;
+                }
+
+                // 3. 检查缺失的区块头（范围内未找到的高度）
+                List<Long> missingHeights = new ArrayList<>();
+                for (long h = batchStart; h <= batchEnd; h++) {
+                    if (!heightToHeaderMap.containsKey(h)) {
+                        missingHeights.add(h);
+                    }
+                }
+                if (!missingHeights.isEmpty()) {
+                    log.warn("第{}批缺失{}个区块头: {}", batchNum + 1, missingHeights.size(), missingHeights);
+                    // 缺失前置区块头时，直接跳过当前批次（确保顺序性）
+                    continue;
+                }
+
+                // 4. 批量验证区块头PoW（按高度顺序验证）
+                Map<Long, BlockHeader> validHeaders = new TreeMap<>(); // 使用TreeMap保证按高度升序
+                for (long h = batchStart; h <= batchEnd; h++) {
+                    BlockHeader header = heightToHeaderMap.get(h);
+                    if (validateBlockHeaderPoW(header)) {
+                        validHeaders.put(h, header);
+                    } else {
+                        log.error("第{}批区块[{}]的区块头PoW验证失败，整批中断（确保顺序）", batchNum + 1, h);
+                        validHeaders.clear(); // 清除已验证的，中断后续处理
+                        break;
+                    }
+                }
+                log.info("第{}批有效区块头: {}个（总{}个）", batchNum + 1, validHeaders.size(), heightToHeaderMap.size());
+                if (validHeaders.isEmpty()) {
+                    continue; // 无有效区块头，跳过后续处理
+                }
+
+                // 5. 并发批量下载完整区块（通过哈希）
+                List<CompletableFuture<Block>> blockFutures = validHeaders.entrySet().stream()
+                        .map(entry -> {
+                            long height = entry.getKey();
+                            BlockHeader header = entry.getValue();
+                            byte[] blockHash = header.computeHash();
+                            return CompletableFuture.supplyAsync(() -> {
+                                try {
+                                    // 从提供区块头的节点下载完整区块
+                                    NodeInfo node = kademliaNodeServer.getNodeInfo(getNodeIdByHeight(height));
+                                    if (node == null) {
+                                        throw new RuntimeException("区块[" + height + "]对应的节点已离线");
+                                    }
+                                    RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer);
+                                    proxyFactory.setTimeout(rpcTimeoutMs);
+                                    BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
+                                    Block block = remoteService.getBlockByHash(blockHash);
+                                    if (block == null) {
+                                        throw new RuntimeException("区块[" + height + "]不存在于节点");
+                                    }
+                                    log.debug("区块[{}]下载完成", height);
+                                    return block;
+                                } catch (Exception e) {
+                                    log.error("区块[{}]下载失败", height, e);
+                                    return null; // 下载失败的区块标记为null
+                                }
+                            }, syncExecutor);
+                        })
+                        .toList();
+
+                // 等待所有下载完成，收集结果
+                CompletableFuture.allOf(blockFutures.toArray(new CompletableFuture[0])).join();
+                List<Block> downloadedBlocks = blockFutures.stream()
+                        .map(CompletableFuture::join)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList());
+                log.info("第{}批成功下载完整区块: {}个（请求{}个）", batchNum + 1, downloadedBlocks.size(), validHeaders.size());
+
+                // 6. 按高度升序排序下载的区块（关键：确保处理顺序）
+                List<Block> sortedBlocks = downloadedBlocks.stream()
+                        .sorted(Comparator.comparingLong(Block::getHeight))
+                        .collect(Collectors.toList());
+
+                // 7. 严格按顺序验证并合并完整区块到主链
+                List<Long> successHeights = new ArrayList<>();
+                long lastMergedHeight = batchStart - 1; // 上一个已合并的高度（初始为批次起始前一个）
+                for (Block block : sortedBlocks) {
+                    long currentHeight = block.getHeight();
+
+                    // 校验当前区块是否为下一个应合并的高度（核心顺序校验）
+                    if (currentHeight != lastMergedHeight + 1) {
+                        log.error("区块[{}]与上一个合并区块[{}]不连续，中断当前批次合并", currentHeight, lastMergedHeight);
+                        // 记录缺失的中间高度（用于后续重新下载）
+                        for (long h = lastMergedHeight + 1; h < currentHeight; h++) {
+                            missingHeights.add(h);
+                        }
+                        break; // 顺序断裂，停止后续合并
+                    }
+
+                    // 验证区块完整性并合并
+                    try {
+                        if (localBlockChainService.verifyBlock(block, false)) {
+                            successHeights.add(currentHeight);
+                            lastMergedHeight = currentHeight; // 更新上一个合并高度
+                            log.debug("区块[{}]成功合并到主链", currentHeight);
+                        } else {
+                            log.error("区块[{}]验证失败（完整区块校验），中断后续合并", currentHeight);
+                            break; // 验证失败，停止后续处理
+                        }
+                    } catch (Exception e) {
+                        log.error("区块[{}]合并失败，中断后续合并", currentHeight, e);
+                        break; // 合并异常，停止后续处理
+                    }
+                }
+
+                // 8. 批量清理已成功合并的区块头
+                if (!successHeights.isEmpty()) {
+                    popStorage.deleteDownloadedHeadersInBatch(successHeights);
+                    log.info("第{}批清理{}个已合并的区块头", batchNum + 1, successHeights.size());
+                }
+
+                // 9. 记录批次处理结果
+                log.info("第{}批处理完成: 成功合并{}个，失败{}个",
+                        batchNum + 1, successHeights.size(), downloadedBlocks.size() - successHeights.size());
+                Thread.sleep(5000);
+            }
+            log.info("所有区块合并完成: 总范围[{} - {}]", startHeight, targetHeight);
+        } catch (Exception e) {
+            log.error("批量合并区块失败", e);
+            throw new RuntimeException("区块批量合并异常", e);
+        }
+    }
+
 
 
     /**

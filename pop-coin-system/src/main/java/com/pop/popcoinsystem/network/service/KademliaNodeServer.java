@@ -365,6 +365,7 @@ public class KademliaNodeServer {
         try {
             long now = System.currentTimeMillis();
             // 2. 检查路由表中节点的活性，移除不活跃节点
+            routingTable.cleanExpiredNodes(NODE_EXPIRATION_TIME);
             checkNodeLiveness(now);
             // 3. 随机生成节点ID，执行FindNode操作刷新路由表（Kademlia协议核心）
             refreshRoutingTable();
@@ -380,6 +381,7 @@ public class KademliaNodeServer {
      * 检查节点活性：对超时未响应的节点发送发送Ping，仍无响应则移除
      */
     private void checkNodeLiveness(long now) {
+        log.debug("检查节点活性");
         // 获取路由表中所有节点  或者本节点最近的节点 或者用抽样检测
         List<ExternalNodeInfo> allNodes = routingTable.getAllNodes();
         if (allNodes.isEmpty()) {
@@ -444,8 +446,10 @@ public class KademliaNodeServer {
      * （Kademlia协议通过随机查找填充路由表，确保网络覆盖）
      */
     private void refreshRoutingTable() {
+        log.info("刷新路由表");
         // 随机生成一个160位的节点ID（Kademlia通常使用160位ID）
-        BigInteger randomTargetId = new BigInteger(160, new Random());
+        //BigInteger randomTargetId = new BigInteger(160, new Random());
+        BigInteger randomTargetId = nodeInfo.getId();
 
         // 查找当前路由表中离目标ID最近的节点
         List<ExternalNodeInfo> closestNodes = routingTable.findClosest(randomTargetId);
@@ -460,7 +464,6 @@ public class KademliaNodeServer {
                 findNodeMsg.setSender(nodeInfo);
                 findNodeMsg.setReceiver(BeanCopyUtils.copyObject(peer, NodeInfo.class));
                 findNodeMsg.setData(randomTargetId); // 要查找的目标ID
-
                 udpClient.sendAsyncMessage(findNodeMsg);
                 log.debug("向节点 {} 发送FindNode请求，目标ID: {}", peer.getId(), randomTargetId);
             } catch (Exception e) {
@@ -471,6 +474,10 @@ public class KademliaNodeServer {
 
     public NodeInfo getNodeInfo(BigInteger nodeId) {
         return routingTable.getNodeInfo(nodeId);
+    }
+
+    public void removeNode(BigInteger id) {
+        routingTable.removeNode(id);
     }
 
 

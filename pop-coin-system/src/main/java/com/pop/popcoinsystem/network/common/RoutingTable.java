@@ -400,6 +400,57 @@ public class RoutingTable {
                 successCount, nodeList.size() - successCount);
     }
 
+    // 在RoutingTable类中添加以下方法
+    /**
+     * 清理所有过期节点（lastSeen超过expirationTime毫秒的节点）
+     * @param expirationTime 过期阈值（毫秒），即NODE_EXPIRATION_TIME
+     */
+    public void cleanExpiredNodes(long expirationTime) {
+        if (expirationTime <= 0) {
+            log.warn("过期时间阈值无效，跳过清理");
+            return;
+        }
+
+        StorageService storage = StorageService.getInstance();
+        long now = System.currentTimeMillis();
+        int deletedCount = 0;
+
+        // 获取写锁，确保清理过程线程安全
+        lock.writeLock().lock();
+        try {
+            // 遍历所有桶
+            for (Bucket bucket : buckets) {
+                // 遍历桶中所有节点ID（需Bucket提供获取所有节点的方法）
+                List<BigInteger> nodeIds = new ArrayList<>(bucket.getNodeIds()); // 避免遍历中修改引发并发异常
+                for (BigInteger nodeId : nodeIds) {
+                    // 跳过本地节点
+                    if (nodeId.equals(localNodeId)) {
+                        continue;
+                    }
+
+                    ExternalNodeInfo node = bucket.getNode(nodeId);
+                    if (node == null) {
+                        continue; // 节点已被移除，跳过
+                    }
+
+                    // 计算节点不活跃时间（当前时间 - 最后活跃时间）
+                    long inactiveTime = now - node.getLastSeen().getTime();
+                    if (inactiveTime > expirationTime) {
+                        // 节点已过期，从桶中删除
+                        bucket.remove(nodeId);
+                        // 从存储中删除
+                        storage.deleteRouteTableNode(nodeId);
+                        deletedCount++;
+                        log.debug("删除过期节点：{}（不活跃时间：{}ms）", nodeId, inactiveTime);
+                    }
+                }
+            }
+            log.info("过期节点清理完成，共删除 {} 个节点", deletedCount);
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
 
     /**
      * 将当前路由表中的所有节点信息持久化到存储系统
@@ -435,6 +486,7 @@ public class RoutingTable {
             }
 
             log.info("准备持久化 {} 个路由表节点", nodesToPersist.size());
+            log.info("待持久化的节点信息：{}", nodesToPersist);
 
             if (!nodesToPersist.isEmpty()) {
                 // 批量保存节点信息，提高效率
@@ -493,5 +545,18 @@ public class RoutingTable {
             return null;
         }
         return BeanCopyUtils.copyObject(node, NodeInfo.class);
+    }
+
+    public void removeNode(BigInteger id) {
+        lock.writeLock().lock();
+        try {
+            // 获取节点 ID 对应的桶
+            Bucket bucket = findBucket(id);
+            // 从桶中删除节点（Bucket 需实现 remove (BigInteger id) 方法）
+            bucket.remove(id);
+        }
+        finally {
+            lock.writeLock().unlock();
+        }
     }
 }

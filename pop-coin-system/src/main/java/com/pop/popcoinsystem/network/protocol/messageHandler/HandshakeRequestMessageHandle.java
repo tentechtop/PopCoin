@@ -54,7 +54,7 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
         long remoteLatestHeight  = handshake.getLatestBlockHeight();
         byte[] remoteChainWork = handshake.getChainWork();//工作总量
         byte[] localLatestHash  = block.getHash();
-        long localLatestHeight  = block.getHeight();
+        long localLatestHeight  = blockChainService.getMainLatestHeight();
         byte[] localChainWork = block.getChainWork();
 
 

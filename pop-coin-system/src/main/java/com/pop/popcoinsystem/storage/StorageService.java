@@ -1530,11 +1530,82 @@ public class StorageService {
             throw new RuntimeException("删除下载的区块头失败", e);
         }
     }
+    //批量读取暂存的区块头（按高度范围）
+    /**
+     * 批量读取暂存的区块头（按高度范围）
+     * @param batchStart 起始高度（包含）
+     * @param batchEnd 结束高度（包含）
+     * @return 高度到区块头的映射（键：高度，值：对应的区块头），若范围内无数据则返回空Map
+     * @throws IllegalArgumentException 若起始高度大于结束高度或高度为负数
+     */
+    public Map<Long, BlockHeader> getDownloadedHeadersInBatch(long batchStart, long batchEnd) {
+        // 参数校验
+        if (batchStart < 0 || batchEnd < 0) {
+            throw new IllegalArgumentException("区块高度不能为负数: start=" + batchStart + ", end=" + batchEnd);
+        }
+        if (batchStart > batchEnd) {
+            throw new IllegalArgumentException("起始高度不能大于结束高度: start=" + batchStart + ", end=" + batchEnd);
+        }
 
+        rwLock.readLock().lock();
+        RocksIterator iterator = null;
+        ReadOptions readOptions = null;
+        try {
+            // 初始化结果映射
+            Map<Long, BlockHeader> headerMap = new TreeMap<>(); // 按高度升序排列
 
+            // 配置迭代器，优化范围查询
+            readOptions = new ReadOptions().setPrefixSameAsStart(true);
+            iterator = db.newIterator(ColumnFamily.DOWN_LOAD_BLOCK_HEADER.getHandle(), readOptions);
 
+            // 定位到起始高度
+            byte[] startKey = ByteUtils.toBytes(batchStart);
+            iterator.seek(startKey);
 
+            // 遍历范围内的区块头
+            while (iterator.isValid()) {
+                byte[] keyBytes = iterator.key();
+                long currentHeight = ByteUtils.bytesToLong(keyBytes);
 
+                // 超出结束高度则停止遍历
+                if (currentHeight > batchEnd) {
+                    break;
+                }
+
+                // 反序列化区块头并加入映射
+                byte[] valueBytes = iterator.value();
+                if (valueBytes != null && valueBytes.length > 0) {
+                    BlockHeader header = (BlockHeader) SerializeUtils.deSerialize(valueBytes);
+                    headerMap.put(currentHeight, header);
+                    log.trace("已读取暂存区块头，高度: {}", currentHeight);
+                } else {
+                    log.warn("暂存区块头数据为空，高度: {}", currentHeight);
+                }
+
+                iterator.next();
+            }
+
+            log.debug("批量读取暂存区块头完成，范围: [{} - {}]，实际获取: {}个",
+                    batchStart, batchEnd, headerMap.size());
+            return headerMap;
+
+        } catch (Exception e) {
+            log.error("批量读取暂存区块头失败，范围: [{} - {}]", batchStart, batchEnd, e);
+            throw new RuntimeException("批量读取暂存区块头失败", e);
+        } finally {
+            // 释放资源
+            if (iterator != null) {
+                iterator.close();
+            }
+            if (readOptions != null) {
+                readOptions.close();
+            }
+            rwLock.readLock().unlock();
+        }
+    }
+
+    public void deleteDownloadedHeadersInBatch(List<Long> successHeights) {
+    }
 
     //.................................................................................................................
     //以标准配置（160 位 ID + K=20）为例：
@@ -1713,6 +1784,7 @@ public class StorageService {
     //..................................................................................................................
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final RocksDB db;
+
 
 
 

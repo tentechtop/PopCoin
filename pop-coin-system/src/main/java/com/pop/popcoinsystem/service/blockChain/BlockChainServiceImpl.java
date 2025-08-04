@@ -121,7 +121,7 @@ public class BlockChainServiceImpl implements BlockChainService {
      * 验证交易
      */
     @Override
-    public boolean verifyTransaction(Transaction transaction) {
+    synchronized public boolean verifyTransaction(Transaction transaction) {
         // 基础验证
         if (!validateTransactionBasics(transaction)) {
             return false;
@@ -368,7 +368,7 @@ public class BlockChainServiceImpl implements BlockChainService {
      * 交易验证成功后 广播交易 如果本节点是矿工节点 则再添加到交易池 由矿工打包
      */
     @Override
-    public boolean verifyAndAddTradingPool(Transaction transaction, boolean broadcastMessage) {
+    synchronized public boolean verifyAndAddTradingPool(Transaction transaction, boolean broadcastMessage) {
         log.info("您的交易已提交,正在验证交易...");
         if (verifyTransaction(transaction)) {
             byte[] blockHashByTxId = getBlockHashByTxId(transaction.getTxId());
@@ -393,7 +393,7 @@ public class BlockChainServiceImpl implements BlockChainService {
      * UTXO 并非仅在交易验证成功后产生，而是在交易被成功打包进区块并经过网络确认后，才成为有效的 UTXO。
      */
     @Override
-    public boolean verifyBlock(Block block, boolean broadcastMessage) {
+    synchronized  public boolean verifyBlock(Block block, boolean broadcastMessage) {
         // 验证区块合法性
         if (!validateBlock(block)) {
             log.warn("区块验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
@@ -409,10 +409,10 @@ public class BlockChainServiceImpl implements BlockChainService {
             return true;
         }
         //验证中位置时间
-        if (!validateMedianTime(block)){
+   /*     if (!validateMedianTime(block)){
             log.warn("中位置时间验证失败，中位置时间：{}", block.getMedianTime());
             return false;
-        }
+        }*/
         // 防止未来时间（允许超前最多2小时）
         // 注意：block.getTime() 是秒级时间戳，需转换为毫秒后再比较
         long maxAllowedTime = (System.currentTimeMillis()/1000) + (2 * 60 * 60);
