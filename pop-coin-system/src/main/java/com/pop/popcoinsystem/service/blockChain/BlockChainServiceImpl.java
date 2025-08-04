@@ -1109,6 +1109,13 @@ public class BlockChainServiceImpl implements BlockChainService {
             for (int j = 0; j < tx.getOutputs().size(); j++) {
                 deleteUTXO(tx.getTxId(), j);
             }
+            log.info("撤销UTXO: txId={}", CryptoUtil.bytesToHex(tx.getTxId()));
+            //将回滚的交易 验证后重新提交到交易池
+            // 3. 仅处理非CoinBase交易，验证后重新提交并广播
+            if (!isCoinBaseTransaction(tx)) {  // 关键：跳过CoinBase交易
+                log.info("重新提交交易: txId={}", CryptoUtil.bytesToHex(tx.getTxId()));
+                verifyAndAddTradingPool(tx, true);  // 广播有效交易
+            }
         }
     }
 
