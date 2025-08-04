@@ -827,8 +827,10 @@ public class BlockChainServiceImpl implements BlockChainService {
 
         List<Transaction> transactions = block.getTransactions();
         for (Transaction transaction : transactions) {
-            mining.removeTransaction(transaction.getTxId());
-            log.info("移除交易池中的交易: {}", transaction.getTxId());
+            if (!isCoinBaseTransaction(transaction)){
+                mining.removeTransaction(transaction.getTxId());
+                log.info("移除交易池中的交易: {}", transaction.getTxId());
+            }
         }
         // 检查是否出现分叉（父区块是否为主链最新区块）
         boolean isFork = !Arrays.equals(block.getPreviousHash(), currentMainHash);
