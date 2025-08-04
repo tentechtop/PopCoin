@@ -121,14 +121,14 @@ public class BlockChainServiceImpl implements BlockChainService {
         if (!validateTransactionAuthorization(transaction, utxoMap)) {
             return false;
         }
-        //是否双花 已经存在于区块中
-        if (isDoubleSpend(transaction)) {
-            log.error("交易已经存在");
-            return false;
-        }
         // 验证交易权重
         if (transaction.getWeight() > MAX_BLOCK_WEIGHT) {
             log.error("SegWit交易重量超过限制");
+            return false;
+        }
+        //是否双花 已经存在于区块中
+        if (isDoubleSpend(transaction)) {
+            log.error("交易已经存在");
             return false;
         }
         // 验证SegWit交易ID
@@ -243,18 +243,15 @@ public class BlockChainServiceImpl implements BlockChainService {
      * 验证交易ID
      */
     private boolean validateTransactionId(Transaction transaction) {
-        byte[] originalTxId = transaction.getTxId();
-        byte[] calculatedTxId = Transaction.calculateTxId(transaction);
-
+        Transaction copy = transaction.copy();
+        byte[] originalTxId = copy.getTxId();
+        byte[] calculatedTxId = Transaction.calculateTxId(copy);
         log.info("原始交易ID:{}", CryptoUtil.bytesToHex(originalTxId));
         log.info("验证时交易ID:{}", CryptoUtil.bytesToHex(calculatedTxId));
-
         if (!Arrays.equals(calculatedTxId, originalTxId)) {
             log.error("交易ID不匹配");
             return false;
         }
-
-        transaction.setTxId(calculatedTxId);
         return true;
     }
 
@@ -265,14 +262,11 @@ public class BlockChainServiceImpl implements BlockChainService {
         for (TXInput input : transaction.getInputs()) {
             String utxoKey = getUTXOKey(input.getTxId(), input.getVout());
             UTXO utxo = getUTXO(input.getTxId(), input.getVout());
-
             utxoMap.put(utxoKey, utxo);
-
             if (utxo == null) {
                 log.error("输入的UTXO不存在或已花费");
                 return false;
             }
-
             // 验证成熟度要求
             if (!utxoIsMature(utxo)) {
                 log.error("输入的UTXO未成熟");
