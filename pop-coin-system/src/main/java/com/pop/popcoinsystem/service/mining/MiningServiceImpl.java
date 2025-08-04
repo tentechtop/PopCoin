@@ -490,8 +490,8 @@ public class MiningServiceImpl {
                         }
 
                         block.setNonce(nonce);
-                        byte[] hash = block.computeBlockHash(block);
-                        if (DifficultyUtils.isValidHash(hash, difficultyTarget)) {
+                        byte[] hash = block.computeHash();
+                        if ( DifficultyUtils.isValidHash(hash, difficultyTarget)) {
                             synchronized (result) {
                                 if (!result.found) {
                                     result.hash = hash;
@@ -542,7 +542,6 @@ public class MiningServiceImpl {
 
         return result.found ? result : null;
     }
-    //TODO  extraNonce 在第一笔交易的输入脚本中
 
 
 
