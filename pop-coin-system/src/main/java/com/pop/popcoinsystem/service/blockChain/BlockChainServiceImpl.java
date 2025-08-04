@@ -861,8 +861,7 @@ public class BlockChainServiceImpl implements BlockChainService {
                 log.info("检测到更难的链，准备切换。新链难度: {}, 当前链难度: {}", DifficultyUtils.bytesToLong(block.getChainWork()), DifficultyUtils.bytesToLong(getMainLatestBlock().getChainWork()));
                 switchToNewChain(block);
             } else {
-                log.info("分叉链难度较小，添加到备选链，高度: {}, 哈希: {}",
-                        block.getHeight(), CryptoUtil.bytesToHex(block.getHash()));
+                log.info("分叉链难度较小，添加到备选链，高度: {}, 哈希: {}", block.getHeight(), CryptoUtil.bytesToHex(block.getHash()));
                 addAlternativeChains(block.getHeight(), block.getHash());
             }
         }
@@ -1016,7 +1015,6 @@ public class BlockChainServiceImpl implements BlockChainService {
             blocksToApply.add(0, current);
             current = getBlockByHash(current.getPreviousHash());
         }
-        // 5. 应用这些区块对UTXO的修改
         for (Block block : blocksToApply) {
             //应用这些区块中的UTXO
             applyBlock(block);
@@ -1027,6 +1025,8 @@ public class BlockChainServiceImpl implements BlockChainService {
         updateMainChainHeight(newTipBlock.getHeight());
         updateMainLatestBlockHash(newTipBlock.getHash());
 
+        //处理孤块池
+        cleanOrphanBlocksAfterSwitch(commonAncestor);
         // 7. 清理备选链
         log.info("成功切换到新链，新高度: {}, 新哈希: {}", getMainLatestHeight(), CryptoUtil.bytesToHex(newTipBlock.getHash()));
     }
@@ -1078,7 +1078,6 @@ public class BlockChainServiceImpl implements BlockChainService {
                 // 获取输入引用的原始交易ID和输出索引
                 byte[] referencedTxId = input.getTxId();
                 int referencedVout = input.getVout();
-
                 // 根据交易ID查询所在的区块
                 Block referencedBlock = getBlockByTxId(referencedTxId);
                 if (referencedBlock != null) {
@@ -1111,6 +1110,15 @@ public class BlockChainServiceImpl implements BlockChainService {
                 deleteUTXO(tx.getTxId(), j);
             }
         }
+    }
+
+    // 切换完成后调用
+    private void cleanOrphanBlocksAfterSwitch(Block commonAncestor) {
+        // 清理所有父哈希在旧链（共同祖先之后）的孤儿区块
+        orphanBlocks.asMap().keySet().removeIf(parentHash -> {
+            Block parentBlock = getBlockByHash(parentHash);
+            return parentBlock != null && parentBlock.getHeight() > commonAncestor.getHeight();
+        });
     }
 
 
