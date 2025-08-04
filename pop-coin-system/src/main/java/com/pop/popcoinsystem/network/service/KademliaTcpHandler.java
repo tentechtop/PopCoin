@@ -48,15 +48,13 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
         }
         // 记录：将消息ID存入缓存（自动过期）
         nodeServer.getBroadcastMessages().put(messageId, Boolean.TRUE);
-
         boolean single = message.isSingle();
         if (single){
             //单播消息
             long requestId = message.getRequestId();
             if (message.isResponse()){
                 log.debug("响应消息ID {}", requestId);
-                // 2.1 响应消息：交给RequestResponseManager处理，完成客户端的Promise
-                log.debug("响应内容 {}", message.getData());
+                // 响应消息：交给RequestResponseManager处理，完成客户端的Promise
                 handleResponseMessage(ctx, message);
             }else {
                 log.debug("收到请求消息，requestId: {}", requestId);
@@ -99,15 +97,7 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
             if (response != null) {
                 // 标记为响应消息
                 response.setResponse(true);
-                nodeServer.getTcpClient().sendMessage(response);//优化过 会复用通道
-                // 通过当前通道直接回复，避免再次查找通道
-     /*           ctx.channel().writeAndFlush(response).addListener(future -> {
-                    if (future.isSuccess()) {
-                        log.info("请求消息 {} 的响应已发送", message.getRequestId());
-                    } else {
-                        log.error("请求消息 {} 的响应发送失败", message.getRequestId(), future.cause());
-                    }
-                });*/
+                nodeServer.getTcpClient().sendMessage(response);//已经优化 会复用通道
             }
         } catch (Exception e) {
             log.error("处理请求消息 {} 时发生异常", message.getRequestId(), e);
