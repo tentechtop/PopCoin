@@ -425,36 +425,6 @@ public class BlockChainServiceImpl implements BlockChainService {
 
         Block parentBlock = getBlockByHash(block.getPreviousHash());
         if (parentBlock == null) {
-            log.warn("父区块不存在，存入孤儿区块，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
-            // 1. 获取当前区块的父哈希（作为孤儿区块池的key）
-            byte[] parentHash = block.getPreviousHash();
-            if (parentHash == null || parentHash.length != 32) {
-                log.error("区块父哈希格式无效，无法存入孤儿池，区块哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
-                return false; // 父哈希无效，直接拒绝该区块
-            }
-
-            // 2. 从缓存中获取或创建父哈希对应的孤儿区块集合
-            ConcurrentHashMap<byte[], Block> orphanMap;
-            try {
-                // 尝试获取已存在的集合，不存在则创建新的ConcurrentHashMap
-                orphanMap = orphanBlocks.get(parentHash, ConcurrentHashMap::new);
-            } catch (ExecutionException e) {
-                log.error("获取孤儿区块集合失败", e);
-                return false;
-            }
-            // 3. 将当前区块存入孤儿集合（key为区块自身哈希，避免重复存储）
-            byte[] blockHash = block.getHash();
-            if (orphanMap.containsKey(blockHash)) {
-                log.info("孤儿区块已存在于缓存中，无需重复存储，哈希：{}", CryptoUtil.bytesToHex(blockHash));
-                return false;
-            }
-            orphanMap.put(blockHash, block);
-            log.info("孤儿区块存入成功，父区块哈希：{}，区块哈希：{}，当前该父哈希下的孤儿区块数量：{}",
-                    CryptoUtil.bytesToHex(parentHash),
-                    CryptoUtil.bytesToHex(blockHash),
-                    orphanMap.size());
-            // 4. 自动触发父区块同步（关键步骤：主动拉取父区块以处理孤儿区块）
-            triggerParentBlockSync(parentHash);
             return false;
         }
         if (parentBlock.getHeight() + 1 != block.getHeight()) {

@@ -181,7 +181,7 @@ public class KademliaNodeServer {
             });
             //维护网络 首次执行立即开始，之后每 delay  秒执行一次 maintainNetwork 方法  单位秒
             long delay = 30;
-            scheduler.scheduleAtFixedRate(this::maintainNetwork, 0, delay, TimeUnit.SECONDS);
+            scheduler.scheduleAtFixedRate(this::maintainNetwork, delay, delay, TimeUnit.SECONDS);
         } catch (Exception e) {
             log.error("KademliaNode start error", e);
             stop();

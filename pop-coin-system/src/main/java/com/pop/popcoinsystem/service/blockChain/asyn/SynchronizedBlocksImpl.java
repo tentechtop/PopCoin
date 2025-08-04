@@ -162,7 +162,8 @@ public class SynchronizedBlocksImpl {
      *
      */
     public CompletableFuture<SyncTaskRecord> SubmitDifference(long localHeight, long remoteHeight) {
-        List<ExternalNodeInfo> candidateNodes = kademliaNodeServer.getRoutingTable().getAllNodes();
+        List<ExternalNodeInfo> candidateNodes = kademliaNodeServer.getRoutingTable().findClosest();
+        log.info("提交差异：本地高度={}, 远程高度={}", localHeight, remoteHeight);
         // 1. 验证差异有效性
         if (remoteHeight <= localHeight) {
             log.warn("远程高度({})不大于本地高度({})，无需同步", remoteHeight, localHeight);
@@ -265,7 +266,7 @@ public class SynchronizedBlocksImpl {
                 boolean success = remoteHeight > 0; // 简单判断探测是否成功
                 long latency = System.currentTimeMillis() - start;
                 // 若远程链更优，触发同步
-                if (DifficultyUtils.compare(localWork, remoteWork) < 0 || remoteHeight > localHeight) {
+                if (remoteHeight > localHeight) {
                     log.info("探测 节点{}链更优，开始同步", node.getId());
                     SubmitDifference(remoteHeight,mainLatestHeight);
                 }
@@ -383,7 +384,7 @@ public class SynchronizedBlocksImpl {
         task.setUpdateTime(LocalDateTime.now());
         // 提交所有分片任务并行执行
         List<CompletableFuture<SyncProgress>> shardFutures = task.getSyncProgressList().stream()
-                .map(shard -> executeShardTask(shard, task))
+                .map(shard -> executeShardTaskBatch(shard, task))
                 .toList();
         // 等待所有分片完成后合并区块
         return CompletableFuture.allOf(shardFutures.toArray(new CompletableFuture[0]))
@@ -486,9 +487,19 @@ public class SynchronizedBlocksImpl {
                     progress.setCurrentHeight(batchEnd);
                     progress.setProgressPercent(calculateProgress(progress));
                     progress.setLastSyncTime(LocalDateTime.now());
-                    log.debug("分片[{}]完成批次: {} - {}，累计同步{}个区块，进度: {:.2f}%",
+                    log.info("分片[{}]完成批次: {} - {}，累计同步{}个区块，进度: {}%",
                             progress.getProgressId(), currentHeight - batchSize, batchEnd,
                             progress.getSyncedBlocks(), progress.getProgressPercent());
+
+                    //休眠
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        progress.setStatus(SyncStatus.CANCELLED);
+                        progress.setErrorMsg("任务被中断");
+                        return progress;
+                    }
                 }
 
                 // 分片完成
