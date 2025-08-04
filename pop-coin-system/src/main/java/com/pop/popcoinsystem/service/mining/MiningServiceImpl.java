@@ -124,23 +124,18 @@ public class MiningServiceImpl {
                 }
                 //获取主链最新的区块hash 和 区块高度
                 byte[] latestBlockHash = blockChainService.getMainLatestBlockHash();
-                log.info("最新区块Hash:"+CryptoUtil.bytesToHex(latestBlockHash));
                 long blockHeight = blockChainService.getMainLatestHeight();
-                log.info("最新区块高度: {}", blockHeight);
+                log.info("最新区块Hash: {} 最新区块高度: {}",CryptoUtil.bytesToHex(latestBlockHash),blockHeight);
                 Block latestBlock = blockChainService.getMainBlockByHeight(blockHeight);
-
                 Block newBlock = new Block();
                 newBlock.setPreviousHash(latestBlockHash);
                 newBlock.setHeight(blockHeight+1);
                 newBlock.setTime(System.currentTimeMillis());
                 ArrayList<Transaction> blockTransactions = new ArrayList<>();
-
-                //计算所有交易手续费 输入 = 输出+手续费
                 long totalFee = 0;
                 for (Transaction transaction : transactions) {
                     totalFee += blockChainService.getFee(transaction);
                 }
-                //创建CoinBase交易 放在第一位
                 Transaction coinBaseTransaction = blockChainService.createCoinBaseTransaction(miner.getAddress(), blockHeight+1, totalFee);
                 blockTransactions.add(coinBaseTransaction);
                 blockTransactions.addAll(transactions);
@@ -151,33 +146,15 @@ public class MiningServiceImpl {
                 newBlock.setDifficultyTarget(DifficultyUtils.difficultyToCompact(currentDifficulty));
                 long medianTime = blockChainService.calculateMedianTime(TIME_WINDOW_SIZE);
                 newBlock.setMedianTime(medianTime);
-
-                //  //表示该区块之前的区块链总工作量，以十六进制表示。它反映了整个区块链的挖矿工作量。
-                //    private byte[] chainWork;
-                //计算工作总量
                 byte[] chainWork = latestBlock.getChainWork();
                 byte[] add = DifficultyUtils.add(chainWork, currentDifficulty);
                 newBlock.setChainWork(add);
-
                 newBlock.calculateAndSetSize();
                 newBlock.calculateAndSetWeight();
                 newBlock.setTxCount(blockTransactions.size());
-
-                //隔离见证数据大小
-                newBlock.setWitnessSize(0);
-
-
-                //挖矿奖励：通过 coinbase 交易嵌入区块体
-                //每个区块的第一笔交易是coinbase 交易（特殊交易，无输入），其输出部分直接包含矿工的挖矿奖励。例如：
-                //比特币区块的 coinbase 交易输出会包含 “基础奖励 + 区块内所有交易的手续费总和”，这笔输出会被记录在区块体的交易列表中。
-                //区块只需存储这笔交易，就能通过交易验证逻辑自动计算出矿工获得的总奖励（无需额外字段）。
-                //手续费：隐含在普通交易的 “输入 - 输出差额” 中
-                //普通交易中，输入金额总和 - 输出金额总和 = 手续费，这部分差额由打包该交易的矿工获得。
-                //例如：用户发起一笔交易，输入 10 个代币，输出 9.9 个代币，差额 0.1 个代币即为手续费。这部分无需单独记录，通过遍历区块内所有交易的输入输出即可计算。
-
+                newBlock.setWitnessSize(newBlock.calculateWitnessSize());
                 log.info("\n开始挖矿新区块 #" + newBlock.getHeight() +
                         " (难度: " + newBlock.getDifficulty() + ", 交易数: " + transactions.size() + ", 手续费: "+ totalFee+  ")");
-
                 MiningResult result = mineBlock(newBlock);
                 if (result != null && result.found) {
                     newBlock.setNonce(result.nonce);
@@ -588,6 +565,8 @@ public class MiningServiceImpl {
 
         return result.found ? result : null;
     }
+    //TODO  noce范围耗尽要调整交易顺序 或者调整coinBase交易的生成时间
+
 
 
 

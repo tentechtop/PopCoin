@@ -104,6 +104,8 @@ public class Block implements Serializable {
         if (difficultyTarget != null && difficultyTarget.length != 4) {
             throw new IllegalArgumentException("难度目标必须为4字节");
         }
+        //版本
+        //随机数
     }
 
 
