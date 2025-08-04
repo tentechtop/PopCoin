@@ -293,7 +293,7 @@ public class BlockChainServiceImpl implements BlockChainService {
         genesisBlock.setVersion(1); // 版本号
 
         // 2. 设置时间戳（使用比特币创世时间类似的格式，这里使用系统启动时间）
-        long genesisTime = 1753695705;
+        long genesisTime = 1754287472;
         genesisBlock.setTime(genesisTime);
         genesisBlock.setMedianTime(genesisTime);
 
@@ -330,6 +330,16 @@ public class BlockChainServiceImpl implements BlockChainService {
         log.info("创世区块创建成功，哈希: {}", GENESIS_BLOCK_HASH_HEX);
         return genesisBlock;
     }
+
+    //main
+    public static void main(String[] args) {
+        long l = System.currentTimeMillis() / 1000;
+        log.info("时间戳:{}", l);
+
+    }
+
+
+
 
     /**
      * 验证交易并提交到交易池
@@ -373,7 +383,7 @@ public class BlockChainServiceImpl implements BlockChainService {
             return true;
         }
         //验证中位置时间
-        if (validateMedianTime(block)){
+        if (!validateMedianTime(block)){
             log.warn("中位置时间验证失败，中位置时间：{}", block.getMedianTime());
             return false;
         }
@@ -469,14 +479,12 @@ public class BlockChainServiceImpl implements BlockChainService {
     private boolean validateMedianTime(Block block) {
         long blockHeight = block.getHeight();
         byte[] currentBlockHash = block.getHash();
-
         // 1. 确定实际窗口大小：最多11个，不足则取现有全部祖先
         int actualWindowSize = (int) Math.min(TIME_WINDOW_SIZE, blockHeight);
         if (actualWindowSize == 0) {
             // 创世区块（高度0）无祖先，中位时间等于自身时间
             return block.getMedianTime() == block.getTime();
         }
-
         // 2. 收集前N个祖先区块的时间戳（从父区块开始，主链追溯）
         List<Long> ancestorTimestamps = new ArrayList<>(actualWindowSize);
         Block currentAncestor = getBlockByHash(block.getPreviousHash()); // 父区块（主链）
@@ -488,7 +496,6 @@ public class BlockChainServiceImpl implements BlockChainService {
             // 继续追溯上一个主链祖先（通过父哈希确保主链）
             currentAncestor = getBlockByHash(currentAncestor.getPreviousHash());
         }
-
         // 3. 处理收集结果（不足11个时基于现有数据计算）
         if (ancestorTimestamps.isEmpty()) {
             log.error("未收集到任何有效祖先时间戳，区块高度：{}", blockHeight);

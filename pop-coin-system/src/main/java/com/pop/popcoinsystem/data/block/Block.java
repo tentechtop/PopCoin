@@ -106,7 +106,7 @@ public class Block implements Serializable {
     /**
      * 验证区块头字段的有效性（避免无效数据导致的哈希错误）
      */
-    private void validateBlockHeader(BlockHeader block) {
+    private static void validateBlockHeader(BlockHeader block) {
         if (block.getPreviousHash() != null && block.getPreviousHash().length != 32) {
             throw new IllegalArgumentException("前区块哈希必须为32字节");
         }
@@ -121,10 +121,6 @@ public class Block implements Serializable {
             throw new IllegalArgumentException("版本号必须为32位无符号整数");
         }
     }
-
-
-
-
 
 
     /**
