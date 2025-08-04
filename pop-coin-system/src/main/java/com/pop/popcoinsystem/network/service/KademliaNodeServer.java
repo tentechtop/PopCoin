@@ -174,10 +174,14 @@ public class KademliaNodeServer {
             startUdpDiscovererServer();
             startTcpTransmitServer();
             running = true;
-            scheduler = Executors.newSingleThreadScheduledExecutor();
+            scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread thread = new Thread(r, "kademlia-scheduler");
+                thread.setDaemon(true); // 守护线程，随应用退出
+                return thread;
+            });
             //维护网络 首次执行立即开始，之后每 delay  秒执行一次 maintainNetwork 方法  单位秒
             long delay = 30;
-            scheduler.scheduleAtFixedRate(this::maintainNetwork, delay, delay, TimeUnit.SECONDS);
+            scheduler.scheduleAtFixedRate(this::maintainNetwork, 0, delay, TimeUnit.SECONDS);
         } catch (Exception e) {
             log.error("KademliaNode start error", e);
             stop();

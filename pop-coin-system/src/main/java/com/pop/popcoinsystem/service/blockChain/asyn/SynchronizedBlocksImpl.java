@@ -980,7 +980,7 @@ public class SynchronizedBlocksImpl {
                     RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer);
                     BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
                     Block blockByHash = remoteService.getBlockByHash(hash);
-                    localBlockChainService.verifyBlock(blockByHash,true);
+                    localBlockChainService.verifyBlock(blockByHash,false);
                     //localBlockChainService.addBlockHeader(header,height);
                     popStorage.deleteDownloadedHeader(height); // 合并后删除暂存
                     log.debug("区块[{}]已合并到主链", height);
