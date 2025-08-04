@@ -422,80 +422,63 @@ public class StorageService {
      * 基于区块头计算当前区块及其之前最多10个主链区块的时间戳中位数（共11个区块）
      * 若区块数量不足11个（如创世区块附近），则基于现有数据计算
      * @param currentHeader 当前目标区块的区块头（非空）
-     * @param blockHeightByHash 当前区块在主链上的高度
-     * @param hash 当前区块的哈希
      * @return 时间戳中位数（毫秒级Unix时间戳）
      * @throws IllegalArgumentException 若输入区块头为空
      * @throws RuntimeException 若无法获取有效区块时间戳
      */
-    public long calculateMedianTime(BlockHeader currentHeader, long blockHeightByHash, byte[] hash) {
-        //如果是创世区块
-        if (blockHeightByHash == 0) {
+    public long calculateMedianTime(BlockHeader currentHeader, long blockHeight, byte[] blockHash) {
+        // 创世区块（高度0）无祖先，中位时间等于自身时间
+        if (blockHeight == 0) {
             return currentHeader.getTime();
         }
 
-        // 1. 校验输入参数
+        // 校验输入
         if (currentHeader == null) {
-            throw new IllegalArgumentException("输入区块头不能为空");
+            throw new IllegalArgumentException("区块头不能为空");
         }
 
-        // 2. 初始化参数：收集主链上当前区块及前序区块的时间戳
-        List<Long> timestamps = new ArrayList<>(11); // 固定容量11（最多11个区块）
-        BlockHeader current = currentHeader;
-        int collectedCount = 0;
-        long currentHeight = blockHeightByHash; // 从当前区块高度开始
-        log.debug("开始计算中位数时间，起始区块哈希={}，高度={}",
-                CryptoUtil.bytesToHex(hash), currentHeight);
+        // 1. 确定实际窗口大小：最多11个，不足则取现有全部祖先
+        int actualWindowSize = (int) Math.min(TIME_WINDOW_SIZE, blockHeight);
+        List<Long> timestamps = new ArrayList<>(actualWindowSize);
+        log.debug("开始计算中位数时间，区块哈希={}，高度={}，目标窗口大小：{}",
+                CryptoUtil.bytesToHex(blockHash), blockHeight, actualWindowSize);
 
-        // 3. 循环收集最多11个主链区块的时间戳
-        while (collectedCount < 11 && current != null) {
-            // 3.1 收集当前区块的时间戳（校验有效性）
-            long blockTime = current.getTime();
-            if (blockTime <= 0) {
-                log.warn("区块高度={}的时间戳无效（{}），跳过", currentHeight, blockTime);
-            } else {
+        // 2. 收集前N个主链祖先的时间戳（从父区块开始，与validate逻辑一致）
+        long currentHeight = blockHeight - 1; // 从父区块高度开始
+        BlockHeader currentAncestorHeader = getBlockHeaderByHeight(currentHeight); // 主链父区块
+
+        while (timestamps.size() < actualWindowSize && currentAncestorHeader != null) {
+            long blockTime = currentAncestorHeader.getTime();
+            if (blockTime > 0) { // 过滤无效时间戳
                 timestamps.add(blockTime);
-                collectedCount++;
                 log.trace("已收集高度={}的时间戳：{}，累计数量：{}",
-                        currentHeight, blockTime, collectedCount);
+                        currentHeight, blockTime, timestamps.size());
             }
 
-            if (isGenesisPrevHash(current.getPreviousHash())) {
-                log.debug("已到达创世区块（高度={}），停止向前追溯", currentHeight);
-                break;
-            }
-
-            // 3.2 准备获取前序区块（主链上的前一高度区块）
+            // 追溯上一个主链祖先
             currentHeight--;
             if (currentHeight < 0) {
-                log.debug("已遍历至创世区块之前，停止收集（累计收集{}个）", collectedCount);
+                log.debug("已遍历至创世区块之前，停止收集");
                 break;
             }
-
-            // 3.3 通过高度获取主链上前一区块的区块头（核心修改：确保从主链获取）
-            current = getBlockHeaderByHeight(currentHeight);
-            if (current == null) {
-                log.warn("主链上高度={}的区块不存在，停止收集", currentHeight);
-                break;
-            }
+            currentAncestorHeader = getBlockHeaderByHeight(currentHeight);
         }
 
-        // 4. 处理收集结果
+        // 3. 处理收集结果（不足时基于现有数据计算）
         if (timestamps.isEmpty()) {
             log.error("未收集到任何有效时间戳，无法计算中位数");
             throw new RuntimeException("无有效时间戳数据");
         }
-        if (collectedCount < 11) {
-            log.debug("实际收集到{}个有效时间戳（不足11个），基于现有数据计算", collectedCount);
-        }
+        log.debug("实际收集到{}个有效时间戳（目标：{}）", timestamps.size(), actualWindowSize);
 
-        // 5. 排序并计算中位数
+        // 4. 排序并计算中位数（与validate逻辑一致）
         Collections.sort(timestamps);
         int medianIndex = timestamps.size() / 2;
         long medianTime = timestamps.get(medianIndex);
         log.debug("中位数时间计算完成，参与计算的时间戳：{}，中位数：{}", timestamps, medianTime);
         return medianTime;
     }
+
 
     private BlockHeader getBlockHeaderByHeight(long height) {
         // 1. 校验高度合法性（高度不能为负数）

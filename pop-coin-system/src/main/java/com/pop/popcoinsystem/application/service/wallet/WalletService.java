@@ -604,8 +604,6 @@ public class WalletService {
         } else {
             transaction.setVersion(1); // 普通交易版本为1
         }
-        // 交易最终属性设置
-        transaction.setTime(System.currentTimeMillis() / 1000);
         transaction.setSize(transaction.calculateTotalSize());
         transaction.calculateWeight();
         transaction.setTxId(Transaction.calculateTxId(transaction));
@@ -686,12 +684,12 @@ public class WalletService {
      */
     private byte[] generateSigHash(Transaction tx, int inputIndex, UTXO utxo, int scriptType) {
         if (isSegWitType(scriptType)) {
-            byte[] witnessSignatureHash = blockChainService.createWitnessSignatureHash(tx, inputIndex, utxo.getValue(), SigHashType.ALL);
+            byte[] witnessSignatureHash = Transaction.createWitnessSignatureHash(tx, inputIndex, utxo, SigHashType.ALL);
             log.info("创建时隔离见证需要的签名: {}", CryptoUtil.bytesToHex(witnessSignatureHash));
             return witnessSignatureHash;
         } else {
             // 普通交易逻辑（新增）
-            byte[] legacySignatureHash = blockChainService.createLegacySignatureHash(tx, inputIndex, utxo, SigHashType.ALL);
+            byte[] legacySignatureHash = Transaction.createLegacySignatureHash(tx, inputIndex, utxo, SigHashType.ALL);
             log.info("创建时普通交易需要的签名: {}",CryptoUtil.bytesToHex(CryptoUtil.applySHA256(legacySignatureHash)) );
             return legacySignatureHash;
         }

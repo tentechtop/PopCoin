@@ -38,6 +38,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigInteger;
 import java.net.ConnectException;
+import java.security.SecureRandom;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantLock;
@@ -125,7 +126,6 @@ public class BlockChainServiceImpl implements BlockChainService {
             log.error("交易已经存在");
             return false;
         }
-
         // 验证交易权重
         if (transaction.getWeight() > MAX_BLOCK_WEIGHT) {
             log.error("SegWit交易重量超过限制");
@@ -378,6 +378,20 @@ public class BlockChainServiceImpl implements BlockChainService {
             log.info("区块已存在，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
             return true;
         }
+        //验证中位置时间
+        if (validateMedianTime(block)){
+            log.warn("中位置时间验证失败，中位置时间：{}", block.getMedianTime());
+            return false;
+        }
+        // 防止未来时间（允许超前最多2小时）
+        // 注意：block.getTime() 是秒级时间戳，需转换为毫秒后再比较
+        long maxAllowedTime = (System.currentTimeMillis()/1000) + (2 * 60 * 60);
+        long blockTimeInMillis = block.getTime();
+        if (blockTimeInMillis > maxAllowedTime) {
+            log.warn("区块时间戳超前过多，区块时间（秒）：{}，当前系统时间：{}，允许的最大时间：{}",
+                    block.getTime(), System.currentTimeMillis(), maxAllowedTime);
+            return false;
+        }
 
         Block parentBlock = getBlockByHash(block.getPreviousHash());
         if (parentBlock == null) {
@@ -426,7 +440,6 @@ public class BlockChainServiceImpl implements BlockChainService {
             log.warn("区块 PoW 验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
             return false;
         }
-
         // 处理区块（保存、更新UTXO等）  只要区块通过验证就 保存区块 保存区块产生的UTXO
         try {
             if (!mainChainLock.tryLock(5, TimeUnit.SECONDS)) {
@@ -455,8 +468,64 @@ public class BlockChainServiceImpl implements BlockChainService {
         return true;
     }
 
+
+    /**
+     * 验证区块的中位时间是否符合协议要求
+     */
+    private boolean validateMedianTime(Block block) {
+        long blockHeight = block.getHeight();
+        byte[] currentBlockHash = block.getHash();
+
+        // 1. 确定实际窗口大小：最多11个，不足则取现有全部祖先
+        int actualWindowSize = (int) Math.min(TIME_WINDOW_SIZE, blockHeight);
+        if (actualWindowSize == 0) {
+            // 创世区块（高度0）无祖先，中位时间等于自身时间
+            return block.getMedianTime() == block.getTime();
+        }
+
+        // 2. 收集前N个祖先区块的时间戳（从父区块开始，主链追溯）
+        List<Long> ancestorTimestamps = new ArrayList<>(actualWindowSize);
+        Block currentAncestor = getBlockByHash(block.getPreviousHash()); // 父区块（主链）
+        for (int i = 0; i < actualWindowSize && currentAncestor != null; i++) {
+            long blockTime = currentAncestor.getTime();
+            if (blockTime > 0) { // 过滤无效时间戳
+                ancestorTimestamps.add(blockTime);
+            }
+            // 继续追溯上一个主链祖先（通过父哈希确保主链）
+            currentAncestor = getBlockByHash(currentAncestor.getPreviousHash());
+        }
+
+        // 3. 处理收集结果（不足11个时基于现有数据计算）
+        if (ancestorTimestamps.isEmpty()) {
+            log.error("未收集到任何有效祖先时间戳，区块高度：{}", blockHeight);
+            return false;
+        }
+        log.debug("实际收集到{}个有效祖先时间戳（目标：{}）", ancestorTimestamps.size(), actualWindowSize);
+        // 4. 计算中位数（与calculateMedianTime逻辑一致）
+        Collections.sort(ancestorTimestamps);
+        long calculatedMedian = ancestorTimestamps.get(ancestorTimestamps.size() / 2);
+        // 5. 验证区块记录的中位时间是否匹配
+        if (block.getMedianTime() != calculatedMedian) {
+            log.error("中位时间不匹配，区块记录：{}，计算结果：{}，区块哈希：{}",
+                    block.getMedianTime(), calculatedMedian, CryptoUtil.bytesToHex(currentBlockHash));
+            return false;
+        }
+        // 6. 验证区块自身时间不早于中位时间（协议要求）
+        if (block.getTime() < calculatedMedian) {
+            log.error("区块时间戳早于中位时间，区块时间：{}，中位时间：{}，哈希：{}",
+                    block.getTime(), calculatedMedian, CryptoUtil.bytesToHex(currentBlockHash));
+            return false;
+        }
+        return true;
+    }
+
+
     @Override
     public boolean verifyBlockHeader(BlockHeader blockHeader) {
+        //计算hash
+        byte[] blockHeaderHash = Block.computeBlockHeaderHash(blockHeader);
+
+
         return false;
     }
 
@@ -618,45 +687,7 @@ public class BlockChainServiceImpl implements BlockChainService {
 
 
 
-    /**
-     * 创建隔离见证交易的签名哈希
-     * @param tx 交易对象
-     * @param inputIndex 输入索引  inputIndex指定当前签名对应的输入索引，确保签名仅针对当前输入的 UTXO 权限验证；
-     * @param amount 金额
-     * @param sigHashType 签名哈希类型  sigHashType（如ALL、NONE、SINGLE）决定交易的哪些部分（输入、输出）会被纳入哈希计算（例如ALL表示包含所有输入和输出，防止任何部分被篡改）。
-     * @return 签名哈希
-     */
-    @Override
-    public byte[] createWitnessSignatureHash(Transaction tx, int inputIndex, long amount, SigHashType sigHashType) {
-        // 1. 复制交易对象，避免修改原交易
-        Transaction txCopy = Transaction.copyWithoutWitness(tx);
-        for (TXInput input : txCopy.getInputs()) {
-            input.setScriptSig(null);
-        }
 
-        txCopy.setTime(0L);
-        txCopy.setVersion(0);
-
-        // 获取当前处理的输入
-        TXInput currentInput = txCopy.getInputs().get(inputIndex);
-        if (currentInput == null){
-            log.warn("输入索引超出范围");
-            throw new RuntimeException("输入索引超出范围");
-        }
-
-        UTXO currentUTXO = getUTXO(currentInput.getTxId(), currentInput.getVout()); // inputUTXOs 是当前输入引用的 UTXO 集合
-        ScriptPubKey originalScriptPubKey  = currentUTXO.getScriptPubKey();
-
-        ScriptSig tempByScriptPubKey = ScriptSig.createTempByScriptPubKey(originalScriptPubKey);
-        String scripString = tempByScriptPubKey.toScripString();
-
-        //在区块链交易签名流程中，代码里的临时脚本（tempByScriptPubKey）不需要执行完整验证，
-        // 其核心作用是作为签名哈希（Signature Hash）计算的 “特征上下文”，确保签名能正确关联到被花费的 UTXO 的锁定规则。
-        currentInput.setScriptSig(tempByScriptPubKey); // 临时设置，仅用于签名
-        // 4. 创建签名哈希
-        log.info("植入特征{}", scripString);
-        return txCopy.calculateWitnessSignatureHash(inputIndex, amount, sigHashType);
-    }
 
     private boolean utxoIsMature(UTXO utxo) {
         byte[] txId = utxo.getTxId();
@@ -744,14 +775,10 @@ public class BlockChainServiceImpl implements BlockChainService {
         // 计算所有输入引用的UTXO总值
         long totalInput = 0;
         for (TXInput input : inputs) {
-            // 获取该输入引用的UTXO
-            UTXO utxo = getUTXO(input.getTxId(), input.getVout());
-            // 验证UTXO存在且未被花费
-            if (utxo == null) {
-                // 如果UTXO不存在或已被花费，该输入不贡献价值
-                continue;
-            }
-            totalInput += utxo.getValue();
+            byte[] txId = input.getTxId();
+            Transaction transactionByTxId = getBlockTransactionByTxId(txId);
+            TXOutput output = transactionByTxId.getOutputs().get(input.getVout());
+            totalInput += output.getValue();
         }
         // 计算所有输出总值
         long totalOutput = transaction.getOutputs().stream()
@@ -761,8 +788,6 @@ public class BlockChainServiceImpl implements BlockChainService {
         // 如果输入总额小于输出总额，返回0（这种情况在有效交易中不应该发生）
         return Math.max(0, totalInput - totalOutput);
     }
-
-
 
     /**
      * 判断是否为CoinBase交易（区块中第一笔交易，输入无有效UTXO）
@@ -779,13 +804,11 @@ public class BlockChainServiceImpl implements BlockChainService {
                 && (input.getVout() == -1 || input.getVout() == 0);  // 匹配协议定义的特殊值
     }
 
-
     /**
      * 获取每字节手续费
      * @param tx
      * @return
      */
-    @Override
     public double getFeePerByte(Transaction tx) {
         return getFee(tx) / (double) tx.getSize();
     }
@@ -801,6 +824,11 @@ public class BlockChainServiceImpl implements BlockChainService {
         long currentHeight = getMainLatestHeight();
         byte[] currentMainHash = getMainLatestBlockHash();
 
+        List<Transaction> transactions = block.getTransactions();
+        for (Transaction transaction : transactions) {
+            mining.removeTransaction(transaction.getTxId());
+            log.info("移除交易池中的交易: {}", transaction.getTxId());
+        }
         // 检查是否出现分叉（父区块是否为主链最新区块）
         boolean isFork = !Arrays.equals(block.getPreviousHash(), currentMainHash);
         // 1. 处理主链延伸（非分叉情况）
@@ -1416,10 +1444,6 @@ public class BlockChainServiceImpl implements BlockChainService {
     }
 
 
-    // 分页结果数据结构（调整为int类型游标）
-
-
-
     public static TransactionDTO convertTransactionDTO(Transaction transaction) {
         if (transaction == null){
             return null;
@@ -1468,18 +1492,22 @@ public class BlockChainServiceImpl implements BlockChainService {
         //地址到公钥哈希
         AddressType addressType = CryptoUtil.ECDSASigner.getAddressType(to);
         byte[] bytes = CryptoUtil.ECDSASigner.getAddressHash(to);//地址哈希
+        ScriptPubKey scriptPubKey = createScriptPubKey(addressType, bytes);
         //coinBase的输入的交易ID
         byte[] zeroTxId = new byte[32]; // 32字节 = 256位
         Arrays.fill(zeroTxId, (byte) 0);
-        TXInput input = new TXInput(zeroTxId, 0, null);
+        //额外随机数
+        byte[] extraNonce = new byte[8];
+        SecureRandom random = new SecureRandom();
+        random.nextBytes(extraNonce);
+        ScriptSig scriptSig = new ScriptSig(extraNonce);
+        TXInput input = new TXInput(zeroTxId, 0, scriptSig);
         // 创建输出，将奖励发送到指定地址
-        ScriptPubKey scriptPubKey = createScriptPubKey(addressType, bytes);
         TXOutput output = new TXOutput(calculateBlockReward(height)+totalFee, scriptPubKey);
         Transaction coinbaseTx = new Transaction();
         coinbaseTx.setVersion(TRANSACTION_VERSION_1);
         coinbaseTx.getInputs().add(input);
         coinbaseTx.getOutputs().add(output);
-        coinbaseTx.setTime(System.currentTimeMillis());
         // 计算并设置交易ID
         coinbaseTx.setTxId(Transaction.calculateTxId(coinbaseTx));
         coinbaseTx.setSize(coinbaseTx.calculateBaseSize());
@@ -1504,47 +1532,8 @@ public class BlockChainServiceImpl implements BlockChainService {
         }
     }
 
-    public byte[] createLegacySignatureHash(Transaction tx, int inputIndex, UTXO utxo, SigHashType sigHashType) {
-        //打印所有的参数
-        // 1. 复制交易对象，避免修改原交易
-        Transaction txCopy  = new Transaction();
-        txCopy.setTime(0L);
-        // 1. 仅复制计算签名哈希必需的核心字段，去除无关数据
-        // 保留核心字段：版本、输入列表、输出列表、锁定时间（这些是签名哈希计算的必要项）
-        txCopy.setInputs(copyEssentialInputs(tx.getInputs())); // 仅复制输入的必要信息
-        txCopy.setOutputs(new ArrayList<>(tx.getOutputs())); // 复制输出列表（浅拷贝足够，无需修改）
-        txCopy.setLockTime(tx.getLockTime());
-        // 3. 获取当前输入并验证
-        TXInput currentInput = txCopy.getInputs().get(inputIndex);
-        if (currentInput == null) {
-            log.warn("输入索引超出范围");
-            throw new RuntimeException("输入索引超出范围");
-        }
-        // 4. 将当前输入对应的UTXO的scriptPubKey作为临时scriptSig（核心步骤，必须执行）
-        ScriptPubKey originalScriptPubKey = utxo.getScriptPubKey();
-        if (originalScriptPubKey == null) {
-            log.warn("UTXO的scriptPubKey为空");
-            throw new IllegalArgumentException("UTXO的scriptPubKey不能为空");
-        }
-        ScriptSig tempScriptSig = new ScriptSig(originalScriptPubKey.getScriptBytes());
-        currentInput.setScriptSig(tempScriptSig);
 
-        // 5. 计算签名哈希
-        return txCopy.calculateLegacySignatureHash(inputIndex, sigHashType);
-    }
 
-    private List<TXInput> copyEssentialInputs(List<TXInput> inputs) {
-        List<TXInput> copiedInputs = new ArrayList<>();
-        for (TXInput input : inputs) {
-            TXInput inputCopy = new TXInput();
-            // 仅复制输入的必要信息
-            inputCopy.setTxId(Arrays.copyOf(input.getTxId(), input.getTxId().length));
-            inputCopy.setVout(input.getVout());
-            inputCopy.setSequence(input.getSequence());
-            copiedInputs.add(inputCopy);
-        }
-        return copiedInputs;
-    }
 
     public Result getBlockByRange(long start, long end) {
         List<Block> blocks = popStorage.getBlockByRange(start, end);
@@ -1566,15 +1555,8 @@ public class BlockChainServiceImpl implements BlockChainService {
 
 
 
-    public List<Block> getBlockByStartHashAndEndHash(byte[] start, byte[] end) {
-        return popStorage.getBlockByStartHashAndEndHash(start, end);
-    }
 
-    public List<Block> getBlockByStartHashAndEndHashByHeight(byte[] start, byte[] end) {
-        long startHeight = popStorage.getBlockHeightByHash(start);
-        long endHeight = popStorage.getBlockHeightByHash(end);
-        return popStorage.getBlockByRange(startHeight, endHeight);
-    }
+
 
 
     /**
@@ -1632,9 +1614,6 @@ public class BlockChainServiceImpl implements BlockChainService {
         verifyBlock(validBlock,false);
     }
 
-    public void addBlockToAltChain(Block validBlock) {
-        verifyBlock(validBlock,false);
-    }
 
     /**
      * 比较本地与远程节点的区块差异，并发起同步请求
@@ -1647,16 +1626,6 @@ public class BlockChainServiceImpl implements BlockChainService {
         blockSynchronizer.submitSyncTask(nodeServer,remoteNode,localHeight,localHash,localWork,remoteHeight,remoteHash,remoteWork);
     }
 
-    @Override
-    public byte[] findForkPoint(List<byte[]> remoteHashes) {
-        // 遍历远程提供的哈希（按从新到旧顺序），返回第一个在本地链中存在的哈希
-        for (byte[] hash : remoteHashes) {
-            if (getBlockByHash(hash) != null) {
-                return hash; // 找到最后一个共同区块
-            }
-        }
-        return null; // 无共同区块
-    }
 
 
 
@@ -1667,37 +1636,36 @@ public class BlockChainServiceImpl implements BlockChainService {
 
     /**
      * 计算当前主链的中位数时间
-     * @param windowSize 时间窗口大小（建议为奇数，如11）
      * @return 中位数时间（单位与区块时间戳一致，如秒）
      */
-    public long calculateMedianTime(int windowSize) {
-        // 1. 校验窗口大小（必须为正整数，建议奇数）
-        if (windowSize <= 0) {
-            throw new IllegalArgumentException("窗口大小必须为正整数");
-        }
-
-        // 2. 获取主链最新区块高度
+    public long calculateMedianTime() {
+        int windowSize = TIME_WINDOW_SIZE;
+        // 获取主链最新区块高度
         long latestHeight = getMainLatestHeight();
-        if (latestHeight < windowSize - 1) {
-            // 区块数量不足窗口大小，直接返回最新区块时间
-            return getMainLatestBlock().getTime();
-        }
+        // 实际窗口大小：最多windowSize个，不足则取现有全部（与第二个方法逻辑对齐）
+        int actualWindowSize = (int) Math.min(windowSize, latestHeight + 1); // +1是因为包含当前高度
 
-        // 3. 提取最近windowSize个主链区块的时间戳
-        List<Long> timestamps = new ArrayList<>(windowSize);
-        for (int i = 0; i < windowSize; i++) {
+        // 提取最近actualWindowSize个主链区块的时间戳
+        List<Long> timestamps = new ArrayList<>(actualWindowSize);
+        for (int i = 0; i < actualWindowSize; i++) {
             long height = latestHeight - i;
             Block block = getMainBlockByHeight(height);
-            if (block != null) {
+            // 过滤无效区块
+            if (block != null && block.getTime() > 0) {
                 timestamps.add(block.getTime());
             }
         }
 
-        // 4. 排序并取中位数
+        // 处理收集结果（无有效数据时抛异常，与第二个方法对齐）
+        if (timestamps.isEmpty()) {
+            throw new RuntimeException("未收集到任何有效时间戳，无法计算中位数");
+        }
+        // 排序并计算中位数（使用实际数据量的中间索引，与第二个方法完全对齐）
         Collections.sort(timestamps);
-        int medianIndex = windowSize / 2; // 对于11个元素，索引为5（0~10）
+        int medianIndex = timestamps.size() / 2;
         return timestamps.get(medianIndex);
     }
+
 
     /**
      * 获取地址余额
@@ -1709,9 +1677,7 @@ public class BlockChainServiceImpl implements BlockChainService {
         final int PAGE_SIZE = 5000; // 分页大小，5000更符合常见分页逻辑
         final int RETRY_COUNT = 3; // 重试次数
         ScriptPubKey lockingScriptByAddress = getLockingScriptByAddress(address);
-        byte[] scriptBytes = lockingScriptByAddress.serialize();
-        byte[] scriptHash = CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(scriptBytes));
-
+        byte[] scriptHash = CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(lockingScriptByAddress.serialize()));
         String cursor = null;
         boolean hasMore = true;
 

@@ -5,6 +5,8 @@ import lombok.Data;
 
 import java.util.List;
 
+import static com.pop.popcoinsystem.util.TypeUtils.reverseBytes;
+
 @Data
 public class BlockHeader {
 
@@ -28,4 +30,8 @@ public class BlockHeader {
     private long witnessSize;
     private long size;
     private long weight;*/
+
+
+
+
 }

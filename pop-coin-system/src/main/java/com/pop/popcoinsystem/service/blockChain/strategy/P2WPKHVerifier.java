@@ -60,10 +60,10 @@ public class P2WPKHVerifier implements ScriptVerificationStrategy{
         byte[] realSignature = SegWitUtils.extractOriginalSignature(signature);
         log.info("P2WPKH签名数据:{}", CryptoUtil.bytesToHex(realSignature));
         //这里应该根据签名类型 构建对应的 交易签名数据
-        byte[] txHash = blockChainService.createWitnessSignatureHash(
+        byte[] txHash = Transaction.createWitnessSignatureHash(
                 tx,
                 inputIndex,
-                utxo.getValue(),
+                utxo,
                 sigHashType
         );
         log.info("P2WPKH验证时需要签名的交易数据:{}", CryptoUtil.bytesToHex(txHash));

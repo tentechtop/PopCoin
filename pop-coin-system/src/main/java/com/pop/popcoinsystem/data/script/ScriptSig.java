@@ -26,7 +26,6 @@ public class ScriptSig extends Script implements Serializable {
         // 添加嵌入的文本（如果有）
         addOpCode(OP_RETURN);
         addData(embeddedMessage);
-        
     }
 
 
@@ -41,13 +40,12 @@ public class ScriptSig extends Script implements Serializable {
         
     }
 
-    public ScriptSig( byte[] signature,byte[] publicKey) {
+    public ScriptSig(byte[] signature,byte[] publicKey) {
         super();
         // 添加签名
         addData(signature);
         // 添加公钥哈希
         addData(publicKey);
-        
     }
 
 
@@ -59,7 +57,6 @@ public class ScriptSig extends Script implements Serializable {
         // 添加公钥
         addData(publicKey.getEncoded());
         // 添加嵌入的文本（如果有）
-        
     }
 
 

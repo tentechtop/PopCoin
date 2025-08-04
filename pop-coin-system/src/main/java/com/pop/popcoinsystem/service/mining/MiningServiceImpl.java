@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.OperatingSystemMXBean;
+import java.security.SecureRandom;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -77,27 +78,8 @@ public class MiningServiceImpl {
             return Result.error("ERROR: The node is already mining ! ");
         }
         log.info("开始初始化挖矿服务...");
-
- /*       int maxRetries = 3; // 最大重试次数
-        int retryDelay = 1000; // 重试间隔（毫秒）
-        for (int i = 0; i < maxRetries; i++) {
-            try {
-
-            } catch (Exception e) {
-                log.error("第{}次初始化失败：{}", i+1, e.getMessage(), e);
-                if (i < maxRetries - 1) { // 非最后一次重试时休眠
-                    try {
-                        sleep(retryDelay);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                    }
-                }
-            }
-        }*/
-
         byte[] mainLatestBlockHash = blockChainService.getMainLatestBlockHash();
         Block block = blockChainService.getBlockByHash(mainLatestBlockHash);
-
         // 初始化成功
         log.info("最新区块: {}", block);
         log.info("最新区块高度: {}", block.getHeight());
@@ -144,7 +126,7 @@ public class MiningServiceImpl {
                 newBlock.setTime(System.currentTimeMillis() /1000);
                 newBlock.setDifficulty(currentDifficulty);
                 newBlock.setDifficultyTarget(DifficultyUtils.difficultyToCompact(currentDifficulty));
-                long medianTime = blockChainService.calculateMedianTime(TIME_WINDOW_SIZE);
+                long medianTime = blockChainService.calculateMedianTime();
                 newBlock.setMedianTime(medianTime);
                 byte[] chainWork = latestBlock.getChainWork();
                 byte[] add = DifficultyUtils.add(chainWork, currentDifficulty);
@@ -160,17 +142,15 @@ public class MiningServiceImpl {
                     newBlock.setNonce(result.nonce);
                     newBlock.setHash(result.hash);
                     adjustDifficulty();
-                    // 挖矿成功：移除已打包的交易
-                    // 挖矿成功：移除已打包的交易
                     for (Transaction tx : transactions) {
-                        removeTransaction(tx.getTxId()); // 直接传入byte[]类型的txId
+                        // 挖矿成功：移除已打包的交易
+                        removeTransaction(tx.getTxId());
                     }
                     //将区块提交到区块链
                     blockChainService.verifyBlock(newBlock,true);
                 } else {
-                    // 未找到有效哈希，将交易放回交易池（避免丢失）
-                    log.info("区块 #" + newBlock.getHeight() + " 挖矿失败，重新尝试...");
-                    // 挖矿失败：延迟重试（例如3秒），减少CPU占用
+                    log.info("区块 #" + newBlock.getHeight() + " 挖矿失败，重新生成区块并打包...");
+
                     try {
                         sleep(1000); // 1秒后重试
                     } catch (InterruptedException e) {
@@ -182,17 +162,15 @@ public class MiningServiceImpl {
         }).start();
         return Result.ok();
     }
+
+
+
+
     private void initExecutor() {
         if (executor == null || executor.isShutdown() || executor.isTerminated()) {
             executor = Executors.newFixedThreadPool(threadCount);
         }
     }
-
-
-
-
-
-
 
 
 
@@ -419,7 +397,7 @@ public class MiningServiceImpl {
             log.info("交易 {} 已从交易池移除", CryptoUtil.bytesToHex(txId));
             return true;
         }
-        log.warn("交易 {} 不在交易池中，移除失败", CryptoUtil.bytesToHex(txId));
+        log.warn("交易 {} 不在交易池中，不需要移除", CryptoUtil.bytesToHex(txId));
         return false;
     }
 
@@ -565,7 +543,7 @@ public class MiningServiceImpl {
 
         return result.found ? result : null;
     }
-    //TODO  noce范围耗尽要调整交易顺序 或者调整coinBase交易的生成时间
+    //TODO  extraNonce 在第一笔交易的输入脚本中
 
 
 

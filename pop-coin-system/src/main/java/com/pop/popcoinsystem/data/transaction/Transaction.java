@@ -71,10 +71,6 @@ public class Transaction implements Serializable {
      */
     private long lockTime;
 
-    /**
-     * 交易创建时间
-     */
-    private long time = System.currentTimeMillis();
 
     /**
      * 交易输入
@@ -211,7 +207,6 @@ public class Transaction implements Serializable {
         Transaction copy = new Transaction();
         copy.setVersion(tx.getVersion());
         copy.setLockTime(tx.getLockTime());
-        copy.setTime(tx.getTime());
         // 复制输入（保留txId、vout、sequence，清空scriptSig）
         List<TXInput> inputs = new ArrayList<>();
         for (TXInput input : tx.getInputs()) {
@@ -242,7 +237,6 @@ public class Transaction implements Serializable {
         Transaction copy = new Transaction();
         copy.setVersion(tx.getVersion());
         copy.setLockTime(tx.getLockTime());
-        copy.setTime(tx.getTime());
         // 复制输入（不包含见证数据）
         List<TXInput> inputs = new ArrayList<>();
         for (TXInput input : tx.getInputs()) {
@@ -459,7 +453,6 @@ public class Transaction implements Serializable {
         copy.setSize(this.size);
         copy.setWeight(this.weight);
         copy.setLockTime(this.lockTime);
-        copy.setTime(this.time);
 
         // 深拷贝 txId 数组（避免引用同一数组）
         if (this.txId != null) {
@@ -833,5 +826,77 @@ public class Transaction implements Serializable {
     public long getWitnessSize() {
         // 直接调用已实现的见证数据大小计算方法
         return calculateWitnessSize();
+    }
+
+
+    public static byte[] createWitnessSignatureHash(Transaction tx, int inputIndex, UTXO utxo, SigHashType sigHashType) {
+
+        // 1. 复制交易对象，避免修改原交易
+        Transaction txCopy = Transaction.copyWithoutWitness(tx);
+        for (TXInput input : txCopy.getInputs()) {
+            input.setScriptSig(null);
+        }
+        txCopy.setVersion(0);
+
+        // 获取当前处理的输入
+        TXInput currentInput = txCopy.getInputs().get(inputIndex);
+        if (currentInput == null){
+            log.warn("输入索引超出范围");
+            throw new RuntimeException("输入索引超出范围");
+        }
+        ScriptPubKey originalScriptPubKey  = utxo.getScriptPubKey();
+        ScriptSig tempByScriptPubKey = ScriptSig.createTempByScriptPubKey(originalScriptPubKey);
+        String scripString = tempByScriptPubKey.toScripString();
+
+        //在区块链交易签名流程中，代码里的临时脚本（tempByScriptPubKey）不需要执行完整验证，
+        // 其核心作用是作为签名哈希（Signature Hash）计算的 “特征上下文”，确保签名能正确关联到被花费的 UTXO 的锁定规则。
+        currentInput.setScriptSig(tempByScriptPubKey); // 临时设置，仅用于签名
+        // 4. 创建签名哈希
+        log.info("植入特征{}", scripString);
+        return txCopy.calculateWitnessSignatureHash(inputIndex, utxo.getValue(), sigHashType);
+    }
+
+
+
+
+
+    public static byte[] createLegacySignatureHash(Transaction tx, int inputIndex, UTXO utxo, SigHashType sigHashType) {
+        //打印所有的参数
+        // 1. 复制交易对象，避免修改原交易
+        Transaction txCopy  = new Transaction();
+        // 1. 仅复制计算签名哈希必需的核心字段，去除无关数据
+        // 保留核心字段：版本、输入列表、输出列表、锁定时间（这些是签名哈希计算的必要项）
+        txCopy.setInputs(copyEssentialInputs(tx.getInputs())); // 仅复制输入的必要信息
+        txCopy.setOutputs(new ArrayList<>(tx.getOutputs())); // 复制输出列表（浅拷贝足够，无需修改）
+        txCopy.setLockTime(tx.getLockTime());
+        // 3. 获取当前输入并验证
+        TXInput currentInput = txCopy.getInputs().get(inputIndex);
+        if (currentInput == null) {
+            log.warn("输入索引超出范围");
+            throw new RuntimeException("输入索引超出范围");
+        }
+        // 4. 将当前输入对应的UTXO的scriptPubKey作为临时scriptSig（核心步骤，必须执行）
+        ScriptPubKey originalScriptPubKey = utxo.getScriptPubKey();
+        if (originalScriptPubKey == null) {
+            log.warn("UTXO的scriptPubKey为空");
+            throw new IllegalArgumentException("UTXO的scriptPubKey不能为空");
+        }
+        ScriptSig tempScriptSig = new ScriptSig(originalScriptPubKey.getScriptBytes());
+        currentInput.setScriptSig(tempScriptSig);
+
+        // 5. 计算签名哈希
+        return txCopy.calculateLegacySignatureHash(inputIndex, sigHashType);
+    }
+    private static List<TXInput> copyEssentialInputs(List<TXInput> inputs) {
+        List<TXInput> copiedInputs = new ArrayList<>();
+        for (TXInput input : inputs) {
+            TXInput inputCopy = new TXInput();
+            // 仅复制输入的必要信息
+            inputCopy.setTxId(Arrays.copyOf(input.getTxId(), input.getTxId().length));
+            inputCopy.setVout(input.getVout());
+            inputCopy.setSequence(input.getSequence());
+            copiedInputs.add(inputCopy);
+        }
+        return copiedInputs;
     }
 }

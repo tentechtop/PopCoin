@@ -1,6 +1,7 @@
 package com.pop.popcoinsystem.data.block;
 
 import com.pop.popcoinsystem.data.transaction.Transaction;
+import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.DifficultyUtils;
 import lombok.AllArgsConstructor;
@@ -72,14 +73,24 @@ public class Block implements Serializable {
 
 
 
-
-
     public byte[] computeBlockHash(Block block) {
         try {
             // 1. 验证区块头关键字段的有效性
-            validateBlockHeader();
+            BlockHeader blockHeader = BeanCopyUtils.copyObject(block, BlockHeader.class);
+            return computeBlockHeaderHash(blockHeader);
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("区块头数据无效：" + e.getMessage());
+        } catch (Exception e) {
+            throw new RuntimeException("哈希计算失败：" + e.getMessage(), e);
+        }
+    }
+
+    public static byte[] computeBlockHeaderHash(BlockHeader blockHeader) {
+        try {
+            // 1. 验证区块头关键字段的有效性
+            validateBlockHeader(blockHeader);
             // 2. 序列化区块头（按协议规定的顺序和格式）
-            byte[] headerBytes = serializeBlockHeader(block);
+            byte[] headerBytes = serializeBlockHeader(blockHeader);
             // 3. 执行两次SHA-256哈希计算
             byte[] hashResult = doubleSHA256(headerBytes);
             // 4. 调整字节序（区块链通常以小端格式存储哈希）
@@ -91,22 +102,29 @@ public class Block implements Serializable {
         }
     }
 
+
     /**
      * 验证区块头字段的有效性（避免无效数据导致的哈希错误）
      */
-    private void validateBlockHeader() {
-        if (previousHash != null && previousHash.length != 32) {
+    private void validateBlockHeader(BlockHeader block) {
+        if (block.getPreviousHash() != null && block.getPreviousHash().length != 32) {
             throw new IllegalArgumentException("前区块哈希必须为32字节");
         }
-        if (merkleRoot != null && merkleRoot.length != 32) {
+        if (block.getMerkleRoot() != null && block.getMerkleRoot().length != 32) {
             throw new IllegalArgumentException("默克尔根必须为32字节");
         }
-        if (difficultyTarget != null && difficultyTarget.length != 4) {
+        if (block.getDifficultyTarget() != null && block.getDifficultyTarget().length != 4) {
             throw new IllegalArgumentException("难度目标必须为4字节");
         }
         //版本
-        //随机数
+        if (block.getVersion() < 0) {
+            throw new IllegalArgumentException("版本号必须为32位无符号整数");
+        }
     }
+
+
+
+
 
 
     /**
@@ -237,31 +255,12 @@ public class Block implements Serializable {
         }
     }
 
-
-
-
-    /**
-     * 计算区块哈希（两次SHA-256）
-     * @return 计算得到的区块哈希（字节数组）
-     */
-    public static byte[] calculateHash(Block block) {
-        // 1. 构建区块头字节流（按比特币协议顺序排列字段）
-        byte[] headerBytes = serializeBlockHeader(block);
-        // 2. 执行两次SHA-256哈希
-        byte[] firstHash = CryptoUtil.applySHA256(headerBytes);
-        byte[] finalHash = CryptoUtil.applySHA256(firstHash);
-        // 3. 哈希结果需要反转（比特币存储为小端字节序）
-        return reverseBytes(finalHash);
-    }
-
     /**
      * 计算并设置当前区块的默克尔根
      */
     public void calculateAndSetMerkleRoot() {
         this.merkleRoot = calculateMerkleRoot(this.transactions);
     }
-
-
 
     /**
      * 计算交易列表的默克尔根
@@ -349,43 +348,43 @@ public class Block implements Serializable {
      * 字段顺序：version(4字节) → previousHash(32字节) → merkleRoot(32字节) → time(4字节) → difficultyBits(4字节) → nonce(4字节)
      * 所有数值字段采用小端字节序（Little-Endian）
      */
-    public static byte[] serializeBlockHeader(Block block) {
+    public static byte[] serializeBlockHeader(BlockHeader blockHeader) {
         try (java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
              java.io.DataOutputStream dos = new java.io.DataOutputStream(baos)) {
 
             // 1. 版本号（4字节，小端）
-            dos.writeInt(Integer.reverseBytes(block.getVersion()));
+            dos.writeInt(Integer.reverseBytes(blockHeader.getVersion()));
 
             // 2. 前区块哈希（32字节，大端存储需反转为小端）
-            byte[] prevHash = block.getPreviousHash();
+            byte[] prevHash = blockHeader.getPreviousHash();
             if (prevHash == null || prevHash.length != 32) {
                 throw new IllegalArgumentException("前区块哈希必须为32字节");
             }
             dos.write(reverseBytes(prevHash)); // 反转字节序为小端
 
             // 3. 默克尔根（32字节，大端存储需反转为小端）
-            byte[] merkleRoot = block.getMerkleRoot();
+            byte[] merkleRoot = blockHeader.getMerkleRoot();
             if (merkleRoot == null || merkleRoot.length != 32) {
                 throw new IllegalArgumentException("默克尔根必须为32字节");
             }
             dos.write(reverseBytes(merkleRoot)); // 反转字节序为小端
 
             // 4. 时间戳（4字节，小端，比特币使用32位时间戳）
-            long timestamp = block.getTime();
+            long timestamp = blockHeader.getTime();
             if (timestamp < 0 || timestamp > Integer.MAX_VALUE) {
                 throw new IllegalArgumentException("时间戳必须为32位正整数（秒级Unix时间）");
             }
             dos.writeInt(Integer.reverseBytes((int) timestamp));
 
             // 5. 难度目标（4字节，小端，压缩格式）
-            byte[] difficultyTarget = block.getDifficultyTarget();
+            byte[] difficultyTarget = blockHeader.getDifficultyTarget();
             if (difficultyTarget == null || difficultyTarget.length != 4) {
                 throw new IllegalArgumentException("难度目标必须为4字节");
             }
             dos.write(reverseBytes(difficultyTarget)); // 反转字节序为小端
 
             // 6. Nonce（4字节，小端）
-            dos.writeInt(Integer.reverseBytes(block.getNonce()));
+            dos.writeInt(Integer.reverseBytes(blockHeader.getNonce()));
 
             return baos.toByteArray();
         } catch (Exception e) {

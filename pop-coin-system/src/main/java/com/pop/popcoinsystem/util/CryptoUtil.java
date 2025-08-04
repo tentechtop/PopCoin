@@ -672,7 +672,6 @@ public class CryptoUtil {
             return null;
         }
 
-
         /**
          * 根据地址获取对应的锁定脚本（ScriptPubKey）
          * 锁定脚本定义了花费该地址资金的条件

@@ -46,7 +46,7 @@ public class P2PKHVerifier implements ScriptVerificationStrategy{
         log.info("原始签名数据:{}", CryptoUtil.bytesToHex(realSignature));
         //这里应该根据签名类型 构建对应的 交易签名数据
 
-        byte[] txHash = blockChainService.createLegacySignatureHash(
+        byte[] txHash = Transaction.createLegacySignatureHash(
                 tx,
                 inputIndex,
                 utxo,

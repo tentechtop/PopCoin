@@ -47,11 +47,6 @@ public interface BlockChainService {
     boolean verifyBlockHeader(BlockHeader blockHeader);
 
     /**
-     * 创建隔离见证交易的签名哈希
-     */
-    byte[] createWitnessSignatureHash(Transaction tx, int inputIndex, long amount, SigHashType sigHashType);
-
-    /**
      * 计算交易手续费（输入总额 - 输出总额）
      */
     long getFee(Transaction transaction);
@@ -141,25 +136,11 @@ public interface BlockChainService {
      */
     TPageResult<UTXOSearch> selectUtxoAmountsByScriptHash(byte[] scriptHash, int pageSize, String lastUtxoKey);
 
-    /**
-     * 创建传统交易的签名哈希（非隔离见证）
-     */
-    byte[] createLegacySignatureHash(Transaction tx, int inputIndex, UTXO utxo, SigHashType sigHashType);
 
     /**
      * 根据高度范围查询区块列表
      */
     Result getBlockByRange(long start, long end);
-
-    /**
-     * 根据起始哈希和结束哈希查询区块列表（连续区块）
-     */
-    List<Block> getBlockByStartHashAndEndHash(byte[] startHash, byte[] endHash);
-
-    /**
-     * 根据起始哈希和结束哈希对应的高度查询区块列表
-     */
-    List<Block> getBlockByStartHashAndEndHashByHeight(byte[] startHash, byte[] endHash);
 
     /**
      * 验证区块的工作量证明（PoW）是否符合难度要求
@@ -172,11 +153,6 @@ public interface BlockChainService {
     void addBlockToMainChain(Block validBlock);
 
     /**
-     * 将验证通过的区块添加到备选链（分叉链）
-     */
-    void addBlockToAltChain(Block validBlock);
-
-    /**
      * 比较本地与远程节点的区块差异，并发起同步请求
      */
     void compareAndSync(KademliaNodeServer nodeServer, NodeInfo remoteNode,
@@ -184,14 +160,9 @@ public interface BlockChainService {
                         long remoteHeight, byte[] remoteHash, byte[] remoteWork)
             throws ConnectException, InterruptedException;
 
-    byte[] findForkPoint(List<byte[]> localHashes);
-
-
-
     List<Block> getBlockByStartHashAndEndHashWithLimit(byte[] startHash, byte[] endHash, int batchSize);
 
     byte[] getMainBlockHashByHeight(long batchEndHeight);
-
 
     BlockDTO getBlockDto(Block block);
 
