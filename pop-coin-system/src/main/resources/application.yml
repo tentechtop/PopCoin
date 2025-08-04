@@ -4,15 +4,24 @@ spring:
     version: 1.0.0
 
 server:
-  port: 9999
+  port: 8333
 
 logging:
   level:
     root: INFO
 
 system:
-  #存储路径
-  storagePath: /data/storage
+  blockchain:
+    sync:
+      healthy-node-score-threshold: 60
+      max-blocks-per-round: 100
+      fast-interval-seconds: 30
+      steady-interval-seconds: 60
+      detect-concurrency: 5
+      rpc-timeout-ms: 3000
+
+  #存储路径 全路径
+  storagePath: /ec/storage
   # 网络版本 决定这个服务能否参与网络共识
   netVersion: 1
   # 公钥 持有公钥的人能够控制这个节点
@@ -21,7 +30,7 @@ system:
     - 1321313132
 
 kademlia:
-  nodeType: 1
+  nodeType: 1  #1全节点 #2轻节点 #仅出站
   node:
     tcpPort: 8334
     udpPort: 8333
