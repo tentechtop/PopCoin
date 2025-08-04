@@ -172,5 +172,7 @@ public interface BlockChainService {
 
     BlockHeader getBlockHeader(long height);
 
-    void addBlockHeader(BlockHeader header);
+    void addBlockHeader(BlockHeader header,long height);
+
+    List<BlockHeader> getBlockHeaders(long startHeight, int count);
 }

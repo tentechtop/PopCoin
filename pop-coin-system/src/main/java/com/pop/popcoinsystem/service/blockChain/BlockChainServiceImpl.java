@@ -1617,7 +1617,7 @@ public class BlockChainServiceImpl implements BlockChainService {
                                long remoteHeight, byte[] remoteHash, byte[] remoteWork
     ) throws ConnectException, InterruptedException {
         log.info("比较本地与远程节点的区块差异");
-        blockSynchronizer.SubmitDifference(localHeight, localHash, localWork,remoteHeight,remoteHash,remoteWork);
+        blockSynchronizer.SubmitDifference(localHeight, remoteHeight);
     }
 
 
@@ -1723,13 +1723,89 @@ public class BlockChainServiceImpl implements BlockChainService {
         return popStorage.getBlockHeaderByHeight(height);
     }
 
+
+
     /**
-     * 将区块头合并到主链
-     * @param header
+     * 将区块头合并到主链，仅处理区块头元数据验证与链状态更新
+     * 核心逻辑：验证区块头有效性 -> 处理父区块依赖 -> 维护主链/分叉链状态
      */
     @Override
-    public void addBlockHeader(BlockHeader header) {
+    public void addBlockHeader(BlockHeader header,long height) {
+        if (header == null) {
+            log.error("区块头为空，拒绝处理");
+            return;
+        }
+        // 1. 验证区块头基本有效性
+        if (!Block.validateBlockHeaderData(header)) {
+            return;
+        }
+        boolean b = header.validatePoW();
+        if (!b) {
+            log.error("区块头pow验证失败");
+            return;
+        }
+        byte[] hash = header.computeHash();
+        // 2. 检查区块头是否已存在（避免重复处理）
+        if (popStorage.getBlockHeaderByHash(hash) != null) {
+            log.info("区块头已存在，哈希：{}", CryptoUtil.bytesToHex(header.getHash() ));
+            return;
+        }
+        // 3. 加锁处理链状态更新（确保并发安全）
+        try {
+            if (!mainChainLock.tryLock(5, TimeUnit.SECONDS)) {
+                log.warn("获取主链锁超时，区块头哈希：{}", CryptoUtil.bytesToHex(header.getHash()));
+                return;
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return;
+        }
 
+        try {
+            // 4. 处理父区块头依赖
+            BlockHeader parentHeader = getBlockHeaderByHash(header.getPreviousHash());
+            if (parentHeader == null) {
+                log.info("父区块头不存在，加入孤儿头池，当前区块头哈希：{}，父哈希：{}",
+                        CryptoUtil.bytesToHex(header.getHash()),
+                        CryptoUtil.bytesToHex(header.getPreviousHash()));
+
+                return;
+            }
+            long parentH = getBlockHeaderHeight(parentHeader);
+            long sonH = getBlockHeaderHeight(header);
+            // 5. 验证高度连续性（父区块高度+1必须等于当前区块高度）
+            if (parentH + 1 != sonH) {
+                log.error("区块头高度不连续，父高度：{}，当前高度：{}，哈希：{}",
+                        parentH, sonH, CryptoUtil.bytesToHex(header.getHash()));
+                return;
+            }
+
+            // 8. 处理主链延伸或分叉
+            handleHeaderChainExtension(header, parentHeader,height, hash);
+        } finally {
+            mainChainLock.unlock();
+        }
+    }
+
+    @Override
+    public List<BlockHeader> getBlockHeaders(long startHeight, int count) {
+        return popStorage.getBlockHeaders(startHeight, count);
+    }
+
+    private void handleHeaderChainExtension(BlockHeader header, BlockHeader parentHeader ,long height, byte[] hash) {
+
+    }
+
+
+
+    private long getBlockHeaderHeight(BlockHeader parentHeader) {
+        //获取区块头高度
+        byte[] hash = parentHeader.computeHash();
+        return popStorage.getBlockHeightByHash(hash);
+    }
+
+    private BlockHeader getBlockHeaderByHash(byte[] previousHash) {
+        return popStorage.getBlockHeaderByHash(previousHash);
     }
 
 

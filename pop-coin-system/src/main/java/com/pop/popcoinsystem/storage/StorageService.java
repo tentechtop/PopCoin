@@ -255,8 +255,6 @@ public class StorageService {
             throw new RuntimeException("保存区块失败", e);
         }
     }
-
-
     //批量保存区块
     public void addBlockBatch(List<Block> blocks) {
         rwLock.writeLock().lock();
@@ -495,6 +493,95 @@ public class StorageService {
         // 3. 通过哈希获取区块头（复用已实现的哈希查询方法）
         return getBlockHeaderByHash(blockHash);
     }
+    //批量获取
+    /**
+     * 批量获取主链区块头（基于现有结构，无需额外索引）
+     * 利用主链高度→哈希索引的迭代器批量扫描，再批量查询区块头，平衡简洁性和性能
+     * @param startHeight 起始高度（包含，≥0）
+     * @param count 要获取的数量（1-1000，超出范围自动调整）
+     * @return 按高度升序排列的区块头列表，可能小于请求数量（若起始高度超出主链范围则返回空列表）
+     * @throws IllegalArgumentException 若输入参数不合法
+     */
+    public List<BlockHeader> getBlockHeaders(long startHeight, int count) {
+        // 1. 参数校验
+        if (startHeight < 0) {
+            throw new IllegalArgumentException("起始高度不能为负数: " + startHeight);
+        }
+        if (count <= 0) {
+            throw new IllegalArgumentException("获取数量必须大于0: " + count);
+        }
+        // 限制最大批量（避免单次操作过多影响性能）
+        int actualCount = Math.min(count, 1000);
+
+        rwLock.readLock().lock();
+        RocksIterator iterator = null;
+        ReadOptions readOptions = null;
+        try {
+            List<BlockHeader> headers = new ArrayList<>(actualCount);
+            long latestHeight = getMainLatestHeight();
+
+            // 若起始高度已超过主链最新高度，直接返回空列表
+            if (startHeight > latestHeight) {
+                log.debug("批量获取区块头：起始高度{}超过主链最新高度{}，返回空列表", startHeight, latestHeight);
+                return headers;
+            }
+
+            // 计算实际结束高度（不超过主链最新高度）
+            long endHeight = Math.min(startHeight + actualCount - 1, latestHeight);
+            log.debug("批量获取区块头：范围[{}, {}]，请求{}个，实际可获取{}个",
+                    startHeight, endHeight, count, endHeight - startHeight + 1);
+
+            // 2. 从主链高度索引中批量获取区块哈希
+            readOptions = new ReadOptions().setPrefixSameAsStart(true); // 优化范围扫描
+            iterator = db.newIterator(ColumnFamily.MAIN_BLOCK_CHAIN_INDEX.getHandle(), readOptions);
+            iterator.seek(ByteUtils.toBytes(startHeight)); // 定位到起始高度
+
+            // 3. 遍历高度范围，批量查询区块头
+            while (iterator.isValid() && headers.size() < actualCount) {
+                long currentHeight = ByteUtils.bytesToLong(iterator.key());
+
+                // 超出结束高度则停止
+                if (currentHeight > endHeight) {
+                    break;
+                }
+
+                // 获取当前高度对应的区块哈希
+                byte[] blockHash = iterator.value();
+                if (blockHash == null || blockHash.length == 0) {
+                    log.warn("高度{}的区块哈希为空，跳过", currentHeight);
+                    iterator.next();
+                    continue;
+                }
+
+                // 通过哈希查询区块头（复用现有方法）
+                try {
+                    BlockHeader header = getBlockHeaderByHash(blockHash);
+                    if (header != null) {
+                        headers.add(header);
+                        log.trace("已获取高度{}的区块头", currentHeight);
+                    } else {
+                        log.warn("高度{}的区块哈希存在，但区块头缺失", currentHeight);
+                    }
+                } catch (Exception e) {
+                    log.error("获取高度{}的区块头失败，跳过", currentHeight, e);
+                }
+
+                iterator.next();
+            }
+            log.debug("批量获取区块头完成：请求{}个，实际获取{}个", actualCount, headers.size());
+            return headers;
+        } finally {
+            // 确保资源释放
+            if (iterator != null) {
+                iterator.close();
+            }
+            if (readOptions != null) {
+                readOptions.close();
+            }
+            rwLock.readLock().unlock();
+        }
+    }
+
 
 
     private boolean isGenesisPrevHash(byte[] prevHash) {
@@ -1407,21 +1494,41 @@ public class StorageService {
 
 
     /**
-     * 保存下载的区块头
+     * 保存下载的区块头 列族 DOWN_LOAD_BLOCK_HEADER
      * @param header
      */
-    public void saveDownloadedHeader(BlockHeader header) {
-
+    public void saveDownloadedHeader(BlockHeader header,long  height) {
+        try {
+            byte[] valueBytes = SerializeUtils.serialize(header);
+            db.put(ColumnFamily.DOWN_LOAD_BLOCK_HEADER.getHandle(), ByteUtils.toBytes(height), valueBytes);
+        } catch (RocksDBException e) {
+            log.error("保存下载的区块头失败: key={}", height, e);
+            throw new RuntimeException("保存下载的区块头失败", e);
+        }
     }
 
 
     public BlockHeader getDownloadedHeader(long height) {
-
-        return null;
+        try {
+            byte[] valueBytes = db.get(ColumnFamily.DOWN_LOAD_BLOCK_HEADER.getHandle(), ByteUtils.toBytes(height));
+            if (valueBytes == null) {
+                log.debug("未找到下载的区块头：height={}", height);
+                return null;
+            }
+            return (BlockHeader) SerializeUtils.deSerialize(valueBytes);
+        } catch (RocksDBException e) {
+            log.error("获取下载的区块头失败：height={}", height, e);
+            throw new RuntimeException("获取下载的区块头失败", e);
+        }
     }
 
     public void deleteDownloadedHeader(long height) {
-
+        try {
+            db.delete(ColumnFamily.DOWN_LOAD_BLOCK_HEADER.getHandle(), ByteUtils.toBytes(height));
+        } catch (RocksDBException e) {
+            log.error("删除下载的区块头失败：height={}", height, e);
+            throw new RuntimeException("删除下载的区块头失败", e);
+        }
     }
 
 

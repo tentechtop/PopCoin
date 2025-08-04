@@ -5,6 +5,8 @@ import lombok.Data;
 
 import java.util.List;
 
+import static com.pop.popcoinsystem.data.block.Block.computeBlockHeaderHash;
+import static com.pop.popcoinsystem.data.block.Block.validateBlockHeaderPoW;
 import static com.pop.popcoinsystem.util.TypeUtils.reverseBytes;
 
 @Data
@@ -31,7 +33,25 @@ public class BlockHeader {
     private long size;
     private long weight;*/
 
+    /**
+     * 计算区块哈希（统一入口）
+     * 基于区块头信息计算双SHA-256哈希
+     */
+    public byte[] computeHash() {
+        return computeBlockHeaderHash(this);
+    }
 
 
+    /**
+     * 验证区块POW（统一入口）
+     * 检查区块哈希是否满足难度目标要求
+     */
+    public boolean validatePoW() {
+        return validateBlockHeaderPoW(this);
+    }
 
+
+    public byte[] getHash() {
+        return computeBlockHeaderHash(this);
+    }
 }
