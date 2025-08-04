@@ -41,7 +41,7 @@ public class StorageService {
         Map<String, Object> config = loadYaml("application.yml");
         if (config != null) {
             storagePath = (String) getNestedValue(config, "system.storagePath");
-            log.info("读取存储路径: " + storagePath);
+            log.debug("读取存储路径: " + storagePath);
         }
     }
 
@@ -480,7 +480,7 @@ public class StorageService {
     }
 
 
-    private BlockHeader getBlockHeaderByHeight(long height) {
+    public BlockHeader getBlockHeaderByHeight(long height) {
         // 1. 校验高度合法性（高度不能为负数）
         if (height < 0) {
             log.warn("获取区块头失败：高度不能为负数，height={}", height);
@@ -1229,7 +1229,6 @@ public class StorageService {
         if (scriptHash == null || scriptHash.length != 20) {
             return 0;
         }
-
         rwLock.readLock().lock();
         RocksIterator iterator = null;
         ReadOptions readOptions = null;
@@ -1259,11 +1258,6 @@ public class StorageService {
             rwLock.readLock().unlock();
         }
     }
-
-
-
-
-
 
 
 
@@ -1342,32 +1336,6 @@ public class StorageService {
             throw new RuntimeException("保存同步任务失败", e);
         }
     }
-
-    public void saveSyncProgress(SyncProgress nodeProgress) {
-        try {
-            byte[] valueBytes = SerializeUtils.serialize(nodeProgress);
-            db.put(ColumnFamily.SYNC_PROGRESS.getHandle(), nodeProgress.getNodeId().toByteArray(), valueBytes);
-        } catch (RocksDBException e) {
-            log.error("保存节点同步进度失败: nodeId={}", nodeProgress.getNodeId(), e);
-            throw new RuntimeException("保存节点同步进度失败", e);
-        }
-    }
-    //获取
-    public SyncProgress getSyncProgress(BigInteger nodeId) {
-        try {
-            byte[] valueBytes = db.get(ColumnFamily.SYNC_PROGRESS.getHandle(), nodeId.toByteArray() );
-            if (valueBytes == null) {
-                log.debug("未找到节点同步进度: nodeId={}", nodeId);
-                return null;
-            }
-            return (SyncProgress) SerializeUtils.deSerialize(valueBytes);
-        } catch (RocksDBException e) {
-            log.error("获取节点同步进度失败: nodeId={}", nodeId, e);
-            throw new RuntimeException("获取节点同步进度失败", e);
-        }
-    }
-
-
     /**
      * 根据任务ID获取同步任务记录
      * @param taskId 同步任务ID
@@ -1418,7 +1386,7 @@ public class StorageService {
                     // 反序列化任务记录
                     SyncTaskRecord task = (SyncTaskRecord) SerializeUtils.deSerialize(valueBytes);
                     // 判断任务是否处于运行中状态（假设SyncTaskRecord有isRunning()方法判断状态）
-                    if (task != null && task.getStatus().equals(SyncStatus.RUNNING)) {
+                    if (task != null && (task.getStatus().equals(SyncStatus.RUNNING)|| task.getStatus().equals(SyncStatus.PAUSED))) {
                         runningTasks.add(task);
                     }
                 }
@@ -1438,11 +1406,23 @@ public class StorageService {
     }
 
 
+    /**
+     * 保存下载的区块头
+     * @param header
+     */
+    public void saveDownloadedHeader(BlockHeader header) {
+
+    }
 
 
+    public BlockHeader getDownloadedHeader(long height) {
 
+        return null;
+    }
 
+    public void deleteDownloadedHeader(long height) {
 
+    }
 
 
 

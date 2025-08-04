@@ -463,6 +463,9 @@ public class KademliaNodeServer {
         }
     }
 
+    public NodeInfo getNodeInfo(BigInteger nodeId) {
+        return routingTable.getNodeInfo(nodeId);
+    }
 
 
     public static class UDPKademliaMessageEncoder extends MessageToMessageEncoder<KademliaMessage<?>> {

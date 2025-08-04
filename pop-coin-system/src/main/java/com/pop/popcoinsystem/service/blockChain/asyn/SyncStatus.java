@@ -34,7 +34,12 @@ public enum SyncStatus {
     /**
      * 取消：任务被主动终止（如用户触发取消操作）
      */
-    CANCELLED
+    CANCELLED,
+
+    /**
+     * 部分完成：任务部分完成，但未完成所有区块同步
+     */
+    PARTIALLY_COMPLETED
 
 
 

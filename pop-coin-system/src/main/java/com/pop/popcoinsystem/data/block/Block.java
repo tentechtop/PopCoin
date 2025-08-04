@@ -8,8 +8,10 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.Serializable;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -17,6 +19,7 @@ import java.util.stream.Collectors;
 import static com.pop.popcoinsystem.util.Numeric.hexStringToByteArray;
 import static com.pop.popcoinsystem.util.TypeUtils.reverseBytes;
 
+@Slf4j
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
@@ -73,22 +76,18 @@ public class Block implements Serializable {
 
 
 
-    public byte[] computeBlockHash(Block block) {
-        try {
-            // 1. 验证区块头关键字段的有效性
-            BlockHeader blockHeader = BeanCopyUtils.copyObject(block, BlockHeader.class);
-            return computeBlockHeaderHash(blockHeader);
-        } catch (IllegalArgumentException e) {
-            throw new RuntimeException("区块头数据无效：" + e.getMessage());
-        } catch (Exception e) {
-            throw new RuntimeException("哈希计算失败：" + e.getMessage(), e);
-        }
+    public static byte[] computeBlockHash(Block block) {
+        BlockHeader blockHeader = BeanCopyUtils.copyObject(block, BlockHeader.class);
+        return computeBlockHeaderHash(blockHeader);
     }
 
     public static byte[] computeBlockHeaderHash(BlockHeader blockHeader) {
         try {
             // 1. 验证区块头关键字段的有效性
-            validateBlockHeader(blockHeader);
+            boolean b = validateBlockHeaderData(blockHeader);
+            if (!b) {
+                throw new IllegalArgumentException("区块头数据无效");
+            }
             // 2. 序列化区块头（按协议规定的顺序和格式）
             byte[] headerBytes = serializeBlockHeader(blockHeader);
             // 3. 执行两次SHA-256哈希计算
@@ -104,22 +103,101 @@ public class Block implements Serializable {
 
 
     /**
-     * 验证区块头字段的有效性（避免无效数据导致的哈希错误）
+     * 验证区块的工作量证明（PoW）是否符合难度要求
+     * 工作量证明验证核心：区块哈希必须小于等于难度目标值
+     * @param block 待验证的区块
+     * @return 验证结果：true-符合PoW要求，false-不符合
      */
-    private static void validateBlockHeader(BlockHeader block) {
+    public static boolean validateBlockPoW(Block block) {
+        BlockHeader blockHeader = BeanCopyUtils.copyObject(block, BlockHeader.class);
+        return validateBlockHeaderPoW(blockHeader);
+    }
+
+
+    public static boolean validateBlockHeaderPoW(BlockHeader block) {
+        // 1. 验证区块对象有效性
+        if (block == null) {
+            log.error("待验证区块为null");
+            return false;
+        }
+
+        // 2. 验证区块哈希有效性（必须为32字节，符合SHA-256哈希长度）
+        byte[] blockHash = computeBlockHeaderHash(block);
+        if (blockHash == null || blockHash.length != 32) {
+            log.error("区块哈希无效，必须为32字节");
+            return false;
+        }
+        // 3. 验证难度目标有效性（必须为4字节压缩格式）
+        byte[] difficultyTarget = block.getDifficultyTarget();
+        if (difficultyTarget == null || difficultyTarget.length != 4) {
+            log.error("难度目标无效，必须为4字节压缩格式");
+            return false;
+        }
+
+        try {
+            // 4. 将4字节压缩难度目标转换为256位目标值（BigInteger）
+            BigInteger target = DifficultyUtils.compactToTarget(difficultyTarget);
+            if (target.equals(BigInteger.ZERO)) {
+                log.error("难度目标转换后为0，无效");
+                return false;
+            }
+
+            // 5. 将区块哈希转换为BigInteger（注意：使用1作为符号位参数，确保哈希值被解析为正数）
+            BigInteger hashValue = new BigInteger(1, blockHash);
+
+            // 6. 核心验证：区块哈希值必须小于等于难度目标值
+            boolean isValid = hashValue.compareTo(target) <= 0;
+            if (!isValid) {
+                log.error("区块PoW验证失败，哈希值({})大于目标值({})",
+                        hashValue.toString(16), target.toString(16));
+            }
+            return isValid;
+        } catch (ArithmeticException e) {
+            log.error("PoW验证时发生数值计算异常", e);
+            return false;
+        }
+    }
+
+
+
+
+
+    /**
+     * 验证区块头字段的有效性（避免无效数据导致的哈希错误）
+     *     private int version;
+     *     private byte[] previousHash;//前序hash
+     *     private byte[] merkleRoot;//默克尔树 验证交易
+     *     private long time;//时间
+     *     private byte[] difficultyTarget;//难度目标
+     *     private int nonce;//随机数
+     */
+    public static boolean validateBlockHeaderData(BlockHeader block) {
         if (block.getPreviousHash() != null && block.getPreviousHash().length != 32) {
-            throw new IllegalArgumentException("前区块哈希必须为32字节");
+            log.debug("前区块哈希必须为32字节");
+            return false;
         }
         if (block.getMerkleRoot() != null && block.getMerkleRoot().length != 32) {
-            throw new IllegalArgumentException("默克尔根必须为32字节");
+            log.debug("默克尔根必须为32字节");
+            return false;
         }
         if (block.getDifficultyTarget() != null && block.getDifficultyTarget().length != 4) {
-            throw new IllegalArgumentException("难度目标必须为4字节");
+            log.debug("难度目标必须为4字节");
+            return false;
         }
-        //版本
         if (block.getVersion() < 0) {
-            throw new IllegalArgumentException("版本号必须为32位无符号整数");
+            log.debug("版本号必须为32位无符号整数");
+            return false;
         }
+        if (block.getTime() < 0) {
+            log.debug("时间戳必须为32位无符号整数");
+            return false;
+        }
+        //随机数
+        if (block.getNonce() < 0) {
+            log.debug("随机数必须为32位无符号整数");
+            return false;
+        }
+        return true;
     }
 
 

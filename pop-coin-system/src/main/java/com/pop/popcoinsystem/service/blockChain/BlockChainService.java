@@ -142,10 +142,6 @@ public interface BlockChainService {
      */
     Result getBlockByRange(long start, long end);
 
-    /**
-     * 验证区块的工作量证明（PoW）是否符合难度要求
-     */
-    boolean validateBlockPoW(Block block);
 
     /**
      * 将验证通过的区块添加到主链
@@ -173,4 +169,8 @@ public interface BlockChainService {
     Result getSyncProgress();
 
     Result stopSync();
+
+    BlockHeader getBlockHeader(long height);
+
+    void addBlockHeader(BlockHeader header);
 }

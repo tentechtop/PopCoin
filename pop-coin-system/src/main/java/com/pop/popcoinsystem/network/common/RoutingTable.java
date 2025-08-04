@@ -486,4 +486,12 @@ public class RoutingTable {
         // 从桶中获取节点（Bucket 需实现 getNode (BigInteger id) 方法返回对应节点）
         return bucket.getNode(id);
     }
+
+    public NodeInfo getNodeInfo(BigInteger nodeId) {
+        ExternalNodeInfo node = findNode(nodeId);
+        if (node == null){
+            return null;
+        }
+        return BeanCopyUtils.copyObject(node, NodeInfo.class);
+    }
 }

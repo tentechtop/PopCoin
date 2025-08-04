@@ -26,10 +26,9 @@ public class WalletStorage {
         Map<String, Object> config = loadYaml("application.yml");
         if (config != null) {
             storagePath = (String) getNestedValue(config, "system.storagePath");
-            log.info("读取存储路径: " + storagePath);
+            log.debug("读取存储路径: " + storagePath);
         }
     }
-
 
     // 数据库存储路径
     private static String DB_PATH = storagePath+"/wallet"+ ".db/";
