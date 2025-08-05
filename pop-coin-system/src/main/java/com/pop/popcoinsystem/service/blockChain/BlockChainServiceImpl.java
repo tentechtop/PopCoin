@@ -33,6 +33,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.math.BigInteger;
@@ -98,6 +99,7 @@ public class BlockChainServiceImpl implements BlockChainService {
     @Autowired
     private MiningServiceImpl mining;
 
+    @Lazy
     @Autowired
     private SynchronizedBlocksImpl blockSynchronizer; // 复用异步同步器
 

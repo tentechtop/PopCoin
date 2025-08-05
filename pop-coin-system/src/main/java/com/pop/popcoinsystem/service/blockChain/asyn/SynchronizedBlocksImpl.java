@@ -25,6 +25,8 @@ import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
@@ -44,7 +46,7 @@ import static com.pop.popcoinsystem.data.block.Block.validateBlockHeaderPoW;
 
 @Slf4j
 @Component
-public class SynchronizedBlocksImpl {
+public class SynchronizedBlocksImpl implements ApplicationRunner {
     @Autowired
     private StorageService popStorage;
     @Autowired
@@ -118,9 +120,8 @@ public class SynchronizedBlocksImpl {
     );
 
 
-    // 初始化：节点启动时恢复未完成的同步任务
-    @PostConstruct
-    public void init() {
+    @Override
+    public void run(ApplicationArguments args) throws Exception {
         // 从存储恢复未完成的同步任务 正在进行 或者 暂停的任务
         List<SyncTaskRecord> unfinishedTasks = popStorage.getRunningSyncTasks();
         for (SyncTaskRecord task : unfinishedTasks) {
@@ -154,6 +155,8 @@ public class SynchronizedBlocksImpl {
         scheduler.scheduleAtFixedRate(
                 this::detectAndSync, 0, fastSyncInterval, TimeUnit.SECONDS);
     }
+
+
 
 
 
@@ -557,6 +560,8 @@ public class SynchronizedBlocksImpl {
         List<SyncTaskRecord> runningTasks = activeTasks.values().stream()
                 .filter(task -> task.getStatus() == SyncStatus.RUNNING)
                 .toList();
+        //如果任务进度是100%
+
 
         if (runningTasks.isEmpty()) {
             log.info("当前没有正在同步的任务");
@@ -1275,7 +1280,8 @@ public class SynchronizedBlocksImpl {
                 Map<Long, BlockHeader> validHeaders = new TreeMap<>(); // 使用TreeMap保证按高度升序
                 for (long h = batchStart; h <= batchEnd; h++) {
                     BlockHeader header = heightToHeaderMap.get(h);
-                    log.info("第{}批区块[{}]的区块头PoW验证中...", batchNum + 1, h);
+                    boolean b = validateBlockHeaderPoW(header);
+                    log.info("第{}批区块[{}]的区块头PoW验证结果: {}", batchNum + 1, h, b);
                     if (validateBlockHeaderPoW(header)) {
                         validHeaders.put(h, header);
                     } else {
@@ -1369,7 +1375,7 @@ public class SynchronizedBlocksImpl {
                 // 9. 记录批次处理结果
                 log.info("第{}批处理完成: 成功合并{}个，失败{}个",
                         batchNum + 1, successHeights.size(), downloadedBlocks.size() - successHeights.size());
-                Thread.sleep(5000);
+                Thread.sleep(50);
             }
             log.info("所有区块合并完成: 总范围[{} - {}]", startHeight, targetHeight);
         } catch (Exception e) {
@@ -1482,5 +1488,6 @@ public class SynchronizedBlocksImpl {
 
         return forkHeight;
     }
+
 
 }

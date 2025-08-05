@@ -27,7 +27,7 @@ public class HandshakeResponseMessageHandle implements MessageHandler{
     }
 
     protected EmptyKademliaMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull HandshakeResponseMessage message) throws InterruptedException, ConnectException, UnsupportedChainException {
-        log.info("收到握手响应,验证链信息是否一致");
+        log.info("收到握手响应 验证链信息是否一致....");
         NodeInfo sender = message.getSender();//消息来源
         Handshake handshake = message.getData();
         ExternalNodeInfo data = handshake.getExternalNodeInfo();
