@@ -44,6 +44,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import static com.pop.popcoinsystem.constant.BlockChainConstants.TRANSACTION_VERSION_1;
 import static com.pop.popcoinsystem.constant.BlockChainConstants.*;
+import static com.pop.popcoinsystem.storage.StorageService.getInstance;
 import static com.pop.popcoinsystem.storage.StorageService.getUTXOKey;
 import static com.pop.popcoinsystem.data.transaction.Transaction.calculateBlockReward;
 import static com.pop.popcoinsystem.util.CryptoUtil.ECDSASigner.getLockingScriptByAddress;
@@ -105,10 +106,11 @@ public class BlockChainServiceImpl implements BlockChainService {
         Block genesisBlock = getBlockByHash(GENESIS_BLOCK_HASH);
         if (getBlockByHash(GENESIS_BLOCK_HASH) == null) {
             genesisBlock = createGenesisBlock();
+            byte[] bytes = genesisBlock.computeHash();
             //保存区块
             popStorage.addBlock(genesisBlock);
             //保存最新的区块hash
-            popStorage.updateMainLatestBlockHash(GENESIS_BLOCK_HASH);
+            popStorage.updateMainLatestBlockHash(bytes);
             //最新区块高度
             popStorage.updateMainLatestHeight(genesisBlock.getHeight());
             //保存主链中 高度高度到 hash的索引
@@ -116,6 +118,16 @@ public class BlockChainServiceImpl implements BlockChainService {
         }
     }
 
+
+    //main void
+    public static void main(String[] args) {
+        StorageService instance = getInstance();
+        Block mainBlockByHeight = instance.getMainBlockByHeight(0);
+        byte[] bytes = mainBlockByHeight.computeHash();
+        log.info("{}", CryptoUtil.bytesToHex(bytes));
+
+
+    }
 
     /**
      * 验证交易
@@ -353,12 +365,6 @@ public class BlockChainServiceImpl implements BlockChainService {
         return genesisBlock;
     }
 
-    //main
-    public static void main(String[] args) {
-        long l = System.currentTimeMillis() / 1000;
-        log.info("时间戳:{}", l);
-
-    }
 
 
 
@@ -1764,7 +1770,6 @@ public class BlockChainServiceImpl implements BlockChainService {
     @Override
     public Map<Long, byte[]> getBlockHashes(List<Long> heightsToCheck) {
         Map<Long, byte[]> blockHashes = popStorage.getBlockHashes(heightsToCheck);
-        log.info("批量查询哈希，查询结果:{}", blockHashes);
         if (blockHashes == null) {
             blockHashes = new HashMap<>();
         }
@@ -1776,9 +1781,16 @@ public class BlockChainServiceImpl implements BlockChainService {
         return getMainBlockHashByHeight(mid);
     }
 
+    @Override
+    public void refreshLatestHeight() {
+
+    }
+
     private void handleHeaderChainExtension(BlockHeader header, BlockHeader parentHeader ,long height, byte[] hash) {
 
     }
+
+
 
 
 

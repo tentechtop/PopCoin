@@ -181,4 +181,6 @@ public interface BlockChainService {
     Map<Long,byte[]> getBlockHashes(List<Long> heightsToCheck);
 
     byte[] getBlockHash(long mid);
+
+    void refreshLatestHeight();
 }

@@ -160,7 +160,7 @@ public class TCPClient {
     public KademliaMessage sendMessageWithResponse(KademliaMessage message, long timeout, TimeUnit unit)
             throws ConnectException, TimeoutException, InterruptedException, Exception {
         try {
-            return sendMessageWithResponseAsync(message, timeout, unit, 1).get(timeout, unit);
+            return sendMessageWithResponseAsync(message, timeout, unit, 3).get(timeout, unit);
         } catch (ExecutionException e) {
             // 解包原始异常
             Throwable cause = e.getCause();
@@ -420,7 +420,6 @@ public class TCPClient {
         if (existingChannel != null && isChannelValid(existingChannel)) {
             return existingChannel;
         }
-
         // 2. 若无效，清理并创建新通道（依赖computeIfAbsent的原子性）
         return nodeTCPChannel.computeIfAbsent(nodeId, key -> {
             try {

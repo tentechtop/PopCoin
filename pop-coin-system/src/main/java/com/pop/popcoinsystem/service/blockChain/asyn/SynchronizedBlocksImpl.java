@@ -78,9 +78,8 @@ public class SynchronizedBlocksImpl {
     private static final int SCORE_PENALTY = 15; // 每次降级扣分
 
     // 基础批次大小（可动态调整）
-    private static final int BASE_BATCH_SIZE = 100;
-    // 最大批次大小（避免单次加载过多）
-    private static final int MAX_BATCH_SIZE = 500;
+    private static final int BASE_BATCH_SIZE = 500;
+
     // 最小批次大小（内存紧张时）
     private static final int MIN_BATCH_SIZE = 10;
 
@@ -106,10 +105,10 @@ public class SynchronizedBlocksImpl {
 
     // 线程池优化：限制最大线程数，避免资源耗尽
     public final ExecutorService syncExecutor = new ThreadPoolExecutor(
-            3, // 核心线程数
-            10, // 最大线程数
+            Runtime.getRuntime().availableProcessors() * 2,
+            200,
             60L, TimeUnit.SECONDS,
-            new LinkedBlockingQueue<>(100), // 任务队列限制
+            new SynchronousQueue<>(),
             runnable -> {
                 Thread thread = new Thread(runnable);
                 thread.setName("block-sync-worker");
@@ -165,7 +164,11 @@ public class SynchronizedBlocksImpl {
             throws ConnectException {
         // 情况0：节点正在同步中，拒绝新请求
         if (isSyncing) {
-            log.info("节点正在同步中，暂不处理新请求（当前进度: {}%）", 1);
+            List<SyncTaskRecord> runningTasks = activeTasks.values().stream()
+                    .filter(task -> task.getStatus() == SyncStatus.RUNNING)
+                    .toList();
+
+            log.info("节点正在同步中，暂不处理新请求");
             return;
         }
 
@@ -184,6 +187,8 @@ public class SynchronizedBlocksImpl {
         }
         // 预检查：获取本地与远程的共同分叉点（即使高度不同也可能存在历史分叉）
         long forkHeight = findForkHeightWithBatchQuery(remoteNode, Math.min(localHeight, remoteHeight));
+        log.info("获取本地与远程的分叉点（本地高度: {}，远程高度: {}，分叉点: {}）",
+                localHeight, remoteHeight, forkHeight);
         // 情况3：本地链高度低于远程节点
         if (localHeight < remoteHeight) {
             // 远程高度高，且工作量更大（需要同步）
@@ -309,9 +314,73 @@ public class SynchronizedBlocksImpl {
     }
 
 
+    /**
+     * 从远程节点同步区块（核心同步入口）
+     * @param remoteNode 远程节点信息
+     * @param startHeight 同步起始高度（分叉点或本地当前高度）
+     */
     private void startSyncFromRemote(NodeInfo remoteNode, long startHeight) {
-        // 从远程节点同步链的实现
+        if (remoteNode == null) {
+            log.error("远程节点信息为空，无法启动同步");
+            return;
+        }
 
+        // 标记同步开始
+        if (isSyncing) {
+            log.warn("已有同步任务在执行中，当前任务将排队等待");
+            return;
+        }
+        isSyncing = true;
+        log.info("开始从远程节点[{}]同步区块，起始高度: {}", remoteNode.getId().toString().substring(0, 8), startHeight);
+
+        // 异步执行同步流程（避免阻塞调用线程）
+        CompletableFuture.runAsync(() -> {
+            RpcProxyFactory proxyFactory = null;
+            BlockChainService remoteService = null;
+            try {
+                // 1. 验证远程节点有效性（评分、在线状态）
+                BigInteger nodeId = remoteNode.getId();
+
+
+                // 2. 获取远程节点最新高度（确定同步目标）
+                proxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
+                proxyFactory.setTimeout(rpcTimeoutMs);
+                remoteService = proxyFactory.createProxy(BlockChainService.class);
+                long remoteLatestHeight = remoteService.getMainLatestHeight();
+                log.info("远程节点[{}]最新高度: {}，同步范围: [{} - {}]",
+                        nodeId.toString().substring(0, 8), remoteLatestHeight, startHeight, remoteLatestHeight);
+
+                // 3. 检查同步范围有效性（起始高度必须小于目标高度）
+                if (startHeight >= remoteLatestHeight) {
+                    log.info("无需同步：起始高度[{}] >= 远程最新高度[{}]", startHeight, remoteLatestHeight);
+                    return;
+                }
+
+                // 4. 提交同步任务（自动处理任务重叠、分片及并发控制）
+                CompletableFuture<SyncTaskRecord> syncFuture = SubmitSyncTask(startHeight, remoteLatestHeight);
+                syncFuture.whenComplete((task, ex) -> {
+                    if (ex != null) {
+                        log.error("同步任务执行异常", ex);
+                        degradeNodeScore(nodeId, "同步任务执行失败: " + ex.getMessage());
+                    } else if (task != null) {
+                        log.info("同步任务[{}]完成，状态: {}", task.getTaskId(), task.getStatus());
+                        // 任务成功完成后，更新本地链的最新高度缓存
+                        localBlockChainService.refreshLatestHeight();
+                    }
+                }).join(); // 等待任务完成
+
+            } catch (Exception e) {
+                log.error("从远程节点[{}]同步失败", remoteNode.getId().toString().substring(0, 8), e);
+                // 同步失败时降级节点评分
+                if (remoteNode.getId() != null) {
+                    degradeNodeScore(remoteNode.getId(), "同步流程异常: " + e.getMessage());
+                }
+            } finally {
+                // 无论成功失败，标记同步结束
+                isSyncing = false;
+                log.info("从远程节点[{}]的同步流程结束", remoteNode.getId().toString().substring(0, 8));
+            }
+        }, syncExecutor);
     }
 
 
@@ -408,7 +477,11 @@ public class SynchronizedBlocksImpl {
     private void detectAndSync() {
         printRunningSyncTasks();
         log.info("检测并同步数据....");
-        long networkMaxHeight = getNetworkMaxHeight();
+        CompletableFuture.runAsync(this::getNetworkMaxHeight, detectExecutor)
+                .exceptionally(ex -> {
+                    log.error("节点探测异常", ex);
+                    return null;
+                });
     }
 
     // 获取网络最高高度（遍历健康节点，取最高高度）
@@ -1211,6 +1284,7 @@ public class SynchronizedBlocksImpl {
                 Map<Long, BlockHeader> validHeaders = new TreeMap<>(); // 使用TreeMap保证按高度升序
                 for (long h = batchStart; h <= batchEnd; h++) {
                     BlockHeader header = heightToHeaderMap.get(h);
+                    log.info("第{}批区块[{}]的区块头PoW验证中...", batchNum + 1, h);
                     if (validateBlockHeaderPoW(header)) {
                         validHeaders.put(h, header);
                     } else {

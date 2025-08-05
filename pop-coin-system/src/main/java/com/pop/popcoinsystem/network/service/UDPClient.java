@@ -17,6 +17,7 @@ import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 public class UDPClient {
@@ -33,7 +34,22 @@ public class UDPClient {
 
     public UDPClient() {
         // 线程池复用，控制并发量
-        this.executorService = Executors.newFixedThreadPool(10);
+        this.executorService = new ThreadPoolExecutor(
+                Runtime.getRuntime().availableProcessors() * 2,
+                200,
+                60L, TimeUnit.SECONDS,
+                new SynchronousQueue<>(),
+                new ThreadFactory() {
+                    private final AtomicInteger counter = new AtomicInteger();
+                    @Override
+                    public Thread newThread(Runnable r) {
+                        Thread t = new Thread(r, "business-pool-" + counter.incrementAndGet());
+                        t.setDaemon(true);
+                        return t;
+                    }
+                },
+                new ThreadPoolExecutor.CallerRunsPolicy() // 任务满时让调用者处理，避免任务丢失
+        );
         // 全局复用EventLoopGroup（重量级资源，避免频繁创建）
         this.eventLoopGroup = new NioEventLoopGroup();
         // 初始化Bootstrap并复用配置
@@ -41,6 +57,10 @@ public class UDPClient {
         bootstrap.group(eventLoopGroup)
                 .channel(NioDatagramChannel.class) // UDP通道类型
                 .option(ChannelOption.SO_BROADCAST, true)
+                // 新增：允许端口复用（解决TIME_WAIT导致的端口占用）
+                .option(ChannelOption.SO_REUSEADDR, true)
+                // 新增：设置接收缓冲区大小，减少因缓冲区满导致的隐性失败
+                .option(ChannelOption.SO_RCVBUF, 1024 * 1024)
                 .handler(new ChannelInitializer<NioDatagramChannel>() {
                     @Override
                     protected void initChannel(NioDatagramChannel ch) throws Exception {
