@@ -3,6 +3,7 @@ package com.pop.popcoinsystem.network.protocol.messageHandler;
 import com.pop.popcoinsystem.exception.FullBucketException;
 import com.pop.popcoinsystem.exception.HandlerNotFoundException;
 import com.pop.popcoinsystem.network.common.NodeInfo;
+import com.pop.popcoinsystem.network.common.RoutingTable;
 import com.pop.popcoinsystem.network.protocol.message.*;
 import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
@@ -31,6 +32,8 @@ public class FindNodeResponseMessageHandler implements MessageHandler{
     protected FindNodeResponseMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull FindNodeResponseMessage message) throws InterruptedException, ConnectException, FullBucketException {
         NodeInfo nodeInfo = kademliaNodeServer.getNodeInfo();
         BigInteger id = nodeInfo.getId();
+        RoutingTable routingTable = kademliaNodeServer.getRoutingTable();
+
         //总结：循环的 “天然终止条件”
         //这段代码的逻辑虽然会触发 “处理响应→发送新请求→再处理新响应” 的链条，但由于以下约束，链条会自然终止：
         //路由表update方法的返回值限制（重复节点不触发新请求）；
@@ -41,6 +44,13 @@ public class FindNodeResponseMessageHandler implements MessageHandler{
         executorService.submit(() -> (message).getData().getNodes().forEach(externalNode -> {
             // ignore self
             if (externalNode.getId().equals(kademliaNodeServer.getId())){
+                return;
+            }
+            //如果IP相同 端口相同的节点也忽略
+            if (externalNode.getIpv4().equals(nodeInfo.getIpv4())
+                    && (externalNode.getTcpPort() == nodeInfo.getTcpPort() || externalNode.getUdpPort() == nodeInfo.getUdpPort())){
+                //让路由表删除这个节点
+                routingTable.delete(externalNode);
                 return;
             }
             try {
