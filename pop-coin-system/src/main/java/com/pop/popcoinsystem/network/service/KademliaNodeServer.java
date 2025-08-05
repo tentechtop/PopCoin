@@ -3,7 +3,7 @@ package com.pop.popcoinsystem.network.service;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.pop.popcoinsystem.data.block.Block;
-import com.pop.popcoinsystem.network.protocol.message.HandshakeRequestMessage;
+import com.pop.popcoinsystem.network.protocol.message.*;
 import com.pop.popcoinsystem.network.protocol.messageData.Handshake;
 import com.pop.popcoinsystem.network.protocol.messageHandler.TransactionMessageHandler;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
@@ -11,11 +11,9 @@ import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.common.NodeSettings;
 import com.pop.popcoinsystem.network.common.RoutingTable;
 import com.pop.popcoinsystem.network.protocol.MessageType;
-import com.pop.popcoinsystem.network.protocol.message.FindNodeRequestMessage;
-import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
-import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
 import com.pop.popcoinsystem.network.protocol.messageHandler.*;
 import com.pop.popcoinsystem.event.DisruptorManager;
+import com.pop.popcoinsystem.network.rpc.RequestResponseManager;
 import com.pop.popcoinsystem.network.rpc.RpcServiceRegistry;
 import com.pop.popcoinsystem.service.blockChain.BlockChainServiceImpl;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
@@ -38,6 +36,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.util.LambdaSafe;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Service;
@@ -85,7 +84,7 @@ public class KademliaNodeServer {
     //TCP客服端
     private UDPClient udpClient;
     private TCPClient tcpClient;
-
+    private RequestResponseManager responseManager;
     // 替换原有ConcurrentHashMap为Guava Cache：自动过期+最大容量
     private final Cache<Long, Boolean> broadcastMessages = CacheBuilder.newBuilder()
             .maximumSize(10000) // 最大缓存10000条消息（防止内存溢出）
@@ -140,6 +139,8 @@ public class KademliaNodeServer {
     public void init() {
         routingTable = new RoutingTable(nodeInfo.getId(), nodeSettings);
         routingTable.recoverFromNodeList();
+        // 创建全局唯一的请求响应管理器
+        responseManager = new RequestResponseManager();
 
         //注册消息处理器
         this.registerMessageHandler(MessageType.EMPTY.getCode(), new EmptyMessageHandler());
@@ -158,8 +159,8 @@ public class KademliaNodeServer {
 
 
         //初始化UDP客户端
-        this.udpClient = new UDPClient();
-        this.tcpClient = new TCPClient();
+        this.udpClient = new UDPClient(responseManager);
+        this.tcpClient = new TCPClient(responseManager);
     }
     public void registerMessageHandler(int type, MessageHandler messageHandler) {
         KademliaMessageHandler.put(type, messageHandler);
@@ -215,7 +216,7 @@ public class KademliaNodeServer {
                             pipeline.addLast(new LengthFieldPrepender(4));
                             pipeline.addLast(new UDPKademliaMessageEncoder());
                             pipeline.addLast(new UDPKademliaMessageDecoder());
-                            pipeline.addLast(new KademliaUdpHandler(KademliaNodeServer.this));
+                            pipeline.addLast(new KademliaUdpHandler(KademliaNodeServer.this,udpClient));
                         }
                     });
 
@@ -273,7 +274,11 @@ public class KademliaNodeServer {
         PingKademliaMessage pingKademliaMessage = new PingKademliaMessage();
         pingKademliaMessage.setSender(this.nodeInfo);//本节点信息
         pingKademliaMessage.setReceiver(bootstrapNodeInfo);
+        pingKademliaMessage.setReqResId();
+        pingKademliaMessage.setResponse(false);
+
         udpClient.sendMessage(pingKademliaMessage);
+        log.info("向引导节点{}发送Ping消息", bootstrapNodeInfo);
 
         //向引导节点发送握手请求 收到握手回复后检查 自己的区块链信息
         BlockChainServiceImpl blockChainService = this.getBlockChainService();

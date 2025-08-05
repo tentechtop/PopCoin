@@ -2,11 +2,13 @@ package com.pop.popcoinsystem.network.service;
 
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
+import com.pop.popcoinsystem.network.rpc.RequestResponseManager;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.util.AttributeKey;
+import io.netty.util.concurrent.Promise;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 
@@ -14,10 +16,7 @@ import java.math.BigInteger;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 @Slf4j
 public class UDPClient {
@@ -30,11 +29,14 @@ public class UDPClient {
     private static final AttributeKey<BigInteger> NODE_ID_KEY = AttributeKey.valueOf("NODE_ID");
     private static final int DEFAULT_OPERATION_TIMEOUT = 5000; // 默认操作超时（毫秒）
 
-    public UDPClient() {
+    private RequestResponseManager responseManager;
+
+    public UDPClient(RequestResponseManager requestResponseManager) {
         // 线程池复用，控制并发量
         this.executorService = Executors.newFixedThreadPool(10);
         // 全局复用EventLoopGroup（重量级资源，避免频繁创建）
         this.eventLoopGroup = new NioEventLoopGroup();
+        responseManager = requestResponseManager;
         // 初始化Bootstrap并复用配置
         this.bootstrap = new Bootstrap();
         bootstrap.group(eventLoopGroup)
@@ -86,6 +88,61 @@ public class UDPClient {
             }
         }catch (Exception e){
             log.error("Failed to send UDP message: {}", e.getMessage());
+        }
+    }
+
+
+    public KademliaMessage sendMessageWithResponse(KademliaMessage message)
+            throws ConnectException, TimeoutException, InterruptedException, Exception {
+        // 默认超时时间5秒，也可以提供重载方法让用户指定超时
+        return sendMessageWithResponse(message, 5, TimeUnit.SECONDS);
+    }
+
+
+
+    public KademliaMessage sendMessageWithResponse(KademliaMessage message, long timeout, TimeUnit unit)
+            throws ConnectException, TimeoutException, InterruptedException, Exception {
+        if (message == null || message.getReceiver() == null) {
+            throw new IllegalArgumentException("消息或接收者不能为空");
+        }
+        //请求ID已经在消息创建阶段设置
+        long requestId = message.getRequestId();
+        NodeInfo receiver = message.getReceiver();
+        BigInteger nodeId = receiver.getId();
+        InetSocketAddress targetAddr = new InetSocketAddress(receiver.getIpv4(), receiver.getUdpPort());
+        Channel channel = getOrCreateChannel(nodeId, targetAddr);
+        if (channel == null || !channel.isActive()) {
+            throw new ConnectException("节点 " + nodeId + " 无可用连接");
+        }
+
+        // 标记为请求消息（非响应）
+        message.setResponse(false);
+        // 发送请求并获取Promise（内部异步处理）
+        Promise<KademliaMessage> promise = responseManager.sendRequest(channel, message, timeout, unit);
+        try {
+            // 阻塞等待结果
+            if (!promise.await(timeout, unit)) {
+                // 超时：主动取消并抛出超时异常
+                promise.cancel(false);
+                throw new TimeoutException("等待节点 " + nodeId + " 响应超时（" + timeout +" "+ unit + "）");
+            }
+            // 检查结果状态
+            if (promise.isSuccess()) {
+                return promise.getNow();
+            } else {
+                // 失败：抛出具体异常
+                Throwable cause = promise.cause();
+                if (cause instanceof Exception) {
+                    throw (Exception) cause;
+                } else {
+                    throw new Exception("发送消息失败：" + cause.getMessage(), cause);
+                }
+            }
+        } finally {
+            // 清理：如果消息处理完成，从管理器中移除
+            if (promise.isDone()) {
+                responseManager.clearRequest(message.getRequestId());
+            }
         }
     }
 
@@ -241,4 +298,7 @@ public class UDPClient {
     }
 
 
+    public RequestResponseManager getResponseManager() {
+        return responseManager;
+    }
 }

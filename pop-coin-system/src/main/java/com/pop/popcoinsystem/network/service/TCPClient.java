@@ -29,21 +29,18 @@ public class TCPClient {
     /** 节点ID到Channel的映射 */
     private final Map<BigInteger, Channel> nodeTCPChannel = new ConcurrentHashMap<>();
 
-    // 请求响应管理器，全局唯一实例
-    private final RequestResponseManager responseManager;
-
-
+    private RequestResponseManager responseManager;
 
     // 用于在Channel中存储节点ID的属性键
     private static final AttributeKey<BigInteger> NODE_ID_KEY = AttributeKey.valueOf("NODE_ID");
-    private static final int DEFAULT_CONNECT_TIMEOUT = 30000; // 30秒，与Netty默认保持一致
+    public static final int DEFAULT_CONNECT_TIMEOUT = 30000; // 30秒，与Netty默认保持一致
 
-    public TCPClient() {
+    public TCPClient(RequestResponseManager requestResponseManager) {
         executorService = Executors.newFixedThreadPool(10);
         // 全局复用一个EventLoopGroup，避免资源浪费
         eventLoopGroup = new NioEventLoopGroup();
-        // 创建全局唯一的请求响应管理器
-        responseManager = new RequestResponseManager();
+        responseManager = requestResponseManager;
+
         // 初始化Bootstrap并复用配置
         bootstrap = new Bootstrap();
         bootstrap.group(eventLoopGroup)

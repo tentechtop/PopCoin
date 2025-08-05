@@ -28,14 +28,4 @@ public class PongKademliaMessage extends KademliaMessage<String>{
     }
 
 
-
-
-
-
-
-
-
-
-
-
 }
