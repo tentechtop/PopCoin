@@ -4,9 +4,15 @@ import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockHeader;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeInfo;
+import com.pop.popcoinsystem.network.protocol.message.HandshakeRequestMessage;
+import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
+import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
+import com.pop.popcoinsystem.network.protocol.message.PongKademliaMessage;
+import com.pop.popcoinsystem.network.protocol.messageData.Handshake;
 import com.pop.popcoinsystem.network.rpc.RpcProxyFactory;
 import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.service.blockChain.BlockChainService;
+import com.pop.popcoinsystem.service.blockChain.BlockChainServiceImpl;
 import com.pop.popcoinsystem.service.blockChain.asyn.SyncProgress;
 import com.pop.popcoinsystem.service.blockChain.asyn.SyncStatus;
 import com.pop.popcoinsystem.service.blockChain.asyn.SyncTaskRecord;
@@ -30,6 +36,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+import static com.pop.popcoinsystem.constant.BlockChainConstants.GENESIS_BLOCK_HASH_HEX;
 import static com.pop.popcoinsystem.constant.BlockChainConstants.RPC_TIMEOUT;
 import static com.pop.popcoinsystem.data.block.Block.validateBlockHeaderPoW;
 
@@ -148,9 +155,6 @@ public class SynchronizedBlocksImpl {
         // 快速同步任务
         scheduler.scheduleAtFixedRate(
                 this::detectAndSync, 0, fastSyncInterval, TimeUnit.SECONDS);
-        // 稳态同步任务
-/*        scheduler.scheduleAtFixedRate(
-                this::steadyStateSync, 0, steadySyncInterval, TimeUnit.SECONDS);*/
     }
 
 
@@ -167,12 +171,11 @@ public class SynchronizedBlocksImpl {
 
         // 情况1：本地节点未初始化（无区块数据）仅仅一个创世区块
         if (localHeight == 0) {
-            log.info("本地节点未初始化（高度: {}），请求远程完整链（远程高度: {}，远程总工作量: {}）",
+            log.info("本地节点未初始化（高度: {}），请求远程完整链（远程最新高度: {}，远程总工作量: {}）",
                     localHeight, remoteHeight, remoteTotalWork);
-            startSyncFromRemote(remoteNode, -1);  // 从初始状态同步
+            startSyncFromRemote(remoteNode, 0);  // 从初始状态同步
             return;
         }
-
         // 情况2：远程节点未初始化（无区块数据）
         if (remoteHeight == 0) {
             log.info("远程节点未初始化（高度: {}），等待远程节点拉取本地链（本地高度: {}，本地总工作量: {}）",
@@ -181,7 +184,6 @@ public class SynchronizedBlocksImpl {
         }
         // 预检查：获取本地与远程的共同分叉点（即使高度不同也可能存在历史分叉）
         long forkHeight = findForkHeightWithBatchQuery(remoteNode, Math.min(localHeight, remoteHeight));
-
         // 情况3：本地链高度低于远程节点
         if (localHeight < remoteHeight) {
             // 远程高度高，且工作量更大（需要同步）
@@ -260,6 +262,7 @@ public class SynchronizedBlocksImpl {
     private long findForkHeightWithBatchQuery(NodeInfo remoteNode, long maxCommonHeight) {
         RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
         BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
+        log.info("开始批量查询哈希，远程节点:{}，最大共同高度:{}", remoteNode, maxCommonHeight);
 
         if (maxCommonHeight < 0) {
             return -1;
@@ -275,7 +278,9 @@ public class SynchronizedBlocksImpl {
             try {
                 List<Long> heightsToCheck = Arrays.asList(mid, low, high);
                 Map<Long, byte[]> localHashes = localBlockChainService.getBlockHashes(heightsToCheck);
+                log.info("本地址批量查询哈希，高度范围:{}", heightsToCheck);
                 Map<Long, byte[]> remoteHashes = remoteService.getBlockHashes(heightsToCheck);
+                log.info("远程地址批量查询哈希，高度范围:{}", heightsToCheck);
 
                 // 获取本地和远程节点的哈希，并判断是否存在
                 byte[] localHash = localHashes.get(mid);
@@ -324,32 +329,25 @@ public class SynchronizedBlocksImpl {
      *    hash3的父hash是hash2 就允许创建一个新的任务  也就是两个任务 必须高度连续 区块连续
      *    如果一个任务A是[100 hasha1 - 200 hash2] 任务B是[301 hash3 - 400 hash4] 此时如果A正在同步 则要拒绝B任务 因为不连续 无法合到主链
      */
-    public CompletableFuture<SyncTaskRecord> SubmitDifference(long localHeight, long remoteHeight) {
+    public CompletableFuture<SyncTaskRecord> SubmitSyncTask(long startHeight, long endHeight) {
         List<ExternalNodeInfo> candidateNodes = kademliaNodeServer.getRoutingTable().findClosest();
-        log.info("提交差异：本地高度={}, 远程高度={}", localHeight, remoteHeight);
-        // 1. 验证差异有效性
-        if (remoteHeight <= localHeight) {
-            log.warn("远程高度({})不大于本地高度({})，无需同步", remoteHeight, localHeight);
-            return CompletableFuture.completedFuture(null);
-        }
-        long newTaskStart = localHeight + 1;
-        // 2. 检查并处理与已有任务的重叠
-        List<SyncTaskRecord> overlappingTasks = findOverlappingTasks(newTaskStart, remoteHeight);
+        log.info("提交差异：开始高度={}, 结束高度={}", startHeight, endHeight);
+        // 检查并处理与已有任务的重叠
+        List<SyncTaskRecord> overlappingTasks = findOverlappingTasks(startHeight, endHeight);
         // 计算需要修剪的起始高度（取所有重叠任务的最大结束高度 + 1）
-        long adjustedStart = newTaskStart;
+        long adjustedStart = startHeight;
         if (!overlappingTasks.isEmpty()) {
             long maxEndHeight = overlappingTasks.stream()
                     .mapToLong(SyncTaskRecord::getTargetHeight)
                     .max()
-                    .orElse(newTaskStart - 1);
+                    .orElse(startHeight - 1);
 
             adjustedStart = maxEndHeight + 1;
             log.info("检测到与{}个任务重叠，调整新任务起始高度从{}到{}",
-                    overlappingTasks.size(), newTaskStart, adjustedStart);
+                    overlappingTasks.size(), startHeight, adjustedStart);
         }
-
         // 如果调整后起始高度超过结束高度，说明无需创建新任务
-        if (adjustedStart > remoteHeight) {
+        if (adjustedStart > endHeight) {
             log.info("新任务范围已被已有任务完全覆盖，无需创建新任务");
             return CompletableFuture.completedFuture(null);
         }
@@ -365,7 +363,7 @@ public class SynchronizedBlocksImpl {
         }
 
         // 4. 创建修剪后的新任务
-        SyncTaskRecord task = createSyncProgresses(adjustedStart, remoteHeight, validNodes);
+        SyncTaskRecord task = createSyncProgresses(adjustedStart, endHeight, validNodes);
         log.info("创建新同步任务：{}", task);
         activeTasks.put(task.getTaskId(), task);
         popStorage.saveSyncTaskRecord(task);
@@ -409,34 +407,74 @@ public class SynchronizedBlocksImpl {
 
     private void detectAndSync() {
         printRunningSyncTasks();
-        log.info("检测 避免错过握手阶段的同步....");
-        long localHeight = localBlockChainService.getMainLatestHeight();
-        byte[] localHash = localBlockChainService.getMainLatestBlockHash();
-        byte[] localWork = localBlockChainService.getMainLatestBlock().getChainWork();
-
-
-        // 获取所有邻居节点，筛选健康节点（评分>60分）
-        List<ExternalNodeInfo> allNodes = kademliaNodeServer.getRoutingTable().findClosest();
-        // 对每个健康节点发起同步（并发控制由syncService保证）
-        for (ExternalNodeInfo externalNodeInfo : allNodes) {
-            NodeInfo node = BeanCopyUtils.copyObject(externalNodeInfo, NodeInfo.class);
-            try {
-                // 探测节点最新状态
-                RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, node);
-                BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
-                long remoteHeight = remoteService.getMainLatestHeight();
-                byte[] remoteHash = remoteService.getMainLatestBlockHash();
-                byte[] remoteWork = remoteService.getMainLatestBlock().getChainWork();
-                log.info("检测到 节点{}最新高度为: {}", node.getId(), remoteHeight);
-                compareAndSync(node, localHeight, localHash, localWork, remoteHeight, remoteHash, remoteWork);
-            } catch (Exception e) {
-                // 记录失败，降低节点评分
-                log.warn("节点{}探测失败，降低评分", node.getId());
-            }
-        }
-
-
+        log.info("检测并同步数据....");
+        long networkMaxHeight = getNetworkMaxHeight();
     }
+
+    // 获取网络最高高度（遍历健康节点，取最高高度）
+    private long getNetworkMaxHeight() {
+        try {
+            NodeInfo local = kademliaNodeServer.getNodeInfo();
+            // 默认使用本地高度作为基准
+            long maxHeight = localBlockChainService.getMainLatestHeight();
+            List<ExternalNodeInfo> allNodes = kademliaNodeServer.getRoutingTable().findClosest();
+            // 遍历健康节点获取最高高度
+            for (ExternalNodeInfo nodeInfo : allNodes) {
+                NodeInfo node = BeanCopyUtils.copyObject(nodeInfo, NodeInfo.class);
+                try {
+                    RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, node);
+                    BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
+                    long remoteHeight = remoteService.getMainLatestHeight();
+                    if (remoteHeight > maxHeight) {
+                        maxHeight = remoteHeight;
+                        log.info("更新网络最高高度为: {} (来自节点 {})", maxHeight, node.getId());
+                        PingKademliaMessage pingKademliaMessage = new PingKademliaMessage();
+                        pingKademliaMessage.setSender(local);//本节点信息
+                        pingKademliaMessage.setReceiver(node);
+                        pingKademliaMessage.setReqResId();
+                        pingKademliaMessage.setResponse(false);
+                        try {
+                            KademliaMessage kademliaMessage = kademliaNodeServer.getUdpClient().sendMessageWithResponse(pingKademliaMessage);
+                            if (kademliaMessage == null){
+                                log.error("未收到节点{}的Pong消息,无法同步", node);
+                            }
+                            if (kademliaMessage != null){
+                                log.info("收到节点{}的Pong消息", node);
+                                //向节点发送握手请求 收到握手回复后检查 自己的区块链信息
+                                Block mainLatestBlock = localBlockChainService.getMainLatestBlock();
+                                Handshake handshake = new Handshake();
+                                handshake.setExternalNodeInfo(kademliaNodeServer.getExternalNodeInfo());//携带我的节点信息
+                                handshake.setGenesisBlockHash(CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX));
+                                handshake.setLatestBlockHash(mainLatestBlock.getHash());
+                                handshake.setLatestBlockHeight(mainLatestBlock.getHeight());
+                                handshake.setChainWork(mainLatestBlock.getChainWork());
+                                HandshakeRequestMessage handshakeRequestMessage = new HandshakeRequestMessage(handshake);
+                                handshakeRequestMessage.setSender(local);//本节点信息
+                                handshakeRequestMessage.setReceiver(node);
+                                kademliaNodeServer.getTcpClient().sendMessage(handshakeRequestMessage);
+                            }
+                        }catch (Exception e){
+                            log.error("与节点{}通信失败: {}", node.getId(), e.getMessage());
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("获取节点{}的高度失败: {}", node.getId(), e.getMessage());
+                }
+            }
+            return maxHeight;
+        } catch (Exception e) {
+            log.error("获取网络最高高度失败", e);
+            return localBlockChainService.getMainLatestHeight();
+        }
+    }
+
+
+
+
+
+
+
+
 
 
     /**
@@ -478,49 +516,7 @@ public class SynchronizedBlocksImpl {
         }
     }
 
-    // 稳态同步（接近最新高度时，仅同步最新区块）
-    private void steadyStateSync() {
-        long localHeight = localBlockChainService.getMainLatestHeight();
-        // 若本地高度与网络最高高度差距<5，进入稳态同步
-        if (getNetworkMaxHeight() - localHeight < 5) {
-            syncLatestBlocks(); // 只同步最新几个区块，避免批量同步消耗资源
-        }
-    }
 
-
-    // 同步最新区块（增量同步）
-    private void syncLatestBlocks() {
-
-    }
-
-
-    // 获取网络最高高度（遍历健康节点，取最高高度）
-    private long getNetworkMaxHeight() {
-        try {
-            // 默认使用本地高度作为基准
-            long maxHeight = localBlockChainService.getMainLatestHeight();
-            List<ExternalNodeInfo> allNodes = kademliaNodeServer.getRoutingTable().findClosest();
-            // 遍历健康节点获取最高高度
-            for (ExternalNodeInfo nodeInfo : allNodes) {
-                NodeInfo node = BeanCopyUtils.copyObject(nodeInfo, NodeInfo.class);
-                try {
-                    RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, node);
-                    BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
-                    long remoteHeight = remoteService.getMainLatestHeight();
-                    if (remoteHeight > maxHeight) {
-                        maxHeight = remoteHeight;
-                        log.debug("更新网络最高高度为: {} (来自节点 {})", maxHeight, node.getId());
-                    }
-                } catch (Exception e) {
-                    log.warn("获取节点{}的高度失败: {}", node.getId(), e.getMessage());
-                }
-            }
-            return maxHeight;
-        } catch (Exception e) {
-            log.error("获取网络最高高度失败", e);
-            return localBlockChainService.getMainLatestHeight();
-        }
-    }
 
 
 

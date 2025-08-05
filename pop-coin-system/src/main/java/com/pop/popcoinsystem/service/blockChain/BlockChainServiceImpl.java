@@ -1763,7 +1763,11 @@ public class BlockChainServiceImpl implements BlockChainService {
 
     @Override
     public Map<Long, byte[]> getBlockHashes(List<Long> heightsToCheck) {
-        return popStorage.getBlockHashes(heightsToCheck);
+        Map<Long, byte[]> blockHashes = popStorage.getBlockHashes(heightsToCheck);
+        if (blockHashes == null) {
+            blockHashes = new HashMap<>();
+        }
+        return blockHashes;
     }
 
     @Override
