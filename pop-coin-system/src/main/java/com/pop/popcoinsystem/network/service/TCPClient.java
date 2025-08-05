@@ -421,22 +421,17 @@ public class TCPClient {
             return existingChannel;
         }
 
-        // 2. 若无效，清理并创建新通道（使用computeIfAbsent原子操作）
+        // 2. 若无效，清理并创建新通道（依赖computeIfAbsent的原子性）
         return nodeTCPChannel.computeIfAbsent(nodeId, key -> {
             try {
-                // 二次检查，避免并发创建
+                // 二次检查（可选，防止其他线程在get和computeIfAbsent之间已创建通道）
                 Channel existing = nodeTCPChannel.get(nodeId);
                 if (isChannelValid(existing)) {
                     return existing;
                 }
-                // 执行连接
+                // 执行连接（此时computeIfAbsent已确保只有一个线程进入此逻辑）
                 Channel newChannel = connectWithRetry(receiver.getIpv4(), receiver.getTcpPort(), nodeId);
-                // 原子替换，确保唯一
-                Channel prevChannel = nodeTCPChannel.putIfAbsent(nodeId, newChannel);
-                if (prevChannel != null && isChannelValid(prevChannel)) {
-                    newChannel.close(); // 异步关闭冗余通道
-                    return prevChannel;
-                }
+                // 无需putIfAbsent，computeIfAbsent会自动将newChannel放入map
                 return newChannel;
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -446,7 +441,6 @@ public class TCPClient {
             }
         });
     }
-
     /** 通道有效性检查 */
     private boolean isChannelValid(Channel channel) {
         return channel != null
