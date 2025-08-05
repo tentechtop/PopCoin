@@ -554,6 +554,7 @@ public class RoutingTable {
             Bucket bucket = findBucket(id);
             // 从桶中删除节点（Bucket 需实现 remove (BigInteger id) 方法）
             bucket.remove(id);
+            StorageService.getInstance().deleteRouteTableNode(id);
         }
         finally {
             lock.writeLock().unlock();

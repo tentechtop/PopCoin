@@ -41,7 +41,9 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
 import java.math.BigInteger;
+import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.util.*;
 import java.util.concurrent.*;
@@ -276,23 +278,42 @@ public class KademliaNodeServer {
         pingKademliaMessage.setReceiver(bootstrapNodeInfo);
         pingKademliaMessage.setReqResId();
         pingKademliaMessage.setResponse(false);
-        log.info("向引导节点{}发送Ping消息", bootstrapNodeInfo);
-        KademliaMessage kademliaMessage = udpClient.sendMessageWithResponse(pingKademliaMessage);
-        if (kademliaMessage instanceof PongKademliaMessage){
-            log.info("收到引导节点{}的Pong消息", bootstrapNodeInfo);
-            //向引导节点发送握手请求 收到握手回复后检查 自己的区块链信息
-            BlockChainServiceImpl blockChainService = this.getBlockChainService();
-            Block mainLatestBlock = blockChainService.getMainLatestBlock();
-            Handshake handshake = new Handshake();
-            handshake.setExternalNodeInfo(this.getExternalNodeInfo());//携带我的节点信息
-            handshake.setGenesisBlockHash(CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX));
-            handshake.setLatestBlockHash(mainLatestBlock.getHash());
-            handshake.setLatestBlockHeight(mainLatestBlock.getHeight());
-            handshake.setChainWork(mainLatestBlock.getChainWork());
-            HandshakeRequestMessage handshakeRequestMessage = new HandshakeRequestMessage(handshake);
-            handshakeRequestMessage.setSender(this.nodeInfo);//本节点信息
-            handshakeRequestMessage.setReceiver(bootstrapNodeInfo);
-            this.getTcpClient().sendMessage(handshakeRequestMessage);
+        try {
+            KademliaMessage kademliaMessage = udpClient.sendMessageWithResponse(pingKademliaMessage);
+            if (kademliaMessage == null){
+                log.error("未收到引导节点{}的Pong消息", bootstrapNodeInfo);
+                return;
+            }
+            if (kademliaMessage != null && kademliaMessage instanceof PongKademliaMessage){
+                log.info("收到引导节点{}的Pong消息", bootstrapNodeInfo);
+                //向引导节点发送握手请求 收到握手回复后检查 自己的区块链信息
+                BlockChainServiceImpl blockChainService = this.getBlockChainService();
+                Block mainLatestBlock = blockChainService.getMainLatestBlock();
+                Handshake handshake = new Handshake();
+                handshake.setExternalNodeInfo(this.getExternalNodeInfo());//携带我的节点信息
+                handshake.setGenesisBlockHash(CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX));
+                handshake.setLatestBlockHash(mainLatestBlock.getHash());
+                handshake.setLatestBlockHeight(mainLatestBlock.getHeight());
+                handshake.setChainWork(mainLatestBlock.getChainWork());
+                HandshakeRequestMessage handshakeRequestMessage = new HandshakeRequestMessage(handshake);
+                handshakeRequestMessage.setSender(this.nodeInfo);//本节点信息
+                handshakeRequestMessage.setReceiver(bootstrapNodeInfo);
+                this.getTcpClient().sendMessage(handshakeRequestMessage);
+            }
+        }
+        // 明确捕获"连接被拒绝"异常
+        catch (ConnectException e) {
+            log.error("连接引导节点失败：目标节点 {}:{} 拒绝连接（可能未启动或端口错误）",
+                    bootstrapNodeInfo.getIpv4(), bootstrapNodeInfo.getUdpPort(), e);
+            // 可选：将无效的引导节点从配置中移除或标记为不可用
+        }
+        // 捕获其他网络异常（如超时、IO错误等）
+        catch (IOException e) {
+            log.error("与引导节点通信时发生网络错误", e);
+        }
+        // 捕获其他非网络异常
+        catch (Exception e) {
+            log.error("连接引导节点时发生未知错误", e);
         }
     }
 

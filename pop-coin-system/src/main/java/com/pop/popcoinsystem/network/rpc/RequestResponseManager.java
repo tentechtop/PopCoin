@@ -44,7 +44,9 @@ public class RequestResponseManager {
             // 超时：移除请求并标记失败
             RequestContext context = pendingRequests.remove(requestId);
             if (context != null && !promise.isDone()) {
-                promise.setFailure(new TimeoutException("Request (id=" + requestId + ") timeout after " + timeout +" " + unit));
+                promise.setSuccess(null);
+                //promise.setFailure(new TimeoutException("Request (id=" + requestId + ") timeout after " + timeout + unit));
+                //context.promise.setSuccess(null); // 超时返回null而非抛出异常
             }
         }, timeout, unit);
 
@@ -59,7 +61,8 @@ public class RequestResponseManager {
                 if (context != null) {
                     context.timeoutFuture.cancel(false); // 取消超时任务
                     if (!promise.isDone()) {
-                        promise.setFailure(future.cause());
+                        //promise.setFailure(future.cause());
+                        promise.setSuccess(null);
                     }
                 }
             }
@@ -102,7 +105,8 @@ public class RequestResponseManager {
         pendingRequests.values().forEach(context -> {
             context.timeoutFuture.cancel(false);
             if (!context.promise.isDone()) {
-                context.promise.setFailure(new CancellationException("Request manager cleared or closed"));
+                //context.promise.setFailure(new CancellationException("Request manager cleared or closed"));
+                context.promise.setSuccess(null);
             }
         });
         pendingRequests.clear();
@@ -152,7 +156,8 @@ public class RequestResponseManager {
             RequestContext context = pendingRequests.remove(requestId);
             if (context != null && !context.promise.isDone()) {
                 String errorMsg = "Request (id=" + requestId + ") timed out after " + timeout + unit;
-                context.promise.setFailure(new TimeoutException(errorMsg));
+                //context.promise.setFailure(new TimeoutException(errorMsg));
+                context.promise.setSuccess(null);
             }
         }, timeout, unit);
 

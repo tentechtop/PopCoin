@@ -250,6 +250,8 @@ public class SynchronizedBlocksImpl {
         byte[] localWork = localBlockChainService.getMainLatestBlock().getChainWork();
         // 获取所有邻居节点，筛选健康节点（评分>60分）
         List<ExternalNodeInfo> allNodes = kademliaNodeServer.getRoutingTable().findClosest();
+
+        log.info("离自己最近的节点{}", allNodes);
         // 对每个健康节点发起同步（并发控制由syncService保证）
         for (ExternalNodeInfo externalNodeInfo : allNodes) {
             NodeInfo node = BeanCopyUtils.copyObject(externalNodeInfo, NodeInfo.class);
@@ -273,10 +275,8 @@ public class SynchronizedBlocksImpl {
             } catch (Exception e) {
                 // 记录失败，降低节点评分
                 log.warn("节点{}探测失败，降低评分", node.getId());
-
                 //删除
                 kademliaNodeServer.removeNode(node.getId());
-
             }
         }
     }
