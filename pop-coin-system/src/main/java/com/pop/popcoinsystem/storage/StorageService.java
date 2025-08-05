@@ -65,6 +65,9 @@ public class StorageService {
 
     /*节点相关设置*/
     private static final byte[] KEY_NODE_SETTING = "key_node_setting".getBytes();
+
+    private static final byte[] KEY_SELF_NODE_INFO = "key_self_node_info".getBytes();
+
     private static final byte[] KEY_MINER = "key_miner".getBytes();
 
 
@@ -1750,6 +1753,32 @@ public class StorageService {
             throw new RuntimeException("获取节点状态失败", e);
         }
     }
+
+    public void addOrUpdateSelfNode(ExternalNodeInfo value) {
+        try {
+            byte[] valueBytes = SerializeUtils.serialize(value);
+            db.put(ColumnFamily.NODE_INFO.getHandle(), KEY_SELF_NODE_INFO, valueBytes);
+        } catch (RocksDBException e) {
+            log.error("节点状态失败: key={}", KEY_SELF_NODE_INFO, e);
+            throw new RuntimeException("节点状态失败", e);
+        }
+    }
+
+    //获取本节点的设置信息
+    public NodeSettings getNodeSelfNode() {
+        try {
+            byte[] valueBytes = db.get(ColumnFamily.NODE_INFO.getHandle(), KEY_SELF_NODE_INFO);
+            if (valueBytes == null) {
+                return null; // 不存在返回null，避免抛出异常
+            }
+            return (NodeSettings)SerializeUtils.deSerialize(valueBytes);
+        } catch (RocksDBException e) {
+            log.error("获取节点状态失败: key={}", KEY_SELF_NODE_INFO, e);
+            throw new RuntimeException("获取节点状态失败", e);
+        }
+    }
+
+
 
     /**
      * 新增或者修改本节点的矿工信息

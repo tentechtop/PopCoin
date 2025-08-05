@@ -1,11 +1,13 @@
 package com.pop.popcoinsystem.network.protocol.messageHandler;
 
+import com.pop.popcoinsystem.exception.FullBucketException;
 import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.FindNodeResult;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.common.RoutingTable;
 import com.pop.popcoinsystem.network.protocol.message.*;
+import com.pop.popcoinsystem.util.BeanCopyUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 
@@ -18,26 +20,24 @@ import java.util.List;
 public class FindNodeRequestMessageHandler implements MessageHandler{
 
     @Override
-    public KademliaMessage<? extends Serializable> handleMesage(KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) throws InterruptedException, ConnectException {
+    public KademliaMessage<? extends Serializable> handleMesage(KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) throws InterruptedException, ConnectException, FullBucketException {
         return doHandle(kademliaNodeServer, (FindNodeRequestMessage) message);
     }
 
 
 
-    protected FindNodeRequestMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull FindNodeRequestMessage message) throws InterruptedException, ConnectException {
+    protected FindNodeRequestMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull FindNodeRequestMessage message) throws InterruptedException, ConnectException, FullBucketException {
         log.info("收到查找节点请求");
         NodeInfo sender = message.getSender();
         BigInteger findId = message.getData();
         RoutingTable routingTable = kademliaNodeServer.getRoutingTable();
-        List<ExternalNodeInfo> closest = routingTable.findClosest(findId);
-        FindNodeResult findNodeResult = new FindNodeResult();
-        findNodeResult.setNodes(closest);
-        findNodeResult.setDestinationId(findId);
-        log.info("返回查找结果:{}", findNodeResult);
+        FindNodeResult closestResult = routingTable.findClosestResult(findId);
+        ExternalNodeInfo externalNodeInfo = BeanCopyUtils.copyObject(sender, ExternalNodeInfo.class);
+        routingTable.update(externalNodeInfo);
         FindNodeResponseMessage findNodeResponseMessage = new FindNodeResponseMessage();
         findNodeResponseMessage.setSender(kademliaNodeServer.getNodeInfo());
         findNodeResponseMessage.setReceiver(sender);
-        findNodeResponseMessage.setData(findNodeResult);
+        findNodeResponseMessage.setData(closestResult);
         kademliaNodeServer.getTcpClient().sendMessage(findNodeResponseMessage);
         return null;
     }

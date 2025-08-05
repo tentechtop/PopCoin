@@ -115,8 +115,9 @@ public class KademliaServiceStart {
         externalNodeInfo.setUdpPort(nodeSetting.getUdpPort());
         externalNodeInfo.setNodeType(nodeSetting.getNodeType());
         server.setExternalNodeInfo(externalNodeInfo);
-        storageService.addOrUpdateRouteTableNode(externalNodeInfo);
-        log.info("保存自己:{}", externalNodeInfo);
+        storageService.addOrUpdateSelfNode(externalNodeInfo);
+        //自己要用单独的KEY保存不再放在路由表中
+
         server.setNodeSettings(NodeSettings.Default.build());
         server.init();
         return server;

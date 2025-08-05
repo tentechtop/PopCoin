@@ -485,6 +485,10 @@ public class KademliaNodeServer {
         routingTable.removeNode(id);
     }
 
+    public BigInteger getId() {
+        return nodeInfo.getId();
+    }
+
 
     public static class UDPKademliaMessageEncoder extends MessageToMessageEncoder<KademliaMessage<?>> {
         @Override
