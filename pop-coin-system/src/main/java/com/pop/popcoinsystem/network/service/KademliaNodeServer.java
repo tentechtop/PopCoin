@@ -278,7 +278,7 @@ public class KademliaNodeServer {
         pingKademliaMessage.setResponse(false);
 
         KademliaMessage kademliaMessage = udpClient.sendMessageWithResponse(pingKademliaMessage);
-        if (kademliaMessage != null && kademliaMessage instanceof PongKademliaMessage){
+        if (kademliaMessage instanceof PongKademliaMessage){
             log.info("向引导节点{}发送Ping消息", bootstrapNodeInfo);
             //向引导节点发送握手请求 收到握手回复后检查 自己的区块链信息
             BlockChainServiceImpl blockChainService = this.getBlockChainService();
