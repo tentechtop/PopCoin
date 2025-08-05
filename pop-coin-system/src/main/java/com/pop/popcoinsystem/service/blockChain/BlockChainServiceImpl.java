@@ -1587,7 +1587,7 @@ public class BlockChainServiceImpl implements BlockChainService {
                                long remoteHeight, byte[] remoteHash, byte[] remoteWork
     ) throws ConnectException, InterruptedException {
         log.info("比较本地与远程节点的区块差异");
-        blockSynchronizer.SubmitDifference(localHeight, remoteHeight, localWork, remoteWork,localHash,remoteHash);
+        blockSynchronizer.compareAndSync(remoteNode,localHeight, localHash, localWork, remoteHeight, remoteHash, remoteWork);
     }
 
 
@@ -1760,6 +1760,16 @@ public class BlockChainServiceImpl implements BlockChainService {
     @Override
     public List<BlockHeader> getBlockHeaders(long startHeight, int count) {
         return popStorage.getBlockHeaders(startHeight, count);
+    }
+
+    @Override
+    public Map<Long, byte[]> getBlockHashes(List<Long> heightsToCheck) {
+        return popStorage.getBlockHashes(heightsToCheck);
+    }
+
+    @Override
+    public byte[] getBlockHash(long mid) {
+        return getMainBlockHashByHeight(mid);
     }
 
     private void handleHeaderChainExtension(BlockHeader header, BlockHeader parentHeader ,long height, byte[] hash) {

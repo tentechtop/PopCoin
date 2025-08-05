@@ -418,6 +418,15 @@ public class StorageService {
     }
 
 
+    public Map<Long,byte[]> getBlockHashes(List<Long> heightsToCheck) {
+        Map<Long,byte[]> blockHashes = new HashMap<>();
+        for (Long height : heightsToCheck) {
+            byte[] mainBlockHashByHeight = getMainBlockHashByHeight(height);
+            blockHashes.put(height,mainBlockHashByHeight);
+        }
+        return blockHashes;
+    }
+
 
     /**
      * 基于区块头计算当前区块及其之前最多10个主链区块的时间戳中位数（共11个区块）
@@ -1426,6 +1435,18 @@ public class StorageService {
             throw new RuntimeException("保存同步任务失败", e);
         }
     }
+    //删除任务
+    public void deleteSyncTaskRecord(String taskId){
+        try {
+            db.delete(ColumnFamily.SYNC_TASK.getHandle(), taskId.getBytes());
+        } catch (RocksDBException e) {
+            log.error("删除同步任务失败: key={}", taskId, e);
+            throw new RuntimeException("删除同步任务失败", e);
+        }
+    }
+
+
+
     /**
      * 根据任务ID获取同步任务记录
      * @param taskId 同步任务ID

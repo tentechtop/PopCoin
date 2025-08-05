@@ -18,6 +18,8 @@ import com.pop.popcoinsystem.network.common.NodeInfo;
 
 import java.net.ConnectException;
 import java.util.List;
+import java.util.Map;
+
 @RpcServiceAlias("BlockChainService")// 标记为需要注册的RPC服务
 public interface BlockChainService {
 
@@ -175,4 +177,8 @@ public interface BlockChainService {
     void addBlockHeader(BlockHeader header,long height);
 
     List<BlockHeader> getBlockHeaders(long startHeight, int count);
+
+    Map<Long,byte[]> getBlockHashes(List<Long> heightsToCheck);
+
+    byte[] getBlockHash(long mid);
 }

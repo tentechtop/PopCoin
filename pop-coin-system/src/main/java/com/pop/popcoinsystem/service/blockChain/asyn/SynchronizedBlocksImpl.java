@@ -12,6 +12,7 @@ import com.pop.popcoinsystem.service.blockChain.asyn.SyncStatus;
 import com.pop.popcoinsystem.service.blockChain.asyn.SyncTaskRecord;
 import com.pop.popcoinsystem.storage.StorageService;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
+import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.DifficultyUtils;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -88,12 +89,13 @@ public class SynchronizedBlocksImpl {
     // 错误区块头占比阈值（超过此比例则判定为大量错误）
     private static final double INVALID_HEADER_RATE_THRESHOLD = 0.3;
 
-
-
     private final Map<String, SyncTaskRecord> activeTasks = new ConcurrentHashMap<>();
     Map<String, CompletableFuture<SyncTaskRecord>> taskFutureMap = new ConcurrentHashMap<>();
     private ScheduledExecutorService scheduler; // 合并为一个调度器，减少线程资源占用
     private ExecutorService detectExecutor; // 用于并发探测节点的线程池
+
+    // 同步中标记（避免并发冲突）
+    private volatile boolean isSyncing = false;
 
     // 线程池优化：限制最大线程数，避免资源耗尽
     public final ExecutorService syncExecutor = new ThreadPoolExecutor(
@@ -108,7 +110,6 @@ public class SynchronizedBlocksImpl {
                 return thread;
             },
             new ThreadPoolExecutor.CallerRunsPolicy() // 队列满时让提交者执行，避免任务丢失 new ThreadPoolExecutor.AbortPolicy() // 任务满时拒绝，避免OOM
-
     );
 
 
@@ -152,6 +153,218 @@ public class SynchronizedBlocksImpl {
                 this::steadyStateSync, 0, steadySyncInterval, TimeUnit.SECONDS);*/
     }
 
+
+
+    public void compareAndSync(NodeInfo remoteNode,
+                                long localHeight, byte[] localHash, byte[] localTotalWork,
+                                long remoteHeight, byte[] remoteHash, byte[] remoteTotalWork)
+            throws ConnectException {
+        // 情况0：节点正在同步中，拒绝新请求
+        if (isSyncing) {
+            log.info("节点正在同步中，暂不处理新请求（当前进度: {}%）", 1);
+            return;
+        }
+
+        // 情况1：本地节点未初始化（无区块数据）仅仅一个创世区块
+        if (localHeight == 0) {
+            log.info("本地节点未初始化（高度: {}），请求远程完整链（远程高度: {}，远程总工作量: {}）",
+                    localHeight, remoteHeight, remoteTotalWork);
+            startSyncFromRemote(remoteNode, -1);  // 从初始状态同步
+            return;
+        }
+
+        // 情况2：远程节点未初始化（无区块数据）
+        if (remoteHeight == 0) {
+            log.info("远程节点未初始化（高度: {}），等待远程节点拉取本地链（本地高度: {}，本地总工作量: {}）",
+                    remoteHeight, localHeight, localTotalWork);
+            return;
+        }
+        // 预检查：获取本地与远程的共同分叉点（即使高度不同也可能存在历史分叉）
+        long forkHeight = findForkHeightWithBatchQuery(remoteNode, Math.min(localHeight, remoteHeight));
+
+        // 情况3：本地链高度低于远程节点
+        if (localHeight < remoteHeight) {
+            // 远程高度高，且工作量更大（需要同步）
+            if (DifficultyUtils.compare(remoteTotalWork,localTotalWork)==1) {
+                // 存在历史分叉（共同高度后出现分歧）
+                if (forkHeight < localHeight) {
+                    log.info("本地链短、工作量小且存在历史分叉（本地高度:{}，远程高度:{}，分叉点:{}，本地总工作量:{}，远程总工作量:{}），从分叉点开始同步远程链",
+                            localHeight, remoteHeight, forkHeight, localTotalWork, remoteTotalWork);
+                    startSyncFromRemote(remoteNode, forkHeight);  // 从分叉点同步，覆盖本地分歧链
+                } else {
+                    // 无历史分叉，直接从本地当前高度同步
+                    log.info("本地链落后且远程工作量更大（本地高度:{}，远程高度:{}，无历史分叉，本地总工作量:{}，远程总工作量:{}），开始同步远程链",
+                            localHeight, remoteHeight, localTotalWork, remoteTotalWork);
+                    startSyncFromRemote(remoteNode, localHeight);
+                }
+            } else {
+                // 远程高度高但工作量更小（无效链），等待远程同步本地
+                log.info("本地链高度低但工作量更大（本地高度:{}，远程高度:{}，本地总工作量:{}，远程总工作量:{}），等待远程节点同步本地链",
+                        localHeight, remoteHeight, localTotalWork, remoteTotalWork);
+            }
+            return;
+        }
+
+        // 情况4：本地链高度高于远程节点
+        if (localHeight > remoteHeight) {
+            // 本地高度高，需判断工作量
+            if (DifficultyUtils.compare(localTotalWork, remoteTotalWork) ==1) {
+                // 本地高度高且工作量更大（有效链），无需同步
+                log.info("本地链领先且工作量更大（本地高度:{}，远程高度:{}，本地总工作量:{}，远程总工作量:{}），状态正常",
+                        localHeight, remoteHeight, localTotalWork, remoteTotalWork);
+            } else {
+                // 本地高度高但工作量更小（无效链），需同步远程
+                // 检查是否存在历史分叉
+                if (forkHeight < remoteHeight) {
+                    log.info("本地链高但工作量小且存在历史分叉（本地高度:{}，远程高度:{}，分叉点:{}，本地总工作量:{}，远程总工作量:{}），从分叉点开始同步远程链",
+                            localHeight, remoteHeight, forkHeight, localTotalWork, remoteTotalWork);
+                    startSyncFromRemote(remoteNode, forkHeight);
+                } else {
+                    log.info("本地链高度高但工作量更小（本地高度:{}，远程高度:{}，无历史分叉，本地总工作量:{}，远程总工作量:{}），开始同步远程链",
+                            localHeight, remoteHeight, localTotalWork, remoteTotalWork);
+                    startSyncFromRemote(remoteNode, remoteHeight);
+                }
+            }
+            return;
+        }
+
+        // 情况5：高度相同但哈希不同（存在分叉）
+        if (!Arrays.equals(localHash, remoteHash)) {
+            // 分叉时以工作量大的链为准
+            if (DifficultyUtils.compare(localTotalWork, remoteTotalWork) == 1) {
+                log.info("链分叉（高度:{}），本地工作量更大（本地:{}，远程:{}），等待远程同步本地链",
+                        localHeight, localTotalWork, remoteTotalWork);
+            } else if (DifficultyUtils.compare(remoteTotalWork,localTotalWork)==1) {
+                log.info("链分叉（高度:{}），远程工作量更大（本地:{}，远程:{}），开始同步远程链",
+                        localHeight, localTotalWork, remoteTotalWork);
+                startSyncFromRemote(remoteNode, localHeight);
+            } else {
+                // 工作量相同的特殊情况（极罕见），可根据策略保留本地链
+                log.info("链分叉（高度:{}），双方工作量相同（{}），保留本地链",
+                        localHeight, localTotalWork);
+            }
+            return;
+        }
+
+        // 情况6：高度相同且哈希一致（状态正常）
+        log.info("本地链与远程链状态一致（高度: {}，哈希: {}，总工作量: {}）",
+                localHeight, CryptoUtil.bytesToHex(localHash), localTotalWork);
+    }
+
+
+    /**
+     * 高效查找本地链与远程链的分叉点高度
+     * 采用二分查找法，时间复杂度优化为O(log n)
+     * @param remoteNode 远程节点信息
+     * @param maxCommonHeight 理论上的最大共同高度（取本地和远程高度的最小值）
+     * @return 分叉点高度（-1表示无共同历史）
+     */
+    private long findForkHeight(NodeInfo remoteNode, long maxCommonHeight) {
+        RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
+        BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
+        // 边界校验：若最大共同高度为负数，直接返回无共同历史
+        if (maxCommonHeight < 0) {
+            return -1;
+        }
+
+        long low = 0;
+        long high = maxCommonHeight;
+        long forkHeight = -1;  // 初始化分叉点为无共同历史
+
+        // 缓存已查询的哈希，避免重复网络请求或本地查询
+        Map<Long, byte[]> localHashCache = new HashMap<>();
+        Map<Long, byte[]> remoteHashCache = new HashMap<>();
+
+        try {
+            // 二分查找主逻辑
+            while (low <= high) {
+                // 计算中间高度（避免溢出）
+                long mid = low + (high - low) / 2;
+
+                // 获取本地区块哈希（优先从缓存获取）
+                byte[] localHash = localHashCache.get(mid);
+                if (localHash == null) {
+                    localHash = localBlockChainService.getBlockHash(mid);
+                    localHashCache.put(mid, localHash);
+                }
+
+                // 获取远程区块哈希（优先从缓存获取）
+                byte[] remoteHash = remoteHashCache.get(mid);
+                if (remoteHash == null) {
+                    remoteHash = remoteService.getBlockHash(mid);
+                    remoteHashCache.put(mid, remoteHash);
+                }
+
+                // 哈希相同：说明此高度及以下可能存在共同历史，尝试查找更高的共同高度
+                if (Arrays.equals(localHash, remoteHash)) {
+                    forkHeight = mid;  // 临时记录当前共同高度
+                    low = mid + 1;    // 向更高高度查找
+                } else {
+                    // 哈希不同：分叉点在更低高度，缩小上边界
+                    high = mid - 1;
+                }
+            }
+        } catch (Exception e) {
+            log.error("分叉点检测失败，最大共同高度:{}", maxCommonHeight, e);
+            // 异常情况下尝试返回已找到的临时分叉点（可能不准确，但避免完全失败）
+            return forkHeight != -1 ? forkHeight : -1;
+        }
+
+        return forkHeight;
+    }
+
+    /**
+     * 进一步优化：批量查询哈希（适用于支持批量接口的场景）
+     * 减少网络交互次数，尤其在跨节点通信时提升性能
+     */
+    private long findForkHeightWithBatchQuery(NodeInfo remoteNode, long maxCommonHeight) {
+        RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
+        BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
+
+        if (maxCommonHeight < 0) {
+            return -1;
+        }
+
+        long low = 0;
+        long high = maxCommonHeight;
+        long forkHeight = -1;
+
+        while (low <= high) {
+            long mid = low + (high - low) / 2;
+
+            try {
+                // 批量获取一段高度范围的哈希（如mid-1, mid, mid+1）
+                // 减少单次网络请求的开销，尤其适用于远程节点查询
+                List<Long> heightsToCheck = Arrays.asList(mid, low, high);
+                Map<Long, byte[]> localHashes = localBlockChainService.getBlockHashes(heightsToCheck);
+                Map<Long, byte[]> remoteHashes = remoteService.getBlockHashes(heightsToCheck);
+
+                byte[] localHash = localHashes.get(mid);
+                byte[] remoteHash = remoteHashes.get(mid);
+
+                if (Arrays.equals(localHash, remoteHash)) {
+                    forkHeight = mid;
+                    low = mid + 1;
+                } else {
+                    high = mid - 1;
+                }
+            } catch (Exception e) {
+                log.error("批量查询哈希失败，中间高度:{}", mid, e);
+                high = mid - 1;  // 出错时缩小范围，避免死循环
+            }
+        }
+
+        return forkHeight;
+    }
+
+
+    private void startSyncFromRemote(NodeInfo remoteNode, long startHeight) {
+        // 从远程节点同步链的实现
+
+    }
+
+
+
     /**
      * 提交差异
      * 节点握手确定差异
@@ -161,15 +374,20 @@ public class SynchronizedBlocksImpl {
      *    将下载的区块暂存到 下载数据库
      *    检查全部下载完就开始从开始位置慢慢补充到主链
      *
+     *    要检查开始高度 和开始高度hash
+     *    如果不重叠且间隙 hash一致 也就是 [100 hasha1 - 200 hash2] [101hash3-200hash4]
+     *    hash3的父hash是hash2 就允许创建一个新的任务
+     *
      */
-    public CompletableFuture<SyncTaskRecord> SubmitDifference(long localHeight, long remoteHeight,byte[] localWork,byte[] remoteWork,byte[] localHash,byte[] remoteHash) {
+    public CompletableFuture<SyncTaskRecord> SubmitDifference(NodeInfo remoteNode,long localHeight, long remoteHeight,byte[] localWork,byte[] remoteWork,byte[] localHash,byte[] remoteHash) {
         List<ExternalNodeInfo> candidateNodes = kademliaNodeServer.getRoutingTable().findClosest();
-        log.info("提交差异：本地高度={}, 远程高度={}", localHeight, remoteHeight);
-        // 1. 验证差异有效性
-        if (remoteHeight <= localHeight) {
-            log.warn("远程高度({})不大于本地高度({})，无需同步", remoteHeight, localHeight);
-            return CompletableFuture.completedFuture(null);
-        }
+
+
+
+
+
+
+
 
 
 
@@ -232,26 +450,6 @@ public class SynchronizedBlocksImpl {
         return taskFuture;
     }
 
-
-    /**
-     * 比较本地与远程节点的区块差异，并发起同步请求
-     */
-    private void compareAndSync(KademliaNodeServer nodeServer, NodeInfo remoteNode, long localHeight, byte[] localHash, long remoteHeight, byte[] remoteHash) throws ConnectException {
-        // 情况1：本地链落后于远程节点（需要同步远程的新区块）
-        if (localHeight < remoteHeight) {
-            log.info("本地链落后（本地高度:{}，远程高度:{}），开始同步", localHeight, remoteHeight);
-
-        }
-        // 情况2：本地链与远程链高度相同但哈希不同（存在分叉）
-        else if (localHeight == remoteHeight && !Arrays.equals(localHash, remoteHash)) {
-
-
-        }
-        // 情况3：本地链领先或一致（无需同步，或远程会主动请求）
-        else {
-            log.info("本地链状态正常（本地高度:{}，远程高度:{}），无需同步", localHeight, remoteHeight);
-        }
-    }
 
 
     public CompletableFuture<SyncTaskRecord> SubmitDifference(long localHeight, long remoteHeight) {
@@ -472,13 +670,16 @@ public class SynchronizedBlocksImpl {
     /**
      * 执行完整同步任务（包含所有分片）
      */
+// 修改executeSyncTask方法中的任务提交逻辑
     private CompletableFuture<SyncTaskRecord> executeSyncTask(SyncTaskRecord task) {
         task.setStatus(SyncStatus.RUNNING);
         task.setUpdateTime(LocalDateTime.now());
+
         // 提交所有分片任务并行执行
         List<CompletableFuture<SyncProgress>> shardFutures = task.getSyncProgressList().stream()
                 .map(shard -> executeShardTaskBatch(shard, task))
                 .toList();
+
         // 等待所有分片完成后合并区块
         return CompletableFuture.allOf(shardFutures.toArray(new CompletableFuture[0]))
                 .thenApply(v -> {
@@ -497,6 +698,21 @@ public class SynchronizedBlocksImpl {
 
                     task.setUpdateTime(LocalDateTime.now());
                     return task;
+                })
+                // 在任务最终完成时自动删除
+                .whenComplete((completedTask, ex) -> {
+                    activeTaskCount.decrementAndGet();
+                    if (ex != null) {
+                        log.error("任务[{}]执行失败", task.getTaskId(), ex);
+                        completedTask.setStatus(SyncStatus.FAILED);
+                        completedTask.setErrorMsg(ex.getMessage());
+                    } else {
+                        log.info("任务[{}]执行完成", task.getTaskId());
+                    }
+                    // 持久化任务状态（保留历史记录，仅删除内存中的活跃任务）
+                    popStorage.saveSyncTaskRecord(completedTask);
+                    // 自动删除内存中的任务记录
+                    removeTask(task.getTaskId());
                 });
     }
 
@@ -751,6 +967,9 @@ public class SynchronizedBlocksImpl {
         } else {
             log.info("任务[{}]已完成或不存在，无需取消", taskId);
         }
+
+        // 手动终止后自动删除任务
+        removeTask(taskId);
     }
 
 
@@ -1012,10 +1231,6 @@ public class SynchronizedBlocksImpl {
             long shardStart = startHeight + (long) i * BASE_BATCH_SIZE;
             long shardTarget = Math.min(shardStart + BASE_BATCH_SIZE - 1, targetHeight);
 
-            // 核心修改：记录当前分片所有高度与节点的映射
-            for (long h = shardStart; h <= shardTarget; h++) {
-                heightToNodeMap.put(h, assignedNode.getId());
-            }
 
             SyncProgress progress = new SyncProgress();
             progress.setProgressId(String.format("%s_PROGRESS_[%d-%d]", taskId, shardStart, shardTarget));
@@ -1156,11 +1371,14 @@ public class SynchronizedBlocksImpl {
                             return CompletableFuture.supplyAsync(() -> {
                                 try {
                                     // 从提供区块头的节点下载完整区块
+                                    RpcProxyFactory proxyFactory = null;
                                     NodeInfo node = kademliaNodeServer.getNodeInfo(getNodeIdByHeight(height));
                                     if (node == null) {
-                                        throw new RuntimeException("区块[" + height + "]对应的节点已离线");
+                                        log.warn("区块[" + height + "]对应的节点已离线");
+                                        proxyFactory = new RpcProxyFactory(kademliaNodeServer);
+                                    }else {
+                                        proxyFactory = new RpcProxyFactory(kademliaNodeServer,node);
                                     }
-                                    RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer);
                                     proxyFactory.setTimeout(rpcTimeoutMs);
                                     BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
                                     Block block = remoteService.getBlockByHash(blockHash);
@@ -1256,6 +1474,25 @@ public class SynchronizedBlocksImpl {
                 .orElse(0.0);
         return Math.min(totalProgress, 100.0); // 进度不超过100%
     }
+
+
+    /**
+     * 从内存中移除任务（包括活跃任务映射和Future映射）
+     */
+    private void removeTask(String taskId) {
+        // 从活跃任务映射中移除
+        SyncTaskRecord removedTask = activeTasks.remove(taskId);
+        if (removedTask != null) {
+            log.info("任务[{}]已从活跃任务列表中移除（状态：{}）", taskId, removedTask.getStatus());
+        }
+        // 从Future映射中移除
+        CompletableFuture<SyncTaskRecord> removedFuture = taskFutureMap.remove(taskId);
+        if (removedFuture != null) {
+            log.debug("任务[{}]的Future已清理", taskId);
+        }
+        popStorage.deleteSyncTaskRecord(taskId);
+    }
+
 
     @PreDestroy
     public void destroy() {
