@@ -370,7 +370,7 @@ public class KademliaNodeServer {
         try {
             long now = System.currentTimeMillis();
             // 2. 检查路由表中节点的活性，移除不活跃节点
-            routingTable.cleanExpiredNodes(NODE_EXPIRATION_TIME);
+            /*routingTable.cleanExpiredNodes(NODE_EXPIRATION_TIME);*/
             checkNodeLiveness(now);
             // 3. 随机生成节点ID，执行FindNode操作刷新路由表（Kademlia协议核心）
             refreshRoutingTable();
