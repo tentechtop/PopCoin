@@ -434,6 +434,7 @@ public class KademliaNodeServer {
                 routingTable.delete(node);
                 continue;
             }
+            log.info("节点 {} 活跃，最后活跃时间：{}ms", node.getId(), inactiveTime);
 
             // 2. 节点即将过期（接近阈值阈值），发送Ping确认活性
             if (inactiveTime > NODE_EXPIRATION_TIME * 0.8) {

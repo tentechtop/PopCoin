@@ -1587,7 +1587,7 @@ public class BlockChainServiceImpl implements BlockChainService {
                                long remoteHeight, byte[] remoteHash, byte[] remoteWork
     ) throws ConnectException, InterruptedException {
         log.info("比较本地与远程节点的区块差异");
-        blockSynchronizer.SubmitDifference(localHeight, remoteHeight);
+        blockSynchronizer.SubmitDifference(localHeight, remoteHeight, localWork, remoteWork,localHash,remoteHash);
     }
 
 

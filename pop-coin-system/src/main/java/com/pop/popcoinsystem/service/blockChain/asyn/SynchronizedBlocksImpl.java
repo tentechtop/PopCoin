@@ -22,6 +22,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.math.BigInteger;
+import java.net.ConnectException;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
@@ -161,6 +162,98 @@ public class SynchronizedBlocksImpl {
      *    检查全部下载完就开始从开始位置慢慢补充到主链
      *
      */
+    public CompletableFuture<SyncTaskRecord> SubmitDifference(long localHeight, long remoteHeight,byte[] localWork,byte[] remoteWork,byte[] localHash,byte[] remoteHash) {
+        List<ExternalNodeInfo> candidateNodes = kademliaNodeServer.getRoutingTable().findClosest();
+        log.info("提交差异：本地高度={}, 远程高度={}", localHeight, remoteHeight);
+        // 1. 验证差异有效性
+        if (remoteHeight <= localHeight) {
+            log.warn("远程高度({})不大于本地高度({})，无需同步", remoteHeight, localHeight);
+            return CompletableFuture.completedFuture(null);
+        }
+
+
+
+        long newTaskStart = localHeight + 1;
+        // 2. 检查并处理与已有任务的重叠
+        List<SyncTaskRecord> overlappingTasks = findOverlappingTasks(newTaskStart, remoteHeight);
+        // 计算需要修剪的起始高度（取所有重叠任务的最大结束高度 + 1）
+        long adjustedStart = newTaskStart;
+        if (!overlappingTasks.isEmpty()) {
+            long maxEndHeight = overlappingTasks.stream()
+                    .mapToLong(SyncTaskRecord::getTargetHeight)
+                    .max()
+                    .orElse(newTaskStart - 1);
+
+            adjustedStart = maxEndHeight + 1;
+            log.info("检测到与{}个任务重叠，调整新任务起始高度从{}到{}",
+                    overlappingTasks.size(), newTaskStart, adjustedStart);
+        }
+
+        // 如果调整后起始高度超过结束高度，说明无需创建新任务
+        if (adjustedStart > remoteHeight) {
+            log.info("新任务范围已被已有任务完全覆盖，无需创建新任务");
+            return CompletableFuture.completedFuture(null);
+        }
+
+        // 3. 筛选高评分节点（评分>40）
+        List<ExternalNodeInfo> validNodes = candidateNodes.stream()
+                .filter(node -> getNodeScore(node.getId()) > 40)
+                .sorted(Comparator.comparingInt(node -> -getNodeScore(node.getId()))) // 按评分降序
+                .toList();
+        if (validNodes.isEmpty()) {
+            log.error("无可用高评分节点，同步任务创建失败");
+            return CompletableFuture.failedFuture(new IllegalStateException("无可用同步节点"));
+        }
+
+        // 4. 创建修剪后的新任务
+        SyncTaskRecord task = createSyncProgresses(adjustedStart, remoteHeight, validNodes);
+        log.info("创建新同步任务：{}", task);
+        activeTasks.put(task.getTaskId(), task);
+        popStorage.saveSyncTaskRecord(task);
+        activeTasks.put(task.getTaskId(), task);
+        // 5. 检查并发限制，提交任务执行
+        if (activeTaskCount.get() >= MAX_CONCURRENT_TASKS) {
+            log.warn("达到最大并发任务数({})，任务[{}]进入等待队列", MAX_CONCURRENT_TASKS, task.getTaskId());
+        }
+        CompletableFuture<SyncTaskRecord> taskFuture = executeSyncTask(task).whenComplete((completedTask, ex) -> {
+            activeTaskCount.decrementAndGet();
+            if (ex != null) {
+                log.error("任务[{}]执行失败", task.getTaskId(), ex);
+                completedTask.setStatus(SyncStatus.FAILED);
+                completedTask.setErrorMsg(ex.getMessage());
+            } else {
+                log.info("任务[{}]执行完成", task.getTaskId());
+            }
+            // 持久化任务状态
+            popStorage.saveSyncTaskRecord(completedTask);
+        });
+        taskFutureMap.put(task.getTaskId(), taskFuture);
+        activeTaskCount.incrementAndGet();
+        return taskFuture;
+    }
+
+
+    /**
+     * 比较本地与远程节点的区块差异，并发起同步请求
+     */
+    private void compareAndSync(KademliaNodeServer nodeServer, NodeInfo remoteNode, long localHeight, byte[] localHash, long remoteHeight, byte[] remoteHash) throws ConnectException {
+        // 情况1：本地链落后于远程节点（需要同步远程的新区块）
+        if (localHeight < remoteHeight) {
+            log.info("本地链落后（本地高度:{}，远程高度:{}），开始同步", localHeight, remoteHeight);
+
+        }
+        // 情况2：本地链与远程链高度相同但哈希不同（存在分叉）
+        else if (localHeight == remoteHeight && !Arrays.equals(localHash, remoteHash)) {
+
+
+        }
+        // 情况3：本地链领先或一致（无需同步，或远程会主动请求）
+        else {
+            log.info("本地链状态正常（本地高度:{}，远程高度:{}），无需同步", localHeight, remoteHeight);
+        }
+    }
+
+
     public CompletableFuture<SyncTaskRecord> SubmitDifference(long localHeight, long remoteHeight) {
         List<ExternalNodeInfo> candidateNodes = kademliaNodeServer.getRoutingTable().findClosest();
         log.info("提交差异：本地高度={}, 远程高度={}", localHeight, remoteHeight);
