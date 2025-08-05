@@ -252,66 +252,6 @@ public class SynchronizedBlocksImpl {
     }
 
 
-    /**
-     * 高效查找本地链与远程链的分叉点高度
-     * 采用二分查找法，时间复杂度优化为O(log n)
-     * @param remoteNode 远程节点信息
-     * @param maxCommonHeight 理论上的最大共同高度（取本地和远程高度的最小值）
-     * @return 分叉点高度（-1表示无共同历史）
-     */
-    private long findForkHeight(NodeInfo remoteNode, long maxCommonHeight) {
-        RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
-        BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
-        // 边界校验：若最大共同高度为负数，直接返回无共同历史
-        if (maxCommonHeight < 0) {
-            return -1;
-        }
-
-        long low = 0;
-        long high = maxCommonHeight;
-        long forkHeight = -1;  // 初始化分叉点为无共同历史
-
-        // 缓存已查询的哈希，避免重复网络请求或本地查询
-        Map<Long, byte[]> localHashCache = new HashMap<>();
-        Map<Long, byte[]> remoteHashCache = new HashMap<>();
-
-        try {
-            // 二分查找主逻辑
-            while (low <= high) {
-                // 计算中间高度（避免溢出）
-                long mid = low + (high - low) / 2;
-
-                // 获取本地区块哈希（优先从缓存获取）
-                byte[] localHash = localHashCache.get(mid);
-                if (localHash == null) {
-                    localHash = localBlockChainService.getBlockHash(mid);
-                    localHashCache.put(mid, localHash);
-                }
-
-                // 获取远程区块哈希（优先从缓存获取）
-                byte[] remoteHash = remoteHashCache.get(mid);
-                if (remoteHash == null) {
-                    remoteHash = remoteService.getBlockHash(mid);
-                    remoteHashCache.put(mid, remoteHash);
-                }
-
-                // 哈希相同：说明此高度及以下可能存在共同历史，尝试查找更高的共同高度
-                if (Arrays.equals(localHash, remoteHash)) {
-                    forkHeight = mid;  // 临时记录当前共同高度
-                    low = mid + 1;    // 向更高高度查找
-                } else {
-                    // 哈希不同：分叉点在更低高度，缩小上边界
-                    high = mid - 1;
-                }
-            }
-        } catch (Exception e) {
-            log.error("分叉点检测失败，最大共同高度:{}", maxCommonHeight, e);
-            // 异常情况下尝试返回已找到的临时分叉点（可能不准确，但避免完全失败）
-            return forkHeight != -1 ? forkHeight : -1;
-        }
-
-        return forkHeight;
-    }
 
     /**
      * 进一步优化：批量查询哈希（适用于支持批量接口的场景）
@@ -333,7 +273,7 @@ public class SynchronizedBlocksImpl {
             long mid = low + (high - low) / 2;
 
             try {
-                // 批量获取一段高度范围的哈希（如mid-1, mid, mid+1）
+                // 批量获取一段高度范围的哈希（如mid, low, high）
                 // 减少单次网络请求的开销，尤其适用于远程节点查询
                 List<Long> heightsToCheck = Arrays.asList(mid, low, high);
                 Map<Long, byte[]> localHashes = localBlockChainService.getBlockHashes(heightsToCheck);
@@ -344,19 +284,19 @@ public class SynchronizedBlocksImpl {
 
                 if (Arrays.equals(localHash, remoteHash)) {
                     forkHeight = mid;
-                    low = mid + 1;
+                    low = mid + 1; // 找到匹配点，尝试更高高度
                 } else {
-                    high = mid - 1;
+                    high = mid - 1; // 不匹配，尝试更低高度
                 }
             } catch (Exception e) {
                 log.error("批量查询哈希失败，中间高度:{}", mid, e);
                 high = mid - 1;  // 出错时缩小范围，避免死循环
             }
         }
-
-        return forkHeight;
+        // 确保创世区块（高度0）作为最小分叉点
+        // 如果未找到任何分叉点且maxCommonHeight >=0，则返回0
+        return forkHeight == -1 && maxCommonHeight >= 0 ? 0 : forkHeight;
     }
-
 
     private void startSyncFromRemote(NodeInfo remoteNode, long startHeight) {
         // 从远程节点同步链的实现
@@ -1393,4 +1333,67 @@ public class SynchronizedBlocksImpl {
         detectExecutor.shutdown();
         syncExecutor.shutdown();
     }
+
+
+    /**
+     * 高效查找本地链与远程链的分叉点高度
+     * 采用二分查找法，时间复杂度优化为O(log n)
+     * @param remoteNode 远程节点信息
+     * @param maxCommonHeight 理论上的最大共同高度（取本地和远程高度的最小值）
+     * @return 分叉点高度（-1表示无共同历史）
+     */
+    private long findForkHeight(NodeInfo remoteNode, long maxCommonHeight) {
+        RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
+        BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
+        // 边界校验：若最大共同高度为负数，直接返回无共同历史
+        if (maxCommonHeight < 0) {
+            return -1;
+        }
+
+        long low = 0;
+        long high = maxCommonHeight;
+        long forkHeight = -1;  // 初始化分叉点为无共同历史
+
+        // 缓存已查询的哈希，避免重复网络请求或本地查询
+        Map<Long, byte[]> localHashCache = new HashMap<>();
+        Map<Long, byte[]> remoteHashCache = new HashMap<>();
+
+        try {
+            // 二分查找主逻辑
+            while (low <= high) {
+                // 计算中间高度（避免溢出）
+                long mid = low + (high - low) / 2;
+
+                // 获取本地区块哈希（优先从缓存获取）
+                byte[] localHash = localHashCache.get(mid);
+                if (localHash == null) {
+                    localHash = localBlockChainService.getBlockHash(mid);
+                    localHashCache.put(mid, localHash);
+                }
+
+                // 获取远程区块哈希（优先从缓存获取）
+                byte[] remoteHash = remoteHashCache.get(mid);
+                if (remoteHash == null) {
+                    remoteHash = remoteService.getBlockHash(mid);
+                    remoteHashCache.put(mid, remoteHash);
+                }
+
+                // 哈希相同：说明此高度及以下可能存在共同历史，尝试查找更高的共同高度
+                if (Arrays.equals(localHash, remoteHash)) {
+                    forkHeight = mid;  // 临时记录当前共同高度
+                    low = mid + 1;    // 向更高高度查找
+                } else {
+                    // 哈希不同：分叉点在更低高度，缩小上边界
+                    high = mid - 1;
+                }
+            }
+        } catch (Exception e) {
+            log.error("分叉点检测失败，最大共同高度:{}", maxCommonHeight, e);
+            // 异常情况下尝试返回已找到的临时分叉点（可能不准确，但避免完全失败）
+            return forkHeight != -1 ? forkHeight : -1;
+        }
+
+        return forkHeight;
+    }
+
 }
