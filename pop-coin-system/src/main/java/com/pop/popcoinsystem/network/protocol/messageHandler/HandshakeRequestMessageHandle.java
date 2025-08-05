@@ -11,6 +11,7 @@ import com.pop.popcoinsystem.network.protocol.messageData.Handshake;
 import com.pop.popcoinsystem.service.blockChain.BlockChainServiceImpl;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
+import com.pop.popcoinsystem.util.DifficultyUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 
@@ -56,6 +57,13 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
         byte[] localLatestHash  = block.getHash();
         long localLatestHeight  = blockChainService.getMainLatestHeight();
         byte[] localChainWork = block.getChainWork();
+
+        log.info("本地高度:{}",localLatestHash);
+        log.info("远程高度:{}",remoteLatestHeight);
+        log.info("本地工作总量:{}",localChainWork);
+        log.info("远程工作总量:{}",remoteChainWork);
+        log.info("本地和远程比较 工作量比较:{}", DifficultyUtils.compare(localChainWork,remoteChainWork));
+
 
 
         // 3. 比较差异并发起同步
