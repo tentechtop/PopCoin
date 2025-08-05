@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.math.BigInteger;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
+import java.net.SocketException;
 import java.util.Map;
 import java.util.concurrent.*;
 
@@ -34,6 +35,9 @@ public class TCPClient {
     // 用于在Channel中存储节点ID的属性键
     private static final AttributeKey<BigInteger> NODE_ID_KEY = AttributeKey.valueOf("NODE_ID");
     public static final int DEFAULT_CONNECT_TIMEOUT = 30000; // 30秒，与Netty默认保持一致
+    private static final int MAX_RETRY_COUNT = 3; // 连接重试次数
+    private static final long RETRY_DELAY_BASE = 100; // 重试基础延迟(ms)
+
 
     public TCPClient(RequestResponseManager requestResponseManager) {
         executorService = Executors.newFixedThreadPool(10);
@@ -74,31 +78,23 @@ public class TCPClient {
         if (message == null || message.getReceiver() == null) {
             throw new IllegalArgumentException("消息或接收者不能为空");
         }
-        //请求ID已经在消息创建阶段设置
-        long requestId = message.getRequestId();
 
         BigInteger nodeId = message.getReceiver().getId();
         Channel channel = getOrCreateChannel(message.getReceiver());
-        if (channel == null || !channel.isActive()) {
+        if (channel == null || !isChannelValid(channel)) {
             throw new ConnectException("节点 " + nodeId + " 无可用连接");
         }
 
-        // 标记为请求消息（非响应）
         message.setResponse(false);
-        // 发送请求并获取Promise（内部异步处理）
         Promise<KademliaMessage> promise = responseManager.sendRequest(channel, message, timeout, unit);
         try {
-            // 阻塞等待结果
             if (!promise.await(timeout, unit)) {
-                // 超时：主动取消并抛出超时异常
                 promise.cancel(false);
                 throw new TimeoutException("等待节点 " + nodeId + " 响应超时（" + timeout +" "+ unit + "）");
             }
-            // 检查结果状态
             if (promise.isSuccess()) {
                 return promise.getNow();
             } else {
-                // 失败：抛出具体异常
                 Throwable cause = promise.cause();
                 if (cause instanceof Exception) {
                     throw (Exception) cause;
@@ -107,7 +103,6 @@ public class TCPClient {
                 }
             }
         } finally {
-            // 清理：如果消息处理完成，从管理器中移除
             if (promise.isDone()) {
                 responseManager.clearRequest(message.getRequestId());
             }
@@ -115,15 +110,14 @@ public class TCPClient {
     }
 
 
-    public  void sendMessage(KademliaMessage message) throws InterruptedException, ConnectException {
+    public void sendMessage(KademliaMessage message) throws InterruptedException, ConnectException {
         try {
             if (message == null || message.getReceiver() == null) {
                 throw new IllegalArgumentException("Message or receiver cannot be null");
             }
             BigInteger nodeId = message.getReceiver().getId();
             Channel channel = getOrCreateChannel(message.getReceiver());
-            if (channel != null && channel.isActive()) {
-                // 发送消息并添加监听处理发送结果
+            if (channel != null && isChannelValid(channel)) {
                 channel.writeAndFlush(message).addListener((ChannelFutureListener) future -> {
                     if (!future.isSuccess()) {
                         log.error("Failed to send message to node {}: {}", nodeId, future.cause().getMessage());
@@ -133,7 +127,7 @@ public class TCPClient {
             } else {
                 throw new ConnectException("No active channel available for node: " + nodeId);
             }
-        }catch (Exception e){
+        } catch (Exception e) {
             log.error("Failed to send message: {}", e.getMessage());
         }
     }
@@ -143,40 +137,75 @@ public class TCPClient {
     /**
      * 处理消息发送失败的情况
      */
+    /**
+     * 处理发送失败，增加智能重试策略
+     */
     private void handleSendFailure(BigInteger nodeId, KademliaMessage message, Throwable cause) {
-        try {
-            // 移除失效通道并尝试重新连接
-            nodeTCPChannel.remove(nodeId);
-            Channel newChannel = connectTarget(
-                    message.getReceiver().getIpv4(),
-                    message.getReceiver().getTcpPort(),
-                    nodeId
-            );
-            nodeTCPChannel.put(nodeId, newChannel);
-            newChannel.writeAndFlush(message);
-            log.info("Reconnected and resent message to node {}", nodeId);
-        } catch (Exception e) {
-            log.error("Failed to reconnect and resend message to node {}", nodeId, e);
+        // 只处理可恢复的错误（如连接重置、超时等）
+        if (!(cause instanceof SocketException) && !(cause instanceof ConnectException)) {
+            log.warn("Unrecoverable error for node {}, no retry", nodeId, cause);
+            return;
         }
+
+        executorService.submit(() -> {
+            try {
+                // 强制关闭旧通道并清理
+                Channel oldChannel = nodeTCPChannel.remove(nodeId);
+                if (oldChannel != null) {
+                    log.info("Closing faulty channel for node {}", nodeId);
+                    oldChannel.close().syncUninterruptibly(); // 同步关闭确保资源释放
+                }
+
+                // 带重试机制重建连接
+                NodeInfo receiver = message.getReceiver();
+                Channel newChannel = connectWithRetry(
+                        receiver.getIpv4(),
+                        receiver.getTcpPort(),
+                        nodeId
+                );
+                if (newChannel != null) {
+                    nodeTCPChannel.put(nodeId, newChannel);
+                    newChannel.writeAndFlush(message).addListener((ChannelFutureListener) f -> {
+                        if (f.isSuccess()) {
+                            log.info("Resent message to node {} after failure", nodeId);
+                        } else {
+                            log.error("Final retry failed for node {}", nodeId, f.cause());
+                            nodeTCPChannel.remove(nodeId);
+                        }
+                    });
+                }
+            } catch (Exception e) {
+                log.error("Failed to recover connection for node {}", nodeId, e);
+            }
+        });
     }
 
 
     /**
-     * 获取已存在的通道或创建新通道（原子操作避免竞态条件）
+     * 获取或创建通道，增强原子性和资源清理
      */
     private Channel getOrCreateChannel(NodeInfo receiver) throws InterruptedException, ConnectException {
         BigInteger nodeId = receiver.getId();
-        // 检查现有通道是否活跃
         Channel existingChannel = nodeTCPChannel.get(nodeId);
-        if (existingChannel != null && existingChannel.isActive()) {
-            return existingChannel;
+
+        // 检查现有通道是否有效
+        if (existingChannel != null) {
+            if (isChannelValid(existingChannel)) {
+                return existingChannel;
+            } else {
+                // 无效通道立即清理
+                log.info("Cleaning invalid channel for node {}", nodeId);
+                nodeTCPChannel.remove(nodeId);
+                existingChannel.close().syncUninterruptibly(); // 同步关闭
+            }
         }
-        // 使用computeIfAbsent确保原子操作，避免重复连接
+
+        // 原子操作创建新通道，避免并发重复连接
         return nodeTCPChannel.computeIfAbsent(nodeId, key -> {
             try {
-                return connectTarget(receiver.getIpv4(), receiver.getTcpPort(), nodeId);
+                return connectWithRetry(receiver.getIpv4(), receiver.getTcpPort(), nodeId);
             } catch (InterruptedException e) {
-                Thread.currentThread().interrupt(); // 恢复中断状态
+                Thread.currentThread().interrupt();
                 throw new RuntimeException("Interrupted while connecting to node: " + nodeId, e);
             } catch (ConnectException e) {
                 throw new RuntimeException("Failed to connect to node: " + nodeId, e);
@@ -184,38 +213,93 @@ public class TCPClient {
         });
     }
 
-    /**
-     * 连接目标节点并返回通道
-     */
-    private Channel connectTarget(String ipv4, int tcpPort, BigInteger nodeId) throws InterruptedException, ConnectException {
-        InetSocketAddress address = new InetSocketAddress(ipv4, tcpPort);
-        log.info("Trying to connect to {}:{} (node {})", ipv4, tcpPort, nodeId);
-        ChannelFuture connectFuture = bootstrap.connect(address);
 
+
+    /**
+     * 带重试机制的连接方法
+     */
+    private Channel connectWithRetry(String ipv4, int tcpPort, BigInteger nodeId)
+            throws InterruptedException, ConnectException {
+        InetSocketAddress address = new InetSocketAddress(ipv4, tcpPort);
+        ConnectException lastException = null;
+
+        for (int retry = 0; retry < MAX_RETRY_COUNT; retry++) {
+            try {
+                return connectTarget(ipv4, tcpPort, nodeId);
+            } catch (ConnectException e) {
+                lastException = e;
+                // 只对特定错误重试（如地址占用、连接超时）
+                if (isRetryableError(e)) {
+                    long delay = RETRY_DELAY_BASE * (1 << retry); // 指数退避
+                    log.warn("Connection attempt {} failed for node {}, retrying in {}ms",
+                            retry + 1, nodeId, delay, e);
+                    Thread.sleep(delay);
+                } else {
+                    // 非重试错误直接抛出
+                    break;
+                }
+            }
+        }
+
+        throw new ConnectException("Failed to connect to " + address + " after " +
+                MAX_RETRY_COUNT + " retries: " + lastException.getMessage());
+    }
+
+    /**
+     * 实际连接目标节点
+     */
+    private Channel connectTarget(String ipv4, int tcpPort, BigInteger nodeId)
+            throws InterruptedException, ConnectException {
+        InetSocketAddress address = new InetSocketAddress(ipv4, tcpPort);
+        log.info("Connecting to {}:{} (node {})", ipv4, tcpPort, nodeId);
+
+        ChannelFuture connectFuture = bootstrap.connect(address);
         Integer connectTimeout = (Integer) bootstrap.config().options().get(ChannelOption.CONNECT_TIMEOUT_MILLIS);
         int timeoutMillis = (connectTimeout != null) ? connectTimeout : DEFAULT_CONNECT_TIMEOUT;
-        // 等待连接完成，受CONNECT_TIMEOUT_MILLIS限制
+
         if (!connectFuture.await(timeoutMillis, TimeUnit.MILLISECONDS)) {
-            throw new ConnectException("Connection to " + ipv4 + ":" + tcpPort + " timed out after " + timeoutMillis + "ms");
+            throw new ConnectException("Connection to " + address + " timed out after " + timeoutMillis + "ms");
         }
 
         if (!connectFuture.isSuccess()) {
-            String errorMsg = "Failed to connect to " + ipv4 + ":" + tcpPort;
+            String errorMsg = "Failed to connect to " + address;
             log.error(errorMsg, connectFuture.cause());
             throw new ConnectException(errorMsg + ": " + connectFuture.cause().getMessage());
         }
+
         Channel channel = connectFuture.channel();
-        // 存储节点ID与通道的关联，用于后续清理
         channel.attr(NODE_ID_KEY).set(nodeId);
-        log.info("成功连接到节点 Successfully connected to {}:{} (node {})", ipv4, tcpPort, nodeId);
-        // 非阻塞监听通道关闭事件
-        channel.closeFuture().addListener(future -> {
+        log.info("Successfully connected to {}:{} (node {})", ipv4, tcpPort, nodeId);
+
+        // 监听通道关闭，确保映射表同步清理
+        channel.closeFuture().addListener((ChannelFutureListener) future -> {
             log.info("Channel to node {} closed", nodeId);
             nodeTCPChannel.remove(nodeId);
         });
+
         return channel;
     }
 
+
+
+
+    /**
+     * 检查通道是否有效（TCP需同时满足活跃和可写）
+     */
+    private boolean isChannelValid(Channel channel) {
+        return channel.isOpen() && channel.isActive() && channel.isWritable();
+    }
+
+    /**
+     * 判断错误是否可重试
+     */
+    private boolean isRetryableError(ConnectException e) {
+        String message = e.getMessage();
+        return message.contains("Address already in use") ||
+                message.contains("timed out") ||
+                message.contains("Connection refused") ||
+                message.contains("reset by peer");
+    }
 
     public void sendAsyncMessage(KademliaMessage message) {
         executorService.submit(() -> {
@@ -229,24 +313,32 @@ public class TCPClient {
 
 
     /**
-     * 优雅关闭所有资源
+     * 优雅关闭所有资源，确保端口和连接释放
      */
     @PreDestroy
     public void stop() {
         log.info("Stopping TCPClient...");
-        // 关闭所有活跃通道
-        nodeTCPChannel.values().forEach(channel -> {
-            if (channel.isActive()) {
-                channel.close().addListener(future ->
-                        log.info("Channel closed: {}", channel.remoteAddress())
-                );
+
+        // 同步关闭所有通道
+        for (Map.Entry<BigInteger, Channel> entry : nodeTCPChannel.entrySet()) {
+            Channel channel = entry.getValue();
+            if (channel.isOpen()) {
+                try {
+                    log.info("Closing channel to node {}", entry.getKey());
+                    channel.close().sync(); // 同步等待关闭完成
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.error("Interrupted while closing channel to node {}", entry.getKey(), e);
+                }
             }
-        });
+        }
+
         // 关闭EventLoopGroup
         if (eventLoopGroup != null) {
             eventLoopGroup.shutdownGracefully(1, 5, TimeUnit.SECONDS)
-                    .addListener(future -> log.info("EventLoopGroup has been shut down"));
+                    .addListener(future -> log.info("TCP EventLoopGroup shut down"));
         }
+
         // 关闭线程池
         if (executorService != null) {
             executorService.shutdown();
@@ -257,10 +349,9 @@ public class TCPClient {
             } catch (InterruptedException e) {
                 executorService.shutdownNow();
             }
-            log.info("ExecutorService has been shut down");
+            log.info("TCP executor service shut down");
         }
 
-        // 清空映射表
         nodeTCPChannel.clear();
     }
 

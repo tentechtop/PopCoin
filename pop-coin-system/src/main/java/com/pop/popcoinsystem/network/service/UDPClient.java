@@ -152,10 +152,11 @@ public class UDPClient {
      */
     private void handleSendFailure(BigInteger nodeId, InetSocketAddress targetAddr, KademliaMessage message) {
         try {
-            // 移除无效通道
+            // 移除并关闭旧通道（同步等待关闭完成，确保端口释放）
             Channel oldChannel = nodeUDPChannel.remove(nodeId);
             if (oldChannel != null && oldChannel.isOpen()) {
-                oldChannel.close();
+                log.info("Closing invalid UDP channel for node {}", nodeId);
+                oldChannel.close().sync(); // 同步关闭，确保端口释放
             }
             // 重建通道并重发
             Channel newChannel = createAndConnectChannel(nodeId, targetAddr);
@@ -179,21 +180,30 @@ public class UDPClient {
     private Channel getOrCreateChannel(BigInteger nodeId, InetSocketAddress targetAddr) throws InterruptedException, ConnectException {
         // 检查现有通道是否有效
         Channel existingChannel = nodeUDPChannel.get(nodeId);
-        if (existingChannel != null && existingChannel.isOpen() && isChannelConnectedTo(existingChannel, targetAddr)) {
-            return existingChannel;
+        if (existingChannel != null) {
+            if (existingChannel.isOpen() && isChannelConnectedTo(existingChannel, targetAddr)) {
+                return existingChannel;
+            } else {
+                // 无效通道立即关闭并清理（同步等待）
+                log.info("Cleaning up invalid UDP channel for node {}", nodeId);
+                nodeUDPChannel.remove(nodeId);
+                if (existingChannel.isOpen()) {
+                    existingChannel.close().sync(); // 确保端口释放
+                }
+            }
         }
-        // 原子操作创建新通道（避免并发重复创建）
+
+        // 原子操作创建新通道
         return nodeUDPChannel.computeIfAbsent(nodeId, key -> {
             try {
                 return createAndConnectChannel(nodeId, targetAddr);
             } catch (InterruptedException e) {
-                Thread.currentThread().interrupt(); // 恢复中断状态
+                Thread.currentThread().interrupt();
                 throw new RuntimeException("Interrupted while creating UDP channel for node: " + nodeId, e);
             } catch (ConnectException e) {
                 throw new RuntimeException("Failed to create UDP channel for node: " + nodeId, e);
             }
         });
-
     }
 
 
@@ -202,38 +212,58 @@ public class UDPClient {
      */
     private Channel createAndConnectChannel(BigInteger nodeId, InetSocketAddress targetAddr) throws InterruptedException, ConnectException {
         log.info("Creating UDP channel to {} (node {})", targetAddr, nodeId);
+        int maxRetries = 3; // 最大重试次数
+        long retryDelayMs = 100; // 初始重试延迟
 
-        // 绑定本地临时端口（UDP客户端通常不需要固定本地端口）
-        ChannelFuture bindFuture = bootstrap.bind(0); // 0表示随机端口
-        if (!bindFuture.await(DEFAULT_OPERATION_TIMEOUT, TimeUnit.MILLISECONDS)) {
-            throw new ConnectException("UDP bind timed out for node: " + nodeId);
-        }
-        if (!bindFuture.isSuccess()) {
-            throw new ConnectException("UDP bind failed: " + bindFuture.cause().getMessage());
+        for (int retry = 0; retry < maxRetries; retry++) {
+            try {
+                // 绑定本地临时端口（0表示随机分配）
+                ChannelFuture bindFuture = bootstrap.bind(0);
+                if (!bindFuture.await(DEFAULT_OPERATION_TIMEOUT, TimeUnit.MILLISECONDS)) {
+                    throw new ConnectException("UDP bind timed out for node: " + nodeId);
+                }
+                if (!bindFuture.isSuccess()) {
+                    // 提取底层异常判断是否为端口占用
+                    Throwable cause = bindFuture.cause();
+                    if (cause instanceof java.net.BindException && cause.getMessage().contains("Address already in use")
+                            && retry < maxRetries - 1) {
+                        // 端口占用且未达最大重试次数，等待后重试
+                        log.warn("Port busy, retrying bind for node {} (retry {})", nodeId, retry + 1);
+                        Thread.sleep(retryDelayMs * (retry + 1)); // 指数退避
+                        continue;
+                    }
+                    throw new ConnectException("UDP bind failed: " + cause.getMessage());
+                }
+
+                Channel channel = bindFuture.channel();
+                // 绑定默认目标地址（UDP的connect仅设置默认目标）
+                ChannelFuture connectFuture = channel.connect(targetAddr);
+                if (!connectFuture.await(DEFAULT_OPERATION_TIMEOUT, TimeUnit.MILLISECONDS)) {
+                    channel.close().sync(); // 确保绑定的端口被释放
+                    throw new ConnectException("UDP connect timed out (node " + nodeId + ")");
+                }
+                if (!connectFuture.isSuccess()) {
+                    channel.close().sync(); // 释放端口
+                    throw new ConnectException("UDP connect failed: " + connectFuture.cause().getMessage());
+                }
+
+                // 存储节点ID与通道关联
+                channel.attr(NODE_ID_KEY).set(nodeId);
+                // 通道关闭时清理映射（同步等待关闭完成）
+                channel.closeFuture().addListener((ChannelFutureListener) future -> {
+                    log.info("UDP channel to node {} closed", nodeId);
+                    nodeUDPChannel.remove(nodeId);
+                });
+
+                log.info("UDP channel created for node {} (target: {})", nodeId, targetAddr);
+                return channel;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw e;
+            }
         }
 
-        Channel channel = bindFuture.channel();
-        // 为UDP通道设置默认目标地址（类似TCP的connect，简化发送逻辑）
-        ChannelFuture connectFuture = channel.connect(targetAddr);
-        if (!connectFuture.await(DEFAULT_OPERATION_TIMEOUT, TimeUnit.MILLISECONDS)) {
-            channel.close(); // 绑定成功但连接超时，需要关闭通道
-            throw new ConnectException("UDP connect to " + targetAddr + " timed out (node " + nodeId + ")");
-        }
-        if (!connectFuture.isSuccess()) {
-            channel.close(); // 连接失败，关闭通道
-            throw new ConnectException("UDP connect failed: " + connectFuture.cause().getMessage());
-        }
-
-        // 存储节点ID与通道的关联
-        channel.attr(NODE_ID_KEY).set(nodeId);
-        // 监听通道关闭事件，自动清理映射
-        channel.closeFuture().addListener(future -> {
-            log.info("UDP channel to node {} closed", nodeId);
-            nodeUDPChannel.remove(nodeId);
-        });
-
-        log.info("UDP channel created for node {} (target: {})", nodeId, targetAddr);
-        return channel;
+        throw new ConnectException("Failed to bind UDP port after " + maxRetries + " retries (node " + nodeId + ")");
     }
 
 
@@ -269,16 +299,20 @@ public class UDPClient {
     public void stop() {
         log.info("Stopping UDPClient...");
 
-        // 关闭所有活跃通道
-        nodeUDPChannel.values().forEach(channel -> {
+        // 关闭所有活跃通道（同步等待）
+        for (Channel channel : nodeUDPChannel.values()) {
             if (channel.isOpen()) {
-                channel.close().addListener(future ->
-                        log.info("UDP channel closed: {}", channel.remoteAddress())
-                );
+                try {
+                    channel.close().sync(); // 同步关闭，确保端口释放
+                    log.info("UDP channel closed: {}", channel.remoteAddress());
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.error("Interrupted while closing UDP channel", e);
+                }
             }
-        });
+        }
 
-        // 关闭EventLoopGroup（优雅退出IO线程）
+        // 关闭EventLoopGroup
         eventLoopGroup.shutdownGracefully(1, 5, TimeUnit.SECONDS)
                 .addListener(future -> log.info("UDP EventLoopGroup shut down"));
 
@@ -293,10 +327,8 @@ public class UDPClient {
         }
         log.info("UDP executor service shut down");
 
-        // 清空映射表
         nodeUDPChannel.clear();
     }
-
 
     public RequestResponseManager getResponseManager() {
         return responseManager;
