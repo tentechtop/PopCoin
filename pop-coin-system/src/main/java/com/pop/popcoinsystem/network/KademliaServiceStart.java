@@ -133,20 +133,24 @@ public class KademliaServiceStart {
                 kademliaNodeServer.setRpcServiceRegistry(registry);
                 kademliaNodeServer.start();  // 启动服务器
 
-                // 连接所有引导节点（从配置文件读取）
-                log.info("正在连接引导节点......:{}",bootstrap);
-                if (bootstrap != null && !bootstrap.isEmpty()) {
-                    for (BootstrapNode bootstrapNode : bootstrap) {
-                        NodeInfo nodeInfo = NodeInfo.builder()
-                                .id(bootstrapNode.getNodeId())
-                                .ipv4(bootstrapNode.getIp())
-                                .tcpPort(bootstrapNode.getTcpPort())
-                                .udpPort(bootstrapNode.getUdpPort())
-                                .build();
-                        kademliaNodeServer.connectToBootstrapNodes(nodeInfo); // 假设存在单个节点连接方法
+
+                try {
+                    log.info("正在连接引导节点......:{}",bootstrap);
+                    if (bootstrap != null && !bootstrap.isEmpty()) {
+                        for (BootstrapNode bootstrapNode : bootstrap) {
+                            NodeInfo nodeInfo = NodeInfo.builder()
+                                    .id(bootstrapNode.getNodeId())
+                                    .ipv4(bootstrapNode.getIp())
+                                    .tcpPort(bootstrapNode.getTcpPort())
+                                    .udpPort(bootstrapNode.getUdpPort())
+                                    .build();
+                            kademliaNodeServer.connectToBootstrapNodes(nodeInfo); // 假设存在单个节点连接方法
+                        }
+                    } else {
+                        log.warn("未配置任何引导节点");
                     }
-                } else {
-                    log.warn("未配置任何引导节点");
+                }catch (Exception e){
+                    log.error("引导节点连接失败:{}", e.getMessage());
                 }
             } catch (Exception e) {
                 log.error("节点启动失败", e);  // 使用log代替e.printStackTrace()

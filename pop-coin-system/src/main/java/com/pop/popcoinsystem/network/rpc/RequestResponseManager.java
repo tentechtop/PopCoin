@@ -44,7 +44,7 @@ public class RequestResponseManager {
             // 超时：移除请求并标记失败
             RequestContext context = pendingRequests.remove(requestId);
             if (context != null && !promise.isDone()) {
-                promise.setFailure(new TimeoutException("Request (id=" + requestId + ") timeout after " + timeout + unit));
+                promise.setFailure(new TimeoutException("Request (id=" + requestId + ") timeout after " + timeout +" " + unit));
             }
         }, timeout, unit);
 
