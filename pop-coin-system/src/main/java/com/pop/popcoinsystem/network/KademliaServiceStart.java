@@ -112,8 +112,9 @@ public class KademliaServiceStart {
         externalNodeInfo.setTcpPort(nodeSetting.getTcpPort());
         externalNodeInfo.setUdpPort(nodeSetting.getUdpPort());
         externalNodeInfo.setNodeType(nodeSetting.getNodeType());
-
         server.setExternalNodeInfo(externalNodeInfo);
+        storageService.addOrUpdateRouteTableNode(externalNodeInfo);
+        log.info("保存自己:{}", externalNodeInfo);
         server.setNodeSettings(NodeSettings.Default.build());
         server.init();
         return server;
