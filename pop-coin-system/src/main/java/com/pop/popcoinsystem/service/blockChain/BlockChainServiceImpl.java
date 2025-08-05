@@ -588,7 +588,7 @@ public class BlockChainServiceImpl implements BlockChainService {
                     } else {
                         log.warn("父区块同步失败，哈希：{}，将在后续区块同步中重试", CryptoUtil.bytesToHex(parentHash));
                     }
-                }, blockSynchronizer.syncExecutor) // 使用已有的同步线程池，避免创建新线程
+                }, blockSynchronizer.getDetectExecutor()) // 使用已有的同步线程池，避免创建新线程
                 .exceptionally(e -> {
                     log.error("父区块同步任务异常，哈希：{}", CryptoUtil.bytesToHex(parentHash), e);
                     return null;
@@ -683,7 +683,7 @@ public class BlockChainServiceImpl implements BlockChainService {
             CompletableFuture<Block> blockFuture = new CompletableFuture<>();
             for (NodeInfo node : candidateNodes) {
                 try {
-                    blockSynchronizer.syncExecutor.submit(() -> {
+                    blockSynchronizer.getDownloadExecutor().submit(() -> {
                         try {
                             RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, node);
                             proxyFactory.setTimeout(RPC_TIMEOUT);

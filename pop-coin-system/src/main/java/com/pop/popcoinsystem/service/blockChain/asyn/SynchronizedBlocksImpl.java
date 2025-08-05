@@ -22,6 +22,7 @@ import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.DifficultyUtils;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,6 +31,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
+import java.lang.management.ManagementFactory;
 import java.math.BigInteger;
 import java.net.ConnectException;
 import java.time.LocalDateTime;
@@ -43,7 +45,7 @@ import static com.pop.popcoinsystem.constant.BlockChainConstants.RPC_TIMEOUT;
 import static com.pop.popcoinsystem.data.block.Block.validateBlockHeaderPoW;
 
 
-
+@Data
 @Slf4j
 @Component
 public class SynchronizedBlocksImpl implements ApplicationRunner {
@@ -68,6 +70,9 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
     private int detectConcurrency; // 节点探测的最大并发数
     @Value("${system.blockchain.sync.rpc-timeout-ms:3000}")
     private int rpcTimeoutMs; // 远程调用超时时间
+
+
+
 
     // 新增：高度到节点ID的映射（记录每个高度由哪个节点同步）
     // 键：区块高度，值：负责该高度的节点ID
@@ -98,26 +103,31 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
 
     private final Map<String, SyncTaskRecord> activeTasks = new ConcurrentHashMap<>();
     Map<String, CompletableFuture<SyncTaskRecord>> taskFutureMap = new ConcurrentHashMap<>();
-    private ScheduledExecutorService scheduler; // 合并为一个调度器，减少线程资源占用
-    private ExecutorService detectExecutor; // 用于并发探测节点的线程池
+
+
+
+
+
+
+    // 1. 下载线程池（处理区块头/RPC下载，IO密集）
+    private  ThreadPoolExecutor downloadExecutor;
+
+    // 2. 处理线程池（验证+存储区块头，IO密集）
+    private  ThreadPoolExecutor processExecutor;
+
+    // 3. 合并线程池（合并区块到主链，混合密集）
+    private  ThreadPoolExecutor mergeExecutor;
+
+    // 4. 探测线程池（节点健康检测，轻量IO密集）
+    private  ThreadPoolExecutor detectExecutor;
+
+    // 5. 调度器（单线程，负责定时任务）
+    private ScheduledExecutorService scheduler;
+
+
 
     // 同步中标记（避免并发冲突）
     private volatile boolean isSyncing = false;
-
-    // 线程池优化：限制最大线程数，避免资源耗尽
-    public final ExecutorService syncExecutor = new ThreadPoolExecutor(
-            Runtime.getRuntime().availableProcessors() * 2,
-            200,
-            60L, TimeUnit.SECONDS,
-            new SynchronousQueue<>(),
-            runnable -> {
-                Thread thread = new Thread(runnable);
-                thread.setName("block-sync-worker");
-                thread.setDaemon(true);
-                return thread;
-            },
-            new ThreadPoolExecutor.CallerRunsPolicy() // 队列满时让提交者执行，避免任务丢失 new ThreadPoolExecutor.AbortPolicy() // 任务满时拒绝，避免OOM
-    );
 
 
     @Override
@@ -136,25 +146,185 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
         List<ExternalNodeInfo> nodes = kademliaNodeServer.getRoutingTable().getAllNodes();
         nodes.forEach(node -> nodeScores.putIfAbsent(node.getId(), DEFAULT_NODE_SCORE));
 
+        initThreadPool();
 
         scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread thread = new Thread(r, "block-sync-scheduler");
             thread.setDaemon(true); // 守护线程，随应用退出
             return thread;
         });
-        // 初始化节点探测线程池
+
+
+        // 启动线程池监控（每30秒输出状态）
+        scheduler.scheduleAtFixedRate(this::logThreadPoolStatus, 0, 30, TimeUnit.SECONDS);
+
+
+        // 启动线程池动态调整（每60秒检查一次）
+        scheduler.scheduleAtFixedRate(this::adjustThreadPools, 60, 60, TimeUnit.SECONDS);
+
+
+        // 启动快速同步任务
+        scheduler.scheduleAtFixedRate(
+                this::detectAndSync, 0, fastSyncInterval, TimeUnit.SECONDS);
+
+        // 添加任务队列监控，当队列积压过多时发出警告
+        scheduler.scheduleAtFixedRate(this::monitorTaskQueues, 10, 10, TimeUnit.SECONDS);
+    }
+
+    // 监控任务队列，当队列积压过多时发出警告
+    private void monitorTaskQueues() {
+        checkQueueThreshold("下载线程池", downloadExecutor, 0.8);
+        checkQueueThreshold("处理线程池", processExecutor, 0.8);
+        checkQueueThreshold("合并线程池", mergeExecutor, 0.7);
+        checkQueueThreshold("探测线程池", detectExecutor, 0.8);
+    }
+
+    // 检查队列是否达到阈值
+    private void checkQueueThreshold(String name, ThreadPoolExecutor executor, double threshold) {
+        BlockingQueue<?> queue = executor.getQueue();
+        int size = queue.size();
+        int capacity = queue.remainingCapacity() + size;
+        double usage = (double) size / capacity;
+
+        if (usage >= threshold) {
+            log.warn("{}队列使用率过高: {}/{} ({:.0f}%)，可能导致阻塞",
+                    name, size, capacity, usage * 100);
+        }
+    }
+
+    // 动态调整线程池参数
+    private void adjustThreadPools() {
+        try {
+            double cpuUsage = getSystemCpuUsage(); // 获取系统CPU使用率
+
+            // 根据CPU使用率调整下载线程池
+            adjustThreadPool("下载线程池", downloadExecutor, cpuUsage, 0.5, 0.2);
+            // 根据CPU使用率调整处理线程池
+            adjustThreadPool("处理线程池", processExecutor, cpuUsage,0.4, 0.2);
+            // 合并线程池对CPU敏感，调整更保守
+            adjustThreadPool("合并线程池", mergeExecutor, cpuUsage, 0.6, 0.3);
+        } catch (Exception e) {
+            log.error("动态调整线程池失败", e);
+        }
+    }
+
+
+    // 调整单个线程池（带自定义阈值）
+    private void adjustThreadPool(String name, ThreadPoolExecutor executor, double cpuUsage,
+                                  double highThreshold, double lowThreshold) {
+        int currentCore = executor.getCorePoolSize();
+        int max = executor.getMaximumPoolSize();
+        int minCore = Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
+
+        if (cpuUsage < lowThreshold && currentCore < max) {
+            // CPU使用率低，增加核心线程数
+            int newCore = Math.min(currentCore + 1, max);
+            executor.setCorePoolSize(newCore);
+            log.info("{}核心线程数从{}调整为{} (CPU使用率: {}%)",
+                    name, currentCore, newCore, cpuUsage * 100);
+        } else if (cpuUsage > highThreshold && currentCore > minCore) {
+            // CPU使用率高，减少核心线程数
+            int newCore = Math.max(currentCore - 1, minCore);
+            executor.setCorePoolSize(newCore);
+            log.info("{}核心线程数从{}调整为{} (CPU使用率: {}%)",
+                    name, currentCore, newCore, cpuUsage * 100);
+        }
+    }
+
+    // 获取系统CPU使用率（可使用OSHI等库）
+    private double getSystemCpuUsage() {
+        // 可以使用更准确的方法
+        return ManagementFactory.getOperatingSystemMXBean().getSystemLoadAverage();
+    }
+
+    //线程池状态监控日志
+    private void logThreadPoolStatus() {
+        log.info("=== 线程池状态 ===");
+        logThreadPoolInfo("下载线程池", downloadExecutor);
+        logThreadPoolInfo("处理线程池", processExecutor);
+        logThreadPoolInfo("合并线程池", mergeExecutor);
+        logThreadPoolInfo("探测线程池", detectExecutor);
+    }
+
+    // 打印单个线程池信息
+    private void logThreadPoolInfo(String name, ThreadPoolExecutor executor) {
+        log.info("{}: 活跃={}, 核心={}, 最大={}, 队列={}/{}, 完成={}, 拒绝={}",
+                name,
+                executor.getActiveCount(),
+                executor.getCorePoolSize(),
+                executor.getMaximumPoolSize(),
+                executor.getQueue().size(),
+                executor.getQueue().remainingCapacity(),
+                executor.getCompletedTaskCount(),
+                executor.getRejectedExecutionHandler());
+    }
+
+
+    // 初始化线程池并优化配置
+    private void initThreadPool() {
+        int cpuCount = Runtime.getRuntime().availableProcessors();
+        // 下载线程池（处理区块头/RPC下载，IO密集） 下载后按高度排序再提交给处理线程池
+        downloadExecutor = new ThreadPoolExecutor(
+                Math.max(4, cpuCount * 2),  // 核心线程数（CPU*2，至少4个）
+                Math.max(8, cpuCount * 4),  // 最大线程数（CPU*4，至少8个）
+                60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(500),  // 有界队列，避免OOM
+                r -> new Thread(r, "block-downloader"),
+                new ThreadPoolExecutor.DiscardOldestPolicy()  // 下载任务优先处理最新的
+        );
+
+        // 处理线程池（验证+存储区块头，IO密集） 单线程 + FIFO 队列，严格按高度顺序处理
+        processExecutor = new ThreadPoolExecutor(
+                1,  // 核心线程数=1（保证顺序）
+                1,  // 最大线程数=1（禁止并行）
+                60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(1000),  // 队列缓冲待处理任务
+                r -> new Thread(r, "block-processor"),
+                new ThreadPoolExecutor.CallerRunsPolicy()  // 队列满时阻塞提交者，避免乱序
+        );
+
+        // 合并线程池（合并区块到主链，混合密集） 单线程 + FIFO 队列，按高度升序合并
+        mergeExecutor = new ThreadPoolExecutor(
+                1,  // 单线程
+                1,  // 禁止扩容
+                60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(100),  // 缓冲待合并批次
+                r -> new Thread(r, "block-merger"),
+                new ThreadPoolExecutor.AbortPolicy()  // 队列满时拒绝，避免溢出
+        );
+
+        // 探测线程池（节点健康检测，轻量IO密集）
         detectExecutor = new ThreadPoolExecutor(
                 detectConcurrency,
                 detectConcurrency,
                 0L, TimeUnit.MILLISECONDS,
-                new LinkedBlockingQueue<>(100), // 限制任务队列大小
-                r -> new Thread(r, "node-detect-worker"),
-                new ThreadPoolExecutor.CallerRunsPolicy() // 队列满时让提交者执行，避免任务丢失
+                new LinkedBlockingQueue<>(100),
+                r -> new Thread(r, "node-detector"),
+                new ThreadPoolExecutor.CallerRunsPolicy()
         );
-        // 快速同步任务
-        scheduler.scheduleAtFixedRate(
-                this::detectAndSync, 0, fastSyncInterval, TimeUnit.SECONDS);
+
+        // 设置线程池饱和时的钩子函数，用于告警
+        ((ThreadPoolExecutor) downloadExecutor).setRejectedExecutionHandler((r, executor) -> {
+            log.warn("下载线程池饱和，已拒绝任务，当前队列大小: {}", executor.getQueue().size());
+            new ThreadPoolExecutor.DiscardOldestPolicy().rejectedExecution(r, executor);
+        });
+
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -170,8 +340,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                     .filter(task -> task.getStatus() == SyncStatus.RUNNING)
                     .toList();
 
-            log.info("节点正在同步中，暂不处理新请求");
-            return;
+            log.info("节点正在同步中，不处理新请求");
         }
 
         // 情况1：本地节点未初始化（无区块数据）仅仅一个创世区块
@@ -382,7 +551,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 isSyncing = false;
                 log.info("从远程节点[{}]的同步流程结束", remoteNode.getId().toString().substring(0, 8));
             }
-        }, syncExecutor);
+        }, detectExecutor);
     }
 
 
@@ -655,6 +824,33 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 });
     }
 
+    // 批量获取区块头并建立高度映射（核心修改）
+    private Map<Long, BlockHeader> fetchBlockHeadersWithHeightMap(BigInteger nodeId, long startHeight, int count) {
+        NodeInfo remoteNode = kademliaNodeServer.getNodeInfo(nodeId);
+        if (remoteNode == null) {
+            throw new RuntimeException("节点不可用: " + nodeId);
+        }
+
+        RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
+        proxyFactory.setTimeout(rpcTimeoutMs);
+        BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
+
+        // 假设远程返回的区块头按高度升序排列（从startHeight开始）
+        List<BlockHeader> headers = remoteService.getBlockHeaders(startHeight, count);
+        if (headers == null || headers.size() != count) {
+            throw new RuntimeException("区块头数量不匹配: 请求" + count + "个，实际" + (headers == null ? 0 : headers.size()));
+        }
+
+        // 建立高度→区块头的映射（关键：通过请求参数推算高度）
+        Map<Long, BlockHeader> heightToHeaderMap = new TreeMap<>(); // TreeMap保证按高度升序
+        for (int i = 0; i < headers.size(); i++) {
+            long height = startHeight + i; // 第i个区块头对应高度=起始高度+i
+            heightToHeaderMap.put(height, headers.get(i));
+        }
+        return heightToHeaderMap;
+    }
+
+
 
     private CompletableFuture<SyncProgress> executeShardTaskBatch(SyncProgress progress, SyncTaskRecord mainTask) {
         return CompletableFuture.supplyAsync(() -> {
@@ -766,8 +962,161 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 terminateTask(mainTask, progress, progress.getErrorMsg());
                 return progress;
             }
-        }, syncExecutor);
+        }, downloadExecutor);
     }
+
+
+
+    // 处理批量区块头（依赖高度映射）
+    private boolean processBlockHeaderBatch(SyncProgress progress, Map<Long, BlockHeader> heightToHeaderMap) {
+        // TreeMap已按高度升序排序，直接遍历即可保证顺序
+        for (Map.Entry<Long, BlockHeader> entry : heightToHeaderMap.entrySet()) {
+            long height = entry.getKey();
+            BlockHeader header = entry.getValue();
+
+            // 1. 验证区块头PoW（无需高度字段，仅验证自身哈希）
+            if (!validateBlockHeaderPoW(header)) {
+                log.error("高度[{}]区块头PoW验证失败，中断处理", height);
+                return false;
+            }
+
+            // 2. 额外验证：检查当前区块头的前序哈希是否与上一高度区块的哈希匹配
+            if (height > 0) { // 创世区块（高度0）无前置
+                BlockHeader prevHeader = popStorage.getDownloadedHeader(height - 1);
+                if (prevHeader == null) {
+                    log.error("高度[{}]的前置区块（高度{}）未找到，中断处理", height, height - 1);
+                    return false;
+                }
+                if (!Arrays.equals(header.getPreviousHash(), prevHeader.computeHash())) {
+                    log.error("高度[{}]的前置哈希不匹配，中断处理", height);
+                    return false;
+                }
+            }
+
+            // 3. 与高度绑定存储（关键：后续可通过高度直接查询）
+            popStorage.saveDownloadedHeader(header, height);
+            progress.setSyncedBlocks(progress.getSyncedBlocks() + 1);
+            log.debug("已处理高度[{}]区块头", height);
+        }
+        return true;
+    }
+
+
+
+    private CompletableFuture<SyncProgress> executeShardTaskBatchNew(SyncProgress progress, SyncTaskRecord mainTask) {
+        return CompletableFuture.supplyAsync(() -> {
+            progress.setStatus(SyncStatus.RUNNING);
+            long currentHeight = progress.getStartHeight();
+
+            try {
+                while (currentHeight <= progress.getTargetHeight()) {
+                    // 1. 计算当前批次范围（每次下载BASE_BATCH_SIZE个）
+                    int batchSize = Math.min(BASE_BATCH_SIZE, (int)(progress.getTargetHeight() - currentHeight + 1));
+
+                    // 2. 下载并建立高度映射（核心：获取height→header关系）
+                    Map<Long, BlockHeader> heightToHeaderMap;
+                    try {
+                        heightToHeaderMap = fetchBlockHeadersWithHeightMap(
+                                progress.getNodeId(), currentHeight, batchSize);
+                    } catch (Exception e) {
+                        log.error("下载区块头失败（高度范围：{}~{}）", currentHeight, currentHeight + batchSize - 1, e);
+                        throw new RuntimeException("下载区块头失败", e);
+                        //需要重新处理 TODO
+                    }
+
+                    // 3. 提交到单线程处理池，确保顺序执行（依赖TreeMap的有序性）
+                    CompletableFuture<Boolean> processFuture = CompletableFuture.supplyAsync(
+                            () -> processBlockHeaderBatch(progress, heightToHeaderMap),
+                            processExecutor // 单线程池保证顺序
+                    ).exceptionally(ex -> {
+                        log.error("处理区块头失败", ex);
+                        return false;
+                    });
+
+                    // 4. 等待当前批次处理完成，再继续下一批（保证顺序）
+                    if (!processFuture.get()) {
+                        progress.setStatus(SyncStatus.FAILED);
+                        return progress;
+                    }
+
+                    // 5. 推进到下一批次
+                    currentHeight += batchSize;
+                    progress.setCurrentHeight(currentHeight - 1); // 更新已处理到的高度
+                    progress.setProgressPercent(calculateProgress(progress));
+                    log.info("分片[{}]进度：{}%（已处理到高度{}）",
+                            progress.getProgressId(), progress.getProgressPercent(), currentHeight - 1);
+                }
+
+                progress.setStatus(SyncStatus.COMPLETED);
+                return progress;
+            } catch (Exception e) {
+                progress.setStatus(SyncStatus.FAILED);
+                progress.setErrorMsg("分片执行异常: " + e.getMessage());
+                return progress;
+            }
+        }, downloadExecutor);
+    }
+
+
+
+    private void mergeDownloadedBlocksBatchNew(long startHeight, long targetHeight) {
+        mergeExecutor.submit(() -> { // 单线程合并，保证顺序
+            for (long height = startHeight; height <= targetHeight; height++) {
+                // 1. 通过高度直接查询区块头（依赖存储时的高度映射）
+                BlockHeader header = popStorage.getDownloadedHeader(height);
+                if (header == null) {
+                    log.warn("高度[{}]区块头未找到，等待下载后重试", height);
+                    try {
+                        Thread.sleep(2000); // 等待下载补全
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
+                    height--; // 重试当前高度
+                    continue;
+                }
+
+                // 2. 下载完整区块（通过区块头哈希）
+                Block block = downloadFullBlockByHeader(header, height);
+                if (block == null) {
+                    log.error("高度[{}]完整区块下载失败，中断合并", height);
+                    return;
+                }
+
+                // 3. 验证并合并到主链
+                if (!localBlockChainService.verifyBlock(block, false)) {
+                    log.error("高度[{}]区块验证失败，中断合并", height);
+                    return;
+                }
+
+                // 4. 清理暂存的区块头
+                popStorage.deleteDownloadedHeader(height);
+                log.info("已合并高度[{}]区块到主链", height);
+            }
+            log.info("区块合并完成：{}~{}", startHeight, targetHeight);
+        });
+    }
+
+    // 辅助方法：通过区块头下载完整区块（并验证高度一致性）
+    private Block downloadFullBlockByHeader(BlockHeader header, long expectedHeight) {
+        try {
+            byte[] blockHash = header.computeHash();
+            RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer);
+            BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
+            Block block = remoteService.getBlockByHash(blockHash);
+
+            // 额外验证：确保下载的区块高度与预期一致（防止节点返回错误区块）
+            if (block.getHeight() != expectedHeight) {
+                log.error("区块哈希对应的高度不符：预期{}，实际{}", expectedHeight, block.getHeight());
+                return null;
+            }
+            return block;
+        } catch (Exception e) {
+            log.error("下载完整区块失败（预期高度{}）", expectedHeight, e);
+            return null;
+        }
+    }
+
+
 
 
     /**
@@ -775,6 +1124,44 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
      */
     private boolean processBlockHeaderBatch(SyncProgress progress, long batchStart, long batchEnd,
                                             Map<Long, BlockHeader> heightToHeaderMap) {
+
+        // 1. 按高度升序排序当前批次的区块头（关键：保证输入顺序）
+        List<Map.Entry<Long, BlockHeader>> sortedEntries = new ArrayList<>(heightToHeaderMap.entrySet());
+        sortedEntries.sort(Comparator.comparingLong(Map.Entry::getKey));
+
+        // 2. 创建一个顺序执行的任务（整个批次作为一个任务提交）
+/*        CompletableFuture<Boolean> batchFuture = CompletableFuture.supplyAsync(() -> {
+            int validCount = 0;
+            int invalidCount = 0;
+            // 3. 批次内严格按高度顺序验证
+            for (Map.Entry<Long, BlockHeader> entry : sortedEntries) {
+                long height = entry.getKey();
+                BlockHeader header = entry.getValue();
+
+                boolean isValid = validateBlockHeaderPoW(header);
+                if (isValid) {
+                    popStorage.saveDownloadedHeader(header, height); // 顺序存储
+                    validCount++;
+                } else {
+                    invalidCount++;
+                    // 发现无效区块，中断整个批次处理（保证后续区块依赖正确）
+                    if (invalidCount >= MAX_CONTINUOUS_INVALID_HEADER) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }, processExecutor); // 提交到单线程处理池，保证顺序
+
+        // 4. 等待批次处理完成（同步等待，确保当前批次处理完再提交下一批）
+        try {
+            return batchFuture.get(); // 阻塞等待当前批次完成
+        } catch (Exception e) {
+            log.error("批次验证失败", e);
+            return false;
+        }*/
+
+
         int validCount = 0;
         int invalidCount = 0;
         int missingCount = 0; // 新增：记录缺失的区块头数量
@@ -1027,7 +1414,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 terminateTask(mainTask, progress, progress.getErrorMsg());
                 return progress;
             }
-        }, syncExecutor);
+        }, detectExecutor);
     }
 
     private BlockHeader fetchBlockHeaderFromNode(BigInteger nodeId, long currentHeight) {
@@ -1317,7 +1704,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                                     log.error("区块[{}]下载失败", height, e);
                                     return null; // 下载失败的区块标记为null
                                 }
-                            }, syncExecutor);
+                            }, downloadExecutor);
                         })
                         .toList();
 
@@ -1375,7 +1762,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 // 9. 记录批次处理结果
                 log.info("第{}批处理完成: 成功合并{}个，失败{}个",
                         batchNum + 1, successHeights.size(), downloadedBlocks.size() - successHeights.size());
-                Thread.sleep(50);
             }
             log.info("所有区块合并完成: 总范围[{} - {}]", startHeight, targetHeight);
         } catch (Exception e) {
@@ -1424,7 +1810,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
     public void destroy() {
         scheduler.shutdown();
         detectExecutor.shutdown();
-        syncExecutor.shutdown();
     }
 
 
