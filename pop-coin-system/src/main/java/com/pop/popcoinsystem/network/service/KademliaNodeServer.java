@@ -281,12 +281,18 @@ public class KademliaNodeServer {
         pingKademliaMessage.setReqResId();
         pingKademliaMessage.setResponse(false);
         try {
-            KademliaMessage kademliaMessage = udpClient.sendMessageWithResponse(pingKademliaMessage);
+            KademliaMessage kademliaMessage = null;
+            try {
+                kademliaMessage =  udpClient.sendMessageWithResponse(pingKademliaMessage);
+            }catch (TimeoutException e){
+                log.error("未收到节点{}的Pong消息", bootstrapNodeInfo);
+                return;
+            }
             if (kademliaMessage == null){
                 log.error("未收到引导节点{}的Pong消息", bootstrapNodeInfo);
                 return;
             }
-            if (kademliaMessage != null && kademliaMessage instanceof PongKademliaMessage){
+            if (kademliaMessage instanceof PongKademliaMessage){
                 log.info("收到引导节点{}的Pong消息", bootstrapNodeInfo);
                 //向引导节点发送握手请求 收到握手回复后检查 自己的区块链信息
                 BlockChainServiceImpl blockChainService = this.getBlockChainService();

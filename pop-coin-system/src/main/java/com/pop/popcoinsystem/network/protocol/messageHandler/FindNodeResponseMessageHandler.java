@@ -59,7 +59,13 @@ public class FindNodeResponseMessageHandler implements MessageHandler{
                 pingKademliaMessage.setReceiver(BeanCopyUtils.copyObject(externalNode, NodeInfo.class));
                 pingKademliaMessage.setReqResId();
                 pingKademliaMessage.setResponse(false);
-                KademliaMessage kademliaMessage = kademliaNodeServer.getTcpClient().sendMessageWithResponse(pingKademliaMessage);
+                KademliaMessage kademliaMessage = null;
+                try {
+                    kademliaMessage =  kademliaNodeServer.getTcpClient().sendMessageWithResponse(pingKademliaMessage);
+                }catch (TimeoutException e){
+                    log.error("未收到节点{}的Pong消息", externalNode);
+                    return;
+                }
                 if (kademliaMessage == null){
                     log.error("未收到节点{}的Ping消息", externalNode);
                     return;
