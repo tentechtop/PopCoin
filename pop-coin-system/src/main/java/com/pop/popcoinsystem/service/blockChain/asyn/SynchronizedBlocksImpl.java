@@ -273,30 +273,36 @@ public class SynchronizedBlocksImpl {
             long mid = low + (high - low) / 2;
 
             try {
-                // 批量获取一段高度范围的哈希（如mid, low, high）
-                // 减少单次网络请求的开销，尤其适用于远程节点查询
                 List<Long> heightsToCheck = Arrays.asList(mid, low, high);
                 Map<Long, byte[]> localHashes = localBlockChainService.getBlockHashes(heightsToCheck);
                 Map<Long, byte[]> remoteHashes = remoteService.getBlockHashes(heightsToCheck);
 
+                // 获取本地和远程节点的哈希，并判断是否存在
                 byte[] localHash = localHashes.get(mid);
                 byte[] remoteHash = remoteHashes.get(mid);
 
-                if (Arrays.equals(localHash, remoteHash)) {
+                // 处理本地或远程没有该高度的情况
+                if (localHash == null || remoteHash == null) {
+                    // 本地或远程不存在该高度，视为不匹配，缩小上界
+                    high = mid - 1;
+                } else if (Arrays.equals(localHash, remoteHash)) {
+                    // 两者都存在且哈希匹配，尝试更高高度
                     forkHeight = mid;
-                    low = mid + 1; // 找到匹配点，尝试更高高度
+                    low = mid + 1;
                 } else {
-                    high = mid - 1; // 不匹配，尝试更低高度
+                    // 哈希不匹配，缩小上界
+                    high = mid - 1;
                 }
             } catch (Exception e) {
                 log.error("批量查询哈希失败，中间高度:{}", mid, e);
                 high = mid - 1;  // 出错时缩小范围，避免死循环
             }
         }
+
         // 确保创世区块（高度0）作为最小分叉点
-        // 如果未找到任何分叉点且maxCommonHeight >=0，则返回0
         return forkHeight == -1 && maxCommonHeight >= 0 ? 0 : forkHeight;
     }
+
 
     private void startSyncFromRemote(NodeInfo remoteNode, long startHeight) {
         // 从远程节点同步链的实现
