@@ -184,7 +184,9 @@ public class KademliaNodeServer {
             });
             //维护网络 首次执行立即开始，之后每 delay  秒执行一次 maintainNetwork 方法  单位秒
             long delay = 30;
+            long delay1 = 60 * 60; //
             scheduler.scheduleAtFixedRate(this::maintainNetwork, delay, delay, TimeUnit.SECONDS);
+            scheduler.scheduleAtFixedRate(this::persistToStorage, delay1, delay1, TimeUnit.SECONDS);
         } catch (Exception e) {
             log.error("KademliaNode start error", e);
             stop();
@@ -390,16 +392,20 @@ public class KademliaNodeServer {
         RoutingTable routingTable = getRoutingTable();
         try {
             long now = System.currentTimeMillis();
-            // 2. 检查路由表中节点的活性，移除不活跃节点
-            /*routingTable.cleanExpiredNodes(NODE_EXPIRATION_TIME);*/
+            // 检查路由表中节点的活性，移除不活跃节点
             checkNodeLiveness(now);
-            // 3. 随机生成节点ID，执行FindNode操作刷新路由表（Kademlia协议核心）
+            // 随机生成节点ID，执行FindNode操作刷新路由表（Kademlia协议核心）
             refreshRoutingTable();
-            // 4. 持久化路由表（可选，节点重启后可恢复）
-            routingTable.persistToStorage();
         } catch (Exception e) {
             log.error("网络维护任务执行失败", e);
         }
+    }
+
+
+    private void persistToStorage(){
+        log.info("开始将路由表未过期的节点持久化到存储系统");
+        routingTable.cleanExpiredNodes(NODE_EXPIRATION_TIME);
+        routingTable.persistToStorage();
     }
 
 
@@ -407,14 +413,15 @@ public class KademliaNodeServer {
      * 检查节点活性：对超时未响应的节点发送发送Ping，仍无响应则移除
      */
     private void checkNodeLiveness(long now) {
-        log.debug("检查节点活性");
+        log.info("检查节点活性");
         // 获取路由表中所有节点  或者本节点最近的节点 或者用抽样检测
         List<ExternalNodeInfo> allNodes = routingTable.getAllNodes();
         if (allNodes.isEmpty()) {
-            log.debug("路由表为空，无需检查节点活性");
+            log.info("路由表为空，无需检查节点活性");
             return;
         }
         for (ExternalNodeInfo node : allNodes) {
+            log.info("检查节点 {} 活跃性", node.getId());
             // 跳过自身节点
             if (node.getId().equals(nodeInfo.getId())) continue;
 
