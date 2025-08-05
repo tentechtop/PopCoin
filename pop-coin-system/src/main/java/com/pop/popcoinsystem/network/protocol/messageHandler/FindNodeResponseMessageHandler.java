@@ -1,6 +1,7 @@
 package com.pop.popcoinsystem.network.protocol.messageHandler;
 
 import com.pop.popcoinsystem.exception.FullBucketException;
+import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.FindNodeResult;
@@ -24,6 +25,11 @@ public class FindNodeResponseMessageHandler implements MessageHandler{
     protected FindNodeResponseMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull FindNodeResponseMessage message) throws InterruptedException, ConnectException, FullBucketException {
         FindNodeResult data = message.getData();
         List<ExternalNodeInfo> nodes = data.getNodes();
+        NodeInfo nodeInfo = kademliaNodeServer.getNodeInfo();
+        //去除自己
+        nodes.removeIf(node -> node.getId().equals(nodeInfo.getId()));
+        //去除和自己IP 端口一样的节点
+        nodes.removeIf(node -> ( node.getIpv4().equals(nodeInfo.getIpv4()) && (node.getTcpPort() == nodeInfo.getTcpPort() || node.getTcpPort() == nodeInfo.getUdpPort())));
         log.debug("收到节点查询结果{}",nodes);
         for(ExternalNodeInfo node:nodes){
             kademliaNodeServer.getRoutingTable().update(node);

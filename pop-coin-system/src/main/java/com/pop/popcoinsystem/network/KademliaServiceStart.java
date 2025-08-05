@@ -84,7 +84,9 @@ public class KademliaServiceStart {
         nodeSetting.setTcpPort(tcpPort);
         nodeSetting.setUdpPort(udpPort);
         if (nodeSetting.getId() == null){
-            byte[] bytes = CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(CryptoUtil.hexToBytes(nodeSetting.getPublicKeyHex())));
+            //用 “IP + 端口” 作为物理唯一标识
+            String nodeId = localIp + ":" + tcpPort+""+udpPort;
+            byte[] bytes = CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(nodeId.getBytes()));
             if (bytes.length != 20) {
                 throw new IllegalArgumentException("RIPEMD-160 输出必须是 20 字节");
             }
