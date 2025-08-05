@@ -277,23 +277,23 @@ public class KademliaNodeServer {
         pingKademliaMessage.setReqResId();
         pingKademliaMessage.setResponse(false);
 
-        udpClient.sendMessage(pingKademliaMessage);
-        log.info("向引导节点{}发送Ping消息", bootstrapNodeInfo);
-
-        //向引导节点发送握手请求 收到握手回复后检查 自己的区块链信息
-        BlockChainServiceImpl blockChainService = this.getBlockChainService();
-        Block mainLatestBlock = blockChainService.getMainLatestBlock();
-        Handshake handshake = new Handshake();
-        handshake.setExternalNodeInfo(this.getExternalNodeInfo());//携带我的节点信息
-        handshake.setGenesisBlockHash(CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX));
-        handshake.setLatestBlockHash(mainLatestBlock.getHash());
-        handshake.setLatestBlockHeight(mainLatestBlock.getHeight());
-        handshake.setChainWork(mainLatestBlock.getChainWork());
-        HandshakeRequestMessage handshakeRequestMessage = new HandshakeRequestMessage(handshake);
-        handshakeRequestMessage.setSender(this.nodeInfo);//本节点信息
-        handshakeRequestMessage.setReceiver(bootstrapNodeInfo);
-        this.getTcpClient().sendMessage(handshakeRequestMessage);
-
+        KademliaMessage kademliaMessage = udpClient.sendMessageWithResponse(pingKademliaMessage);
+        if (kademliaMessage != null && kademliaMessage instanceof PongKademliaMessage){
+            log.info("向引导节点{}发送Ping消息", bootstrapNodeInfo);
+            //向引导节点发送握手请求 收到握手回复后检查 自己的区块链信息
+            BlockChainServiceImpl blockChainService = this.getBlockChainService();
+            Block mainLatestBlock = blockChainService.getMainLatestBlock();
+            Handshake handshake = new Handshake();
+            handshake.setExternalNodeInfo(this.getExternalNodeInfo());//携带我的节点信息
+            handshake.setGenesisBlockHash(CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX));
+            handshake.setLatestBlockHash(mainLatestBlock.getHash());
+            handshake.setLatestBlockHeight(mainLatestBlock.getHeight());
+            handshake.setChainWork(mainLatestBlock.getChainWork());
+            HandshakeRequestMessage handshakeRequestMessage = new HandshakeRequestMessage(handshake);
+            handshakeRequestMessage.setSender(this.nodeInfo);//本节点信息
+            handshakeRequestMessage.setReceiver(bootstrapNodeInfo);
+            this.getTcpClient().sendMessage(handshakeRequestMessage);
+        }
     }
 
 
