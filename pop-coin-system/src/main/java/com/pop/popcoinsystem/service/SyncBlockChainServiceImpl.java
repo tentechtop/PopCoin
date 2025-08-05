@@ -46,8 +46,6 @@ public class SyncBlockChainServiceImpl {
         TransactionService transactionService = proxyFactory.createProxy(TransactionService.class);
         // 4. 像调用本地方法一样调用远程服务
         String result = transactionService.sayHello("Hello World"); // 底层自动完成远程调用
-
-
         return Result.ok(result);
     }
 
@@ -67,20 +65,15 @@ public class SyncBlockChainServiceImpl {
         nodeInfo.setTcpPort(8334);
         nodeInfo.setUdpPort(8333);
 
-/*        RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer,nodeInfo);
+        RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer,nodeInfo);
         BlockChainService blockChainService = proxyFactory.createProxy(BlockChainService.class);
-        Block blockByHash = blockChainService.getBlockByHash(CryptoUtil.hexToBytes(hash));*/
+        Block blockByHash = blockChainService.getBlockByHash(CryptoUtil.hexToBytes(hash));
         PingKademliaMessage pingKademliaMessage = new PingKademliaMessage();
         pingKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());//本节点信息
         pingKademliaMessage.setReceiver(nodeInfo);
         pingKademliaMessage.setReqResId();
         pingKademliaMessage.setResponse(false);
-
-
         kademliaNodeServer.getTcpClient().sendMessage(pingKademliaMessage);
-
-
-
         return Result.ok();
     }
 }

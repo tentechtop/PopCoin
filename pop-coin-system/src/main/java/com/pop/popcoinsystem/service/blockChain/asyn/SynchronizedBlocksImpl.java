@@ -69,7 +69,6 @@ public class SynchronizedBlocksImpl {
 
     // 新增：高度到节点ID的映射（记录每个高度由哪个节点同步）
     // 键：区块高度，值：负责该高度的节点ID
-    private final ConcurrentMap<Long, BigInteger> heightToNodeMap = new ConcurrentHashMap<>();
 
     // 节点评分管理器：维护节点可信度评分（1-100，默认60）
     private final ConcurrentMap<BigInteger, Integer> nodeScores = new ConcurrentHashMap<>();
@@ -1126,14 +1125,6 @@ public class SynchronizedBlocksImpl {
     }
 
 
-    /**
-     * 通过区块高度获取负责同步该区块的节点ID
-     * （基于分片任务时记录的映射关系）
-     */
-    private BigInteger getNodeIdByHeight(long height) {
-        return heightToNodeMap.get(height);
-    }
-
 
     /**
      * 创建分片任务
@@ -1307,14 +1298,7 @@ public class SynchronizedBlocksImpl {
                             return CompletableFuture.supplyAsync(() -> {
                                 try {
                                     // 从提供区块头的节点下载完整区块
-                                    RpcProxyFactory proxyFactory = null;
-                                    NodeInfo node = kademliaNodeServer.getNodeInfo(getNodeIdByHeight(height));
-                                    if (node == null) {
-                                        log.warn("区块[" + height + "]对应的节点已离线");
-                                        proxyFactory = new RpcProxyFactory(kademliaNodeServer);
-                                    }else {
-                                        proxyFactory = new RpcProxyFactory(kademliaNodeServer,node);
-                                    }
+                                    RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer);
                                     proxyFactory.setTimeout(rpcTimeoutMs);
                                     BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
                                     Block block = remoteService.getBlockByHash(blockHash);
