@@ -104,7 +104,7 @@ public class KademliaServiceStart {
                 .build();
         KademliaNodeServer server = new KademliaNodeServer();
         server.setNodeInfo(nodeInfo);
-        ExternalNodeInfo externalNodeInfo = storageService.getRouteTableNode(nodeSetting.getId());
+        ExternalNodeInfo externalNodeInfo = storageService.getNodeSelfNode();
         if (externalNodeInfo == null){
             externalNodeInfo = new ExternalNodeInfo();
             externalNodeInfo.setScore(60);
@@ -117,7 +117,6 @@ public class KademliaServiceStart {
         server.setExternalNodeInfo(externalNodeInfo);
         storageService.addOrUpdateSelfNode(externalNodeInfo);
         //自己要用单独的KEY保存不再放在路由表中
-
         server.setNodeSettings(NodeSettings.Default.build());
         server.init();
         return server;

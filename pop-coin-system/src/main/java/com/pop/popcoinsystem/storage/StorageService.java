@@ -1765,13 +1765,13 @@ public class StorageService {
     }
 
     //获取本节点的设置信息
-    public NodeSettings getNodeSelfNode() {
+    public ExternalNodeInfo getNodeSelfNode() {
         try {
             byte[] valueBytes = db.get(ColumnFamily.NODE_INFO.getHandle(), KEY_SELF_NODE_INFO);
             if (valueBytes == null) {
                 return null; // 不存在返回null，避免抛出异常
             }
-            return (NodeSettings)SerializeUtils.deSerialize(valueBytes);
+            return (ExternalNodeInfo)SerializeUtils.deSerialize(valueBytes);
         } catch (RocksDBException e) {
             log.error("获取节点状态失败: key={}", KEY_SELF_NODE_INFO, e);
             throw new RuntimeException("获取节点状态失败", e);

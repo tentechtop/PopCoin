@@ -149,10 +149,10 @@ public class CryptoUtil {
 
             BigInteger privKey = new BigInteger(1, normalized);
 
-            // 3. 获取secp256k1曲线参数（使用Bouncy Castle的ECNamedCurveParameterSpec）
+            // 获取secp256k1曲线参数（使用Bouncy Castle的ECNamedCurveParameterSpec）
             ECNamedCurveParameterSpec curveSpec = ECNamedCurveTable.getParameterSpec("secp256k1");
 
-            // 直接使用SECP256K1_SPEC作为参数
+            // 使用SECP256K1_SPEC作为参数
             ECPrivateKeySpec privKeySpec = new ECPrivateKeySpec(privKey, curveSpec);
 
             KeyFactory keyFactory = KeyFactory.getInstance("EC", "BC");
