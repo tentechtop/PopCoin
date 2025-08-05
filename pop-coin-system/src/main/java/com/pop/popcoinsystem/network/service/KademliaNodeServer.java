@@ -21,6 +21,7 @@ import com.pop.popcoinsystem.util.CryptoUtil;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -204,8 +205,15 @@ public class KademliaNodeServer {
             udpBootstrap = new Bootstrap();
             udpBootstrap.group(udpGroup)
                     .channel(NioDatagramChannel.class)
-                    .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000) // 连接超时设置
-                    .option(ChannelOption.SO_BROADCAST, true)
+                    // 核心Channel参数优化
+                    .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT) // 池化内存分配（减少GC）
+                    .option(ChannelOption.SO_RCVBUF, 64*1024*1024) // 接收缓冲区
+                    .option(ChannelOption.SO_SNDBUF, 64*1024*1024) // 发送缓冲区
+                    .option(ChannelOption.SO_REUSEADDR, true) // 允许端口复用（多线程共享端口）
+                    .option(ChannelOption.SO_BROADCAST, true) // 支持广播（按需开启）
+                    .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 1000) // UDP无连接，超时设短（1秒）
+                    .option(ChannelOption.RCVBUF_ALLOCATOR, new FixedRecvByteBufAllocator(1024 * 64)) // 固定接收缓冲区大小（64KB，减少动态调整开销）
+
                     .handler(new ChannelInitializer<NioDatagramChannel>() {
                         @Override
                         protected void initChannel(NioDatagramChannel ch) throws Exception {
@@ -240,9 +248,15 @@ public class KademliaNodeServer {
             tcpBootstrap = new ServerBootstrap();
             tcpBootstrap.group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
-                    .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000) // 连接超时设置
-                    .childOption(ChannelOption.SO_KEEPALIVE, true)////设置TCP长连接,一般如果两个小时内没有数据的通信时,TCP会自动发送一个活动探测数据报文
-                    .childOption(ChannelOption.TCP_NODELAY, true)///将小的数据包包装成更大的帧进行传送，提高网络的负载   // 将网络数据积累到一定的数量后,服务器端才发送出去,会造成一定的延迟。希望服务是低延迟的,建议将TCP_NODELAY设置为true
+
+                    // 3. TCP参数优化
+                    .option(ChannelOption.TCP_NODELAY, true)
+                    .option(ChannelOption.SO_KEEPALIVE, true)
+                    .option(ChannelOption.SO_REUSEADDR, true) // 允许端口复用
+                    .option(ChannelOption.SO_RCVBUF, 64* 1024 * 1024) // 接收缓冲区
+                    .option(ChannelOption.SO_SNDBUF, 64* 1024 * 1024) // 发送缓冲区
+                    .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)
+
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         public void initChannel(SocketChannel ch) throws Exception {

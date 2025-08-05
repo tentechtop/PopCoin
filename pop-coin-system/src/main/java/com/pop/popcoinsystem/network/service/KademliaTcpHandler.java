@@ -8,13 +8,35 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.Serializable;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.pop.popcoinsystem.network.service.KademliaNodeServer.KademliaMessageHandler;
+import static org.springframework.core.io.support.SpringFactoriesLoader.FailureHandler.handleMessage;
 
 @Slf4j
 public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMessage> {
 
     private final KademliaNodeServer nodeServer;
+
+    // 定义业务线程池（CPU密集型：核心数=CPU核心数；IO密集型：核心数=CPU核心数*2）
+    private static final ExecutorService BUSINESS_POOL = new ThreadPoolExecutor(
+            Runtime.getRuntime().availableProcessors() * 2,
+            200,
+            60L, TimeUnit.SECONDS,
+            new SynchronousQueue<>(),
+            new ThreadFactory() {
+                private final AtomicInteger counter = new AtomicInteger();
+                @Override
+                public Thread newThread(Runnable r) {
+                    Thread t = new Thread(r, "business-pool-" + counter.incrementAndGet());
+                    t.setDaemon(true);
+                    return t;
+                }
+            },
+            new ThreadPoolExecutor.CallerRunsPolicy() // 任务满时让调用者处理，避免任务丢失
+    );
+
 
 
     public KademliaTcpHandler(KademliaNodeServer nodeServer) {
@@ -27,32 +49,38 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, KademliaMessage message) throws Exception {
-        long messageId = message.getMessageId();
-        // 检查：若消息已存在（未过期），则跳过广播
-        if (nodeServer.getBroadcastMessages().getIfPresent(messageId) != null) {
-            log.debug("消息,或者交易 {} 已处理过（未过期），跳过", messageId);
-            return;
-        }
-        // 记录：将消息ID存入缓存（自动过期）
-        nodeServer.getBroadcastMessages().put(messageId, Boolean.TRUE);
-        boolean single = message.isSingle();
-        if (single){
-            //单播消息
-            long requestId = message.getRequestId();
-            if (message.isResponse()){
-                log.debug("响应消息ID {}", requestId);
-                // 响应消息：交给RequestResponseManager处理，完成客户端的Promise
-                handleResponseMessage(ctx, message);
-            }else {
-                log.debug("收到请求消息，requestId: {}", requestId);
-                // 处理请求消息并生成响应
-                handleRequestMessage(ctx, message);
+        BUSINESS_POOL.submit(() -> {
+            long messageId = message.getMessageId();
+            // 检查：若消息已存在（未过期），则跳过广播
+            if (nodeServer.getBroadcastMessages().getIfPresent(messageId) != null) {
+                log.debug("消息,或者交易 {} 已处理过（未过期），跳过", messageId);
+                return;
             }
-        }else {
-            //广播消息
-            MessageHandler messageHandler = KademliaMessageHandler.get(message.getType());
-            messageHandler.handleMesage(nodeServer, message);
-        }
+            // 记录：将消息ID存入缓存（自动过期）
+            nodeServer.getBroadcastMessages().put(messageId, Boolean.TRUE);
+            boolean single = message.isSingle();
+            if (single){
+                //单播消息
+                long requestId = message.getRequestId();
+                if (message.isResponse()){
+                    log.debug("响应消息ID {}", requestId);
+                    // 响应消息：交给RequestResponseManager处理，完成客户端的Promise
+                    handleResponseMessage(ctx, message);
+                }else {
+                    log.debug("收到请求消息，requestId: {}", requestId);
+                    // 处理请求消息并生成响应
+                    handleRequestMessage(ctx, message);
+                }
+            }else {
+                //广播消息
+                MessageHandler messageHandler = KademliaMessageHandler.get(message.getType());
+                try {
+                    messageHandler.handleMesage(nodeServer, message);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
     }
 
     /**
