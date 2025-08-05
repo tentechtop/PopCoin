@@ -430,7 +430,7 @@ public class KademliaNodeServer {
 
             // 2. 节点即将过期（接近阈值阈值），发送Ping确认活性
             if (inactiveTime > NODE_EXPIRATION_TIME * 0.8) {
-                log.debug("节点 {} 即将过期，发送Ping确认活性", node.getId());
+                log.info("节点 {} 即将过期，发送Ping确认活性", node.getId());
                 sendPingCheckPing(node);
             }
         }
