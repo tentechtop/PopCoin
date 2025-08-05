@@ -46,11 +46,6 @@ public class SyncBlockChainServiceImpl {
         String result = transactionService.sayHello("Hello World"); // 底层自动完成远程调用
 
 
-
-
-
-
-
         return Result.ok(result);
     }
 

@@ -403,6 +403,33 @@ public class SynchronizedBlocksImpl {
 
     private void detectAndSync() {
         printRunningSyncTasks();
+        log.info("检测 避免错过握手阶段的同步....");
+        long localHeight = localBlockChainService.getMainLatestHeight();
+        byte[] localHash = localBlockChainService.getMainLatestBlockHash();
+        byte[] localWork = localBlockChainService.getMainLatestBlock().getChainWork();
+
+
+        // 获取所有邻居节点，筛选健康节点（评分>60分）
+        List<ExternalNodeInfo> allNodes = kademliaNodeServer.getRoutingTable().findClosest();
+        // 对每个健康节点发起同步（并发控制由syncService保证）
+        for (ExternalNodeInfo externalNodeInfo : allNodes) {
+            NodeInfo node = BeanCopyUtils.copyObject(externalNodeInfo, NodeInfo.class);
+            try {
+                // 探测节点最新状态
+                RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, node);
+                BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
+                long remoteHeight = remoteService.getMainLatestHeight();
+                byte[] remoteHash = remoteService.getMainLatestBlockHash();
+                byte[] remoteWork = remoteService.getMainLatestBlock().getChainWork();
+                log.info("检测到 节点{}最新高度为: {}", node.getId(), remoteHeight);
+                compareAndSync(node, localHeight, localHash, localWork, remoteHeight, remoteHash, remoteWork);
+            } catch (Exception e) {
+                // 记录失败，降低节点评分
+                log.warn("节点{}探测失败，降低评分", node.getId());
+            }
+        }
+
+
     }
 
 

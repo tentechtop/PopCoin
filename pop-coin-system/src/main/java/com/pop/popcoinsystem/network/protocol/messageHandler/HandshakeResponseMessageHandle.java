@@ -52,18 +52,16 @@ public class HandshakeResponseMessageHandle implements MessageHandler{
             throw new UnsupportedChainException("链信息不一致");
         }
 
-        byte[] remoteLatestHash  = handshake.getLatestBlockHash();
-        long remoteLatestHeight  = handshake.getLatestBlockHeight();
-        byte[] remoteChainWork = handshake.getChainWork();//工作总量
-
-        byte[] localLatestHash  = block.getHash();
         long localLatestHeight  = blockChainService.getMainLatestHeight();
+        byte[] localLatestHash  = block.getHash();
         byte[] localChainWork = block.getChainWork();
 
-        log.info("本地高度:{}",localLatestHash);
+        long remoteLatestHeight  = handshake.getLatestBlockHeight();
+        byte[] remoteLatestHash  = handshake.getLatestBlockHash();
+        byte[] remoteChainWork = handshake.getChainWork();//工作总量
+
+        log.info("本地高度:{}",localLatestHeight);
         log.info("远程高度:{}",remoteLatestHeight);
-        log.info("本地工作总量:{}",localChainWork);
-        log.info("远程工作总量:{}",remoteChainWork);
         log.info("本地和远程比较 工作量比较:{}", DifficultyUtils.compare(localChainWork,remoteChainWork));
 
 
