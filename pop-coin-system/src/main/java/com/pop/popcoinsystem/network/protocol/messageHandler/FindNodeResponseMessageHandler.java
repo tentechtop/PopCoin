@@ -31,7 +31,6 @@ public class FindNodeResponseMessageHandler implements MessageHandler{
     protected FindNodeResponseMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull FindNodeResponseMessage message) throws InterruptedException, ConnectException, FullBucketException {
         NodeInfo nodeInfo = kademliaNodeServer.getNodeInfo();
         BigInteger id = nodeInfo.getId();
-
         //总结：循环的 “天然终止条件”
         //这段代码的逻辑虽然会触发 “处理响应→发送新请求→再处理新响应” 的链条，但由于以下约束，链条会自然终止：
         //路由表update方法的返回值限制（重复节点不触发新请求）；
@@ -51,9 +50,12 @@ public class FindNodeResponseMessageHandler implements MessageHandler{
                 pingKademliaMessage.setReqResId();
                 pingKademliaMessage.setResponse(false);
                 KademliaMessage kademliaMessage = kademliaNodeServer.getTcpClient().sendMessageWithResponse(pingKademliaMessage);
+                if (kademliaMessage == null){
+                    log.error("未收到节点{}的Ping消息", externalNode);
+                    return;
+                }
                 boolean update = kademliaNodeServer.getRoutingTable().update(kademliaMessage.getSender());
-                log.info("节点是否已经存在 true是不存在 false是存在: " + update);
-                if (kademliaMessage!=null && update){
+                if (update){
                     // 向这些活跃的节点发起查找
                     FindNodeRequestMessage findNodeRequestMessage = new FindNodeRequestMessage();
                     findNodeRequestMessage.setSender(nodeInfo);

@@ -33,6 +33,7 @@ public class FindNodeRequestMessageHandler implements MessageHandler{
         RoutingTable routingTable = kademliaNodeServer.getRoutingTable();
         FindNodeResult closestResult = routingTable.findClosestResult(findId);
         ExternalNodeInfo externalNodeInfo = BeanCopyUtils.copyObject(sender, ExternalNodeInfo.class);
+        //更新节点
         routingTable.update(externalNodeInfo);
         FindNodeResponseMessage findNodeResponseMessage = new FindNodeResponseMessage();
         findNodeResponseMessage.setSender(kademliaNodeServer.getNodeInfo());
