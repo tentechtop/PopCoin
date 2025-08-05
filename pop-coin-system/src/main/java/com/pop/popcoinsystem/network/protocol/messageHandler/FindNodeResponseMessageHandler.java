@@ -32,6 +32,13 @@ public class FindNodeResponseMessageHandler implements MessageHandler{
         NodeInfo nodeInfo = kademliaNodeServer.getNodeInfo();
         BigInteger id = nodeInfo.getId();
 
+        //总结：循环的 “天然终止条件”
+        //这段代码的逻辑虽然会触发 “处理响应→发送新请求→再处理新响应” 的链条，但由于以下约束，链条会自然终止：
+        //路由表update方法的返回值限制（重复节点不触发新请求）；
+        //有限的 ID 空间和节点数量（候选节点不会无限产生）；
+        //固定的请求目标（避免无限制扩散）；
+        //网络超时和异常处理（中断无效流程）。
+        //因此，代码不会产生无限循环，而是会在 “没有新节点可加入路由表” 时自然终止。
         executorService.submit(() -> (message).getData().getNodes().forEach(externalNode -> {
             // ignore self
             if (externalNode.getId().equals(kademliaNodeServer.getId())){
