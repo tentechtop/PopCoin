@@ -1,11 +1,15 @@
 package com.pop.popcoinsystem.network.protocol.messageData;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
 
 // RPC 响应数据（包含调用结果，实现 Serializable）
 @Data
+@AllArgsConstructor
+@NoArgsConstructor
 public class RpcResponseData implements Serializable {
     private static final long serialVersionUID = 1L;
     private Object result;            // 方法返回值（需可序列化）

@@ -1586,7 +1586,6 @@ public class BlockChainServiceImpl implements BlockChainService {
                                long localHeight, byte[] localHash, byte[] localWork,
                                long remoteHeight, byte[] remoteHash, byte[] remoteWork
     ) throws ConnectException, InterruptedException {
-        log.info("比较本地与远程节点的区块差异");
         blockSynchronizer.compareAndSync(remoteNode,localHeight, localHash, localWork, remoteHeight, remoteHash, remoteWork);
     }
 
