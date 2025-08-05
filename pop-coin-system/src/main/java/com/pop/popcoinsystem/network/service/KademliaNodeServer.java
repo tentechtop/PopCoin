@@ -276,10 +276,10 @@ public class KademliaNodeServer {
         pingKademliaMessage.setReceiver(bootstrapNodeInfo);
         pingKademliaMessage.setReqResId();
         pingKademliaMessage.setResponse(false);
-
+        log.info("向引导节点{}发送Ping消息", bootstrapNodeInfo);
         KademliaMessage kademliaMessage = udpClient.sendMessageWithResponse(pingKademliaMessage);
         if (kademliaMessage instanceof PongKademliaMessage){
-            log.info("向引导节点{}发送Ping消息", bootstrapNodeInfo);
+            log.info("收到引导节点{}的Pong消息", bootstrapNodeInfo);
             //向引导节点发送握手请求 收到握手回复后检查 自己的区块链信息
             BlockChainServiceImpl blockChainService = this.getBlockChainService();
             Block mainLatestBlock = blockChainService.getMainLatestBlock();

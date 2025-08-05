@@ -60,16 +60,6 @@ public class KademliaUdpHandler extends SimpleChannelInboundHandler<KademliaMess
             MessageHandler messageHandler = KademliaMessageHandler.get(message.getType());
             messageHandler.handleMesage(nodeServer, message);
         }
-
-
-
-
-
-        MessageHandler messageHandler = KademliaMessageHandler.get(message.getType());
-        KademliaMessage<? extends Serializable> kademliaMessage = messageHandler.handleMesage(nodeServer, message);
-        if (kademliaMessage != null){
-            nodeServer.getUdpClient().sendMessage(kademliaMessage);
-        }
     }
 
     /**
