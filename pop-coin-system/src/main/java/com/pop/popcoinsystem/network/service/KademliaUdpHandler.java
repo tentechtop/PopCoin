@@ -17,17 +17,15 @@ import static java.lang.Thread.sleep;
 @Slf4j
 public class KademliaUdpHandler extends SimpleChannelInboundHandler<KademliaMessage> {
     private final KademliaNodeServer nodeServer;
-    private final UDPClient udpClient;
-    private RequestResponseManager responseManager;
 
-    public KademliaUdpHandler(KademliaNodeServer nodeServer,UDPClient udpClient) {
+
+
+    public KademliaUdpHandler(KademliaNodeServer nodeServer) {
         if (nodeServer == null) {
             throw new NullPointerException("传入的KademliaNodeServer为null！请检查是否正确传入实例");
         }
         this.nodeServer = nodeServer;
-        this.udpClient = udpClient;
-        // 初始化响应管理器（从TCPClient获取全局唯一实例）
-        this.responseManager = udpClient.getResponseManager();
+
     }
 
 
@@ -66,14 +64,10 @@ public class KademliaUdpHandler extends SimpleChannelInboundHandler<KademliaMess
      * 处理响应消息：分发给对应的RequestResponseManager，触发客户端Promise
      */
     private void handleResponseMessage(ChannelHandlerContext ctx, KademliaMessage response) {
-        if (responseManager == null) {
-            log.error("响应管理器未初始化，无法处理响应消息");
-            return;
-        }
         long requestId = response.getRequestId();
         try {
             // 核心逻辑：通过requestId匹配等待中的请求并完成Promise
-            responseManager.handleResponse(response);
+            RequestResponseManager.handleResponse(response);
             log.debug("响应消息 requestId={} 已成功处理", requestId);
         } catch (Exception e) {
             log.error("处理响应消息 requestId={} 时发生异常", requestId, e);

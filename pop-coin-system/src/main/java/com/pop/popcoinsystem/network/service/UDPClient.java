@@ -29,14 +29,13 @@ public class UDPClient {
     private static final AttributeKey<BigInteger> NODE_ID_KEY = AttributeKey.valueOf("NODE_ID");
     private static final int DEFAULT_OPERATION_TIMEOUT = 5000; // 默认操作超时（毫秒）
 
-    private RequestResponseManager responseManager;
 
-    public UDPClient(RequestResponseManager requestResponseManager) {
+
+    public UDPClient() {
         // 线程池复用，控制并发量
         this.executorService = Executors.newFixedThreadPool(10);
         // 全局复用EventLoopGroup（重量级资源，避免频繁创建）
         this.eventLoopGroup = new NioEventLoopGroup();
-        responseManager = requestResponseManager;
         // 初始化Bootstrap并复用配置
         this.bootstrap = new Bootstrap();
         bootstrap.group(eventLoopGroup)
@@ -118,7 +117,7 @@ public class UDPClient {
         // 标记为请求消息（非响应）
         message.setResponse(false);
         // 发送请求并获取Promise（内部异步处理）
-        Promise<KademliaMessage> promise = responseManager.sendRequest(channel, message, timeout, unit);
+        Promise<KademliaMessage> promise = RequestResponseManager.sendRequest(channel, message, timeout, unit);
         try {
             // 阻塞等待结果
             if (!promise.await(timeout, unit)) {
@@ -141,7 +140,7 @@ public class UDPClient {
         } finally {
             // 清理：如果消息处理完成，从管理器中移除
             if (promise.isDone()) {
-                responseManager.clearRequest(message.getRequestId());
+                RequestResponseManager.clearRequest(message.getRequestId());
             }
         }
     }
@@ -330,7 +329,4 @@ public class UDPClient {
         nodeUDPChannel.clear();
     }
 
-    public RequestResponseManager getResponseManager() {
-        return responseManager;
-    }
 }

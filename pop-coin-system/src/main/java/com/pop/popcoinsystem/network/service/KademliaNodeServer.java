@@ -69,6 +69,8 @@ public class KademliaNodeServer {
 
     private RpcServiceRegistry rpcServiceRegistry;
 
+
+
     @Lazy
     @Autowired
     private BlockChainServiceImpl blockChainService;
@@ -86,7 +88,7 @@ public class KademliaNodeServer {
     //TCP客服端
     private UDPClient udpClient;
     private TCPClient tcpClient;
-    private RequestResponseManager responseManager;
+
     // 替换原有ConcurrentHashMap为Guava Cache：自动过期+最大容量
     private final Cache<Long, Boolean> broadcastMessages = CacheBuilder.newBuilder()
             .maximumSize(10000) // 最大缓存10000条消息（防止内存溢出）
@@ -141,8 +143,7 @@ public class KademliaNodeServer {
     public void init() {
         routingTable = new RoutingTable(nodeInfo.getId(), nodeSettings);
         routingTable.recoverFromNodeList();
-        // 创建全局唯一的请求响应管理器
-        responseManager = new RequestResponseManager();
+
 
         //注册消息处理器
         this.registerMessageHandler(MessageType.EMPTY.getCode(), new EmptyMessageHandler());
@@ -161,8 +162,8 @@ public class KademliaNodeServer {
 
 
         //初始化UDP客户端
-        this.udpClient = new UDPClient(responseManager);
-        this.tcpClient = new TCPClient(responseManager);
+        this.udpClient = new UDPClient();
+        this.tcpClient = new TCPClient();
     }
     public void registerMessageHandler(int type, MessageHandler messageHandler) {
         KademliaMessageHandler.put(type, messageHandler);
@@ -220,7 +221,7 @@ public class KademliaNodeServer {
                             pipeline.addLast(new LengthFieldPrepender(4));
                             pipeline.addLast(new UDPKademliaMessageEncoder());
                             pipeline.addLast(new UDPKademliaMessageDecoder());
-                            pipeline.addLast(new KademliaUdpHandler(KademliaNodeServer.this,udpClient));
+                            pipeline.addLast(new KademliaUdpHandler(KademliaNodeServer.this));
                         }
                     });
 
@@ -257,7 +258,7 @@ public class KademliaNodeServer {
                             pipeline.addLast(new LengthFieldPrepender(4));
                             pipeline.addLast(new TCPKademliaMessageDecoder());
                             pipeline.addLast(new TCPKademliaMessageEncoder());
-                            pipeline.addLast(new KademliaTcpHandler(KademliaNodeServer.this,tcpClient));
+                            pipeline.addLast(new KademliaTcpHandler(KademliaNodeServer.this));
                         }
                     })
                     .option(ChannelOption.SO_BACKLOG, 128)

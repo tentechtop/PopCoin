@@ -3,6 +3,7 @@ package com.pop.popcoinsystem.service;
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.vo.result.Result;
+import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
 import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.network.rpc.RpcProxyFactory;
 import com.pop.popcoinsystem.network.common.NodeInfo;
@@ -16,6 +17,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.math.BigInteger;
+import java.net.ConnectException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -57,7 +59,7 @@ public class SyncBlockChainServiceImpl {
         return blockByRange;
     }
 
-    public Result getBlockByHash(String hash) {
+    public Result getBlockByHash(String hash) throws InterruptedException, ConnectException {
         // 1. 准备目标服务节点信息
         NodeInfo nodeInfo = new NodeInfo();
         nodeInfo.setId(BigInteger.ONE);
@@ -65,11 +67,19 @@ public class SyncBlockChainServiceImpl {
         nodeInfo.setTcpPort(8334);
         nodeInfo.setUdpPort(8333);
 
-        RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer,nodeInfo);
+/*        RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer,nodeInfo);
         BlockChainService blockChainService = proxyFactory.createProxy(BlockChainService.class);
-        Block blockByHash = blockChainService.getBlockByHash(CryptoUtil.hexToBytes(hash));
+        Block blockByHash = blockChainService.getBlockByHash(CryptoUtil.hexToBytes(hash));*/
+        PingKademliaMessage pingKademliaMessage = new PingKademliaMessage();
+        pingKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());//本节点信息
+        pingKademliaMessage.setReceiver(nodeInfo);
+        pingKademliaMessage.setReqResId();
+        pingKademliaMessage.setResponse(false);
 
-        log.info("获取区块成功{}", blockByHash);
+
+        kademliaNodeServer.getTcpClient().sendMessage(pingKademliaMessage);
+
+
 
         return Result.ok();
     }

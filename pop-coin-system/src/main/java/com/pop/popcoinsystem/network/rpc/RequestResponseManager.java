@@ -16,11 +16,19 @@ import java.util.concurrent.TimeoutException;
 
 @Slf4j
 public class RequestResponseManager {
-    // 请求ID -> 请求上下文，全局唯一映射
-    private final ConcurrentHashMap<Long, RequestContext> pendingRequests = new ConcurrentHashMap<>();
+    // 全局唯一实例（饿汉式单例，类加载时初始化，线程安全）
+    private static final RequestResponseManager INSTANCE = new RequestResponseManager();
 
-    public RequestResponseManager() {
-        // 无参构造函数，不再依赖Channel
+    // 请求ID -> 请求上下文，全局唯一映射
+    private static final ConcurrentHashMap<Long, RequestContext> pendingRequests = new ConcurrentHashMap<>();
+
+    // 私有构造函数，禁止外部实例化
+    private RequestResponseManager() {
+    }
+
+    // 全局访问点
+    public static RequestResponseManager getInstance() {
+        return INSTANCE;
     }
 
     /**
@@ -31,7 +39,7 @@ public class RequestResponseManager {
      * @param unit 时间单位
      * @return 响应的Promise
      */
-    public Promise<KademliaMessage> sendRequest(Channel channel, KademliaMessage message, long timeout, TimeUnit unit) {
+    public static Promise<KademliaMessage> sendRequest(Channel channel, KademliaMessage message, long timeout, TimeUnit unit) {
         long requestId = message.getRequestId();
         // 获取通道的EventLoop
         EventLoop eventLoop = channel.eventLoop();
@@ -48,8 +56,14 @@ public class RequestResponseManager {
             }
         }, timeout, unit);
 
-        // 存储请求上下文
-        pendingRequests.put(requestId, new RequestContext(promise, timeoutFuture));
+        // 存储请求上下文（使用putIfAbsent避免重复注册）
+        RequestContext existingContext = pendingRequests.putIfAbsent(requestId, new RequestContext(promise, timeoutFuture));
+        if (existingContext != null) {
+            // 发现重复的requestId，取消当前操作
+            timeoutFuture.cancel(false);
+            promise.setFailure(new IllegalStateException("Duplicate requestId: " + requestId));
+            return promise;
+        }
 
         // 发送消息
         channel.writeAndFlush(message).addListener((ChannelFutureListener) future -> {
@@ -71,7 +85,7 @@ public class RequestResponseManager {
     /**
      * 处理收到的响应消息
      */
-    public void handleResponse(KademliaMessage response) {
+    public static void handleResponse(KademliaMessage response) {
         if (!response.isResponse()) {
             return;
         }
@@ -111,7 +125,7 @@ public class RequestResponseManager {
     /**
      * 手动清理已处理的请求（避免内存泄漏）
      */
-    public void clearRequest(long requestId) {
+    public static void clearRequest(long requestId) {
         RequestContext context = pendingRequests.remove(requestId);
         if (context != null) {
             context.timeoutFuture.cancel(false); // 取消超时任务

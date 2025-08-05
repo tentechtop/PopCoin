@@ -1764,6 +1764,7 @@ public class BlockChainServiceImpl implements BlockChainService {
     @Override
     public Map<Long, byte[]> getBlockHashes(List<Long> heightsToCheck) {
         Map<Long, byte[]> blockHashes = popStorage.getBlockHashes(heightsToCheck);
+        log.info("批量查询哈希，查询结果:{}", blockHashes);
         if (blockHashes == null) {
             blockHashes = new HashMap<>();
         }

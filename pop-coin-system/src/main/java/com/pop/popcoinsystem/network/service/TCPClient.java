@@ -7,6 +7,9 @@ import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.timeout.IdleState;
+import io.netty.handler.timeout.IdleStateEvent;
+import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.Promise;
 import jakarta.annotation.PreDestroy;
@@ -18,6 +21,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.util.Map;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 public class TCPClient {
@@ -30,49 +34,81 @@ public class TCPClient {
     /** 节点ID到Channel的映射 */
     private final Map<BigInteger, Channel> nodeTCPChannel = new ConcurrentHashMap<>();
 
-    private RequestResponseManager responseManager;
 
     // 用于在Channel中存储节点ID的属性键
     private static final AttributeKey<BigInteger> NODE_ID_KEY = AttributeKey.valueOf("NODE_ID");
-    public static final int DEFAULT_CONNECT_TIMEOUT = 30000; // 30秒，与Netty默认保持一致
-    private static final int MAX_RETRY_COUNT = 3; // 连接重试次数
-    private static final long RETRY_DELAY_BASE = 100; // 重试基础延迟(ms)
+    public static final int DEFAULT_CONNECT_TIMEOUT = 30000; // 30秒
+    private static final int MAX_RETRY_COUNT = 2; // 减少重试次数，避免恶性循环
+    private static final long RETRY_DELAY_BASE = 200; // 延长基础延迟，避免网络拥堵
+    private static final int IDLE_TIMEOUT_SECONDS = 30; // 空闲连接超时时间
 
 
-    public TCPClient(RequestResponseManager requestResponseManager) {
-        executorService = Executors.newFixedThreadPool(10);
-        // 全局复用一个EventLoopGroup，避免资源浪费
+    public TCPClient() {
+        // 使用缓存线程池，避免固定线程数导致的任务堆积
+        executorService = new ThreadPoolExecutor(
+                0,
+                10,
+                60L, TimeUnit.SECONDS,
+                new SynchronousQueue<>(),
+                new ThreadFactory() {
+                    private final AtomicInteger counter = new AtomicInteger(0);
+                    @Override
+                    public Thread newThread(Runnable r) {
+                        Thread thread = new Thread(r, "tcp-client-pool-" + counter.incrementAndGet());
+                        thread.setDaemon(true); // 守护线程，避免阻塞程序退出
+                        return thread;
+                    }
+                }
+        );
         eventLoopGroup = new NioEventLoopGroup();
-        responseManager = requestResponseManager;
-
-        // 初始化Bootstrap并复用配置
         bootstrap = new Bootstrap();
         bootstrap.group(eventLoopGroup)
                 .channel(NioSocketChannel.class)
                 .option(ChannelOption.TCP_NODELAY, true)
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000) // 设置连接超时
+                .option(ChannelOption.SO_KEEPALIVE, true) // 启用TCP保活机制
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)
                 .handler(new ChannelInitializer<NioSocketChannel>() {
                     @Override
                     protected void initChannel(NioSocketChannel ch) throws Exception {
                         ChannelPipeline pipeline = ch.pipeline();
-                        // 使用独立的编解码器，解除与服务器实现的耦合
+                        // 添加空闲检测，自动关闭长时间无活动的连接
+                        pipeline.addLast(new IdleStateHandler(
+                                IDLE_TIMEOUT_SECONDS,
+                                IDLE_TIMEOUT_SECONDS,
+                                IDLE_TIMEOUT_SECONDS,
+                                TimeUnit.SECONDS
+                        ));
+                        // 独立编解码器，解除耦合
                         pipeline.addLast(new KademliaNodeServer.TCPKademliaMessageDecoder());
                         pipeline.addLast(new KademliaNodeServer.TCPKademliaMessageEncoder());
+                        // 处理空闲事件
+                        pipeline.addLast(new IdleStateHandlerAdapter());
                     }
                 });
     }
 
+    // 处理空闲连接的适配器
+    private class IdleStateHandlerAdapter extends ChannelInboundHandlerAdapter {
+        @Override
+        public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+            if (evt instanceof IdleStateEvent) {
+                IdleStateEvent event = (IdleStateEvent) evt;
+                if (event.state() == IdleState.ALL_IDLE) {
+                    BigInteger nodeId = ctx.channel().attr(NODE_ID_KEY).get();
+                    log.info("Node {} channel idle for {}s, closing", nodeId, IDLE_TIMEOUT_SECONDS);
+                    ctx.close(); // 触发closeFuture监听器，自动清理映射
+                }
+            }
+            super.userEventTriggered(ctx, evt);
+        }
+    }
 
 
     public KademliaMessage sendMessageWithResponse(KademliaMessage message)
             throws ConnectException, TimeoutException, InterruptedException, Exception {
-        // 默认超时时间5秒，也可以提供重载方法让用户指定超时
         return sendMessageWithResponse(message, 5, TimeUnit.SECONDS);
     }
 
-    /**
-     * 重载方法：允许用户指定超时时间
-     */
     public KademliaMessage sendMessageWithResponse(KademliaMessage message, long timeout, TimeUnit unit)
             throws ConnectException, TimeoutException, InterruptedException, Exception {
         if (message == null || message.getReceiver() == null) {
@@ -86,9 +122,10 @@ public class TCPClient {
         }
 
         message.setResponse(false);
-        Promise<KademliaMessage> promise = responseManager.sendRequest(channel, message, timeout, unit);
+        Promise<KademliaMessage> promise = RequestResponseManager.sendRequest(channel, message, timeout, unit);
         try {
-            if (!promise.await(timeout, unit)) {
+            // 使用不响应中断的等待，避免意外中断导致的异常
+            if (!promise.awaitUninterruptibly(timeout, unit)) {
                 promise.cancel(false);
                 throw new TimeoutException("等待节点 " + nodeId + " 响应超时（" + timeout +" "+ unit + "）");
             }
@@ -103,60 +140,47 @@ public class TCPClient {
                 }
             }
         } finally {
-            if (promise.isDone()) {
-                responseManager.clearRequest(message.getRequestId());
-            }
+            // 无论成功失败，都清理请求（幂等操作）
+            RequestResponseManager.clearRequest(message.getRequestId());
         }
     }
 
 
     public void sendMessage(KademliaMessage message) throws InterruptedException, ConnectException {
-        try {
-            if (message == null || message.getReceiver() == null) {
-                throw new IllegalArgumentException("Message or receiver cannot be null");
-            }
-            BigInteger nodeId = message.getReceiver().getId();
-            Channel channel = getOrCreateChannel(message.getReceiver());
-            if (channel != null && isChannelValid(channel)) {
-                channel.writeAndFlush(message).addListener((ChannelFutureListener) future -> {
-                    if (!future.isSuccess()) {
-                        log.error("Failed to send message to node {}: {}", nodeId, future.cause().getMessage());
-                        handleSendFailure(nodeId, message, future.cause());
-                    }
-                });
-            } else {
-                throw new ConnectException("No active channel available for node: " + nodeId);
-            }
-        } catch (Exception e) {
-            log.error("Failed to send message: {}", e.getMessage());
+        if (message == null || message.getReceiver() == null) {
+            throw new IllegalArgumentException("Message or receiver cannot be null");
+        }
+        BigInteger nodeId = message.getReceiver().getId();
+        Channel channel = getOrCreateChannel(message.getReceiver());
+        if (channel != null && isChannelValid(channel)) {
+            channel.writeAndFlush(message).addListener((ChannelFutureListener) future -> {
+                if (!future.isSuccess()) {
+                    log.error("Failed to send message to node {}: {}", nodeId, future.cause().getMessage());
+                    handleSendFailure(nodeId, message, future.cause());
+                }
+            });
+        } else {
+            throw new ConnectException("No active channel available for node: " + nodeId);
         }
     }
 
 
-
-    /**
-     * 处理消息发送失败的情况
-     */
-    /**
-     * 处理发送失败，增加智能重试策略
-     */
     private void handleSendFailure(BigInteger nodeId, KademliaMessage message, Throwable cause) {
-        // 只处理可恢复的错误（如连接重置、超时等）
+        // 只处理可恢复的网络错误
         if (!(cause instanceof SocketException) && !(cause instanceof ConnectException)) {
             log.warn("Unrecoverable error for node {}, no retry", nodeId, cause);
             return;
         }
-
         executorService.submit(() -> {
             try {
-                // 强制关闭旧通道并清理
-                Channel oldChannel = nodeTCPChannel.remove(nodeId);
-                if (oldChannel != null) {
-                    log.info("Closing faulty channel for node {}", nodeId);
-                    oldChannel.close().syncUninterruptibly(); // 同步关闭确保资源释放
+                // 双重检查：确保通道已被清理
+                Channel oldChannel = nodeTCPChannel.get(nodeId);
+                if (oldChannel != null && !isChannelValid(oldChannel)) {
+                    nodeTCPChannel.remove(nodeId, oldChannel); // 原子操作移除
+                    oldChannel.close().syncUninterruptibly();
                 }
 
-                // 带重试机制重建连接
+                // 重试连接并发送
                 NodeInfo receiver = message.getReceiver();
                 Channel newChannel = connectWithRetry(
                         receiver.getIpv4(),
@@ -181,22 +205,18 @@ public class TCPClient {
     }
 
 
-    /**
-     * 获取或创建通道，增强原子性和资源清理
-     */
     private Channel getOrCreateChannel(NodeInfo receiver) throws InterruptedException, ConnectException {
         BigInteger nodeId = receiver.getId();
         Channel existingChannel = nodeTCPChannel.get(nodeId);
 
-        // 检查现有通道是否有效
+        // 检查现有通道是否有效（增加更严格的判断）
         if (existingChannel != null) {
             if (isChannelValid(existingChannel)) {
                 return existingChannel;
             } else {
-                // 无效通道立即清理
                 log.info("Cleaning invalid channel for node {}", nodeId);
-                nodeTCPChannel.remove(nodeId);
-                existingChannel.close().syncUninterruptibly(); // 同步关闭
+                nodeTCPChannel.remove(nodeId, existingChannel); // 原子移除
+                existingChannel.close().syncUninterruptibly();
             }
         }
 
@@ -206,48 +226,46 @@ public class TCPClient {
                 return connectWithRetry(receiver.getIpv4(), receiver.getTcpPort(), nodeId);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                throw new RuntimeException("Interrupted while connecting to node: " + nodeId, e);
+                throw new CompletionException("Interrupted while connecting to node: " + nodeId, e);
             } catch (ConnectException e) {
-                throw new RuntimeException("Failed to connect to node: " + nodeId, e);
+                throw new CompletionException("Failed to connect to node: " + nodeId, e);
             }
         });
     }
 
 
-
-    /**
-     * 带重试机制的连接方法
-     */
     private Channel connectWithRetry(String ipv4, int tcpPort, BigInteger nodeId)
             throws InterruptedException, ConnectException {
         InetSocketAddress address = new InetSocketAddress(ipv4, tcpPort);
         ConnectException lastException = null;
 
         for (int retry = 0; retry < MAX_RETRY_COUNT; retry++) {
+            // 重试前检查是否已有其他线程成功创建通道
+            Channel existing = nodeTCPChannel.get(nodeId);
+            if (existing != null && isChannelValid(existing)) {
+                log.info("Node {} already connected by another thread, using existing channel", nodeId);
+                return existing;
+            }
+
             try {
                 return connectTarget(ipv4, tcpPort, nodeId);
             } catch (ConnectException e) {
                 lastException = e;
-                // 只对特定错误重试（如地址占用、连接超时）
                 if (isRetryableError(e)) {
                     long delay = RETRY_DELAY_BASE * (1 << retry); // 指数退避
                     log.warn("Connection attempt {} failed for node {}, retrying in {}ms",
                             retry + 1, nodeId, delay, e);
                     Thread.sleep(delay);
                 } else {
-                    // 非重试错误直接抛出
-                    break;
+                    break; // 非重试错误直接退出
                 }
             }
         }
 
         throw new ConnectException("Failed to connect to " + address + " after " +
-                MAX_RETRY_COUNT + " retries: " + lastException.getMessage());
+                MAX_RETRY_COUNT + " retries: " + (lastException != null ? lastException.getMessage() : "Unknown error"));
     }
 
-    /**
-     * 实际连接目标节点
-     */
     private Channel connectTarget(String ipv4, int tcpPort, BigInteger nodeId)
             throws InterruptedException, ConnectException {
         InetSocketAddress address = new InetSocketAddress(ipv4, tcpPort);
@@ -257,7 +275,7 @@ public class TCPClient {
         Integer connectTimeout = (Integer) bootstrap.config().options().get(ChannelOption.CONNECT_TIMEOUT_MILLIS);
         int timeoutMillis = (connectTimeout != null) ? connectTimeout : DEFAULT_CONNECT_TIMEOUT;
 
-        if (!connectFuture.await(timeoutMillis, TimeUnit.MILLISECONDS)) {
+        if (!connectFuture.awaitUninterruptibly(timeoutMillis)) {
             throw new ConnectException("Connection to " + address + " timed out after " + timeoutMillis + "ms");
         }
 
@@ -281,24 +299,24 @@ public class TCPClient {
     }
 
 
-
-
-    /**
-     * 检查通道是否有效（TCP需同时满足活跃和可写）
-     */
+    /** 更严格的通道有效性检查 */
     private boolean isChannelValid(Channel channel) {
-        return channel.isOpen() && channel.isActive() && channel.isWritable();
+        return channel != null
+                && channel.isOpen()
+                && channel.isActive()
+                && channel.isWritable()
+                && !channel.closeFuture().isDone(); // 确保未处于关闭流程中
     }
 
-    /**
-     * 判断错误是否可重试
-     */
     private boolean isRetryableError(ConnectException e) {
         String message = e.getMessage();
-        return message.contains("Address already in use") ||
-                message.contains("timed out") ||
-                message.contains("Connection refused") ||
-                message.contains("reset by peer");
+        return message != null && (
+                message.contains("Address already in use") ||
+                        message.contains("timed out") ||
+                        message.contains("Connection refused") ||
+                        message.contains("reset by peer") ||
+                        message.contains("no route to host")
+        );
     }
 
     public void sendAsyncMessage(KademliaMessage message) {
@@ -312,20 +330,20 @@ public class TCPClient {
     }
 
 
-    /**
-     * 优雅关闭所有资源，确保端口和连接释放
-     */
+
     @PreDestroy
     public void stop() {
         log.info("Stopping TCPClient...");
 
-        // 同步关闭所有通道
+        // 关闭所有通道（带超时）
         for (Map.Entry<BigInteger, Channel> entry : nodeTCPChannel.entrySet()) {
             Channel channel = entry.getValue();
             if (channel.isOpen()) {
                 try {
                     log.info("Closing channel to node {}", entry.getKey());
-                    channel.close().sync(); // 同步等待关闭完成
+                    if (!channel.close().await(1, TimeUnit.SECONDS)) {
+                        log.warn("Channel to node {} did not close in time", entry.getKey());
+                    }
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     log.error("Interrupted while closing channel to node {}", entry.getKey(), e);
@@ -333,35 +351,25 @@ public class TCPClient {
             }
         }
 
-        // 关闭EventLoopGroup
+        // 优雅关闭EventLoopGroup
         if (eventLoopGroup != null) {
             eventLoopGroup.shutdownGracefully(1, 5, TimeUnit.SECONDS)
                     .addListener(future -> log.info("TCP EventLoopGroup shut down"));
         }
 
         // 关闭线程池
-        if (executorService != null) {
-            executorService.shutdown();
-            try {
-                if (!executorService.awaitTermination(5, TimeUnit.SECONDS)) {
-                    executorService.shutdownNow();
-                }
-            } catch (InterruptedException e) {
+        executorService.shutdown();
+        try {
+            if (!executorService.awaitTermination(5, TimeUnit.SECONDS)) {
                 executorService.shutdownNow();
             }
-            log.info("TCP executor service shut down");
+        } catch (InterruptedException e) {
+            executorService.shutdownNow();
         }
+        log.info("TCP executor service shut down");
 
         nodeTCPChannel.clear();
     }
 
 
-    public NioEventLoopGroup getEventLoopGroup() {
-        return eventLoopGroup;
-    }
-
-
-    public RequestResponseManager getResponseManager() {
-        return responseManager;
-    }
 }
