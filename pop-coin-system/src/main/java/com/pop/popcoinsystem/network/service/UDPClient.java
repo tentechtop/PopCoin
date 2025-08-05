@@ -67,11 +67,9 @@ public class UDPClient {
         this.bootstrap = new Bootstrap();
         bootstrap.group(eventLoopGroup)
                 .channel(NioDatagramChannel.class) // UDP通道类型
-                .option(ChannelOption.TCP_NODELAY, true)
                 .option(ChannelOption.SO_BROADCAST, true)
                 .option(ChannelOption.SO_REUSEADDR, true) // 允许端口复用
                 .option(ChannelOption.SO_RCVBUF, 10* 1024 * 1024) // 接收缓冲区1MB
-                .option(ChannelOption.SO_SNDBUF, 10* 1024 * 1024) // 发送缓冲区1MB
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)
                 .handler(new ChannelInitializer<NioDatagramChannel>() {
                     @Override
@@ -435,26 +433,19 @@ public class UDPClient {
             return existingChannel;
         }
 
-        // 2. 原子创建新通道
+        // 2. 原子创建新通道（移除内部的 putIfAbsent 操作）
         return nodeUDPChannel.computeIfAbsent(nodeId, key -> {
             try {
-                // 二次检查，避免并发创建
+                // 二次检查，避免并发创建（双重校验）
                 Channel doubleCheck = nodeUDPChannel.get(nodeId);
                 if (doubleCheck != null && isChannelValid(doubleCheck)
                         && isChannelConnectedTo(doubleCheck, targetAddr)) {
                     return doubleCheck;
                 }
 
-                // 创建新通道
+                // 创建新通道（computeIfAbsent 会自动将结果放入 map）
                 Channel newChannel = createAndConnectChannel(nodeId, targetAddr);
-                // 原子替换，确保唯一
-                Channel prevChannel = nodeUDPChannel.putIfAbsent(nodeId, newChannel);
-                if (prevChannel != null && isChannelValid(prevChannel)
-                        && isChannelConnectedTo(prevChannel, targetAddr)) {
-                    newChannel.close(); // 关闭冗余通道
-                    return prevChannel;
-                }
-                return newChannel;
+                return newChannel; // 直接返回，无需手动 put
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new CompletionException(e);
@@ -463,7 +454,6 @@ public class UDPClient {
             }
         });
     }
-
 
 
     /**

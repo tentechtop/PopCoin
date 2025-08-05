@@ -71,11 +71,8 @@ public class TCPClient {
                 .channel(NioSocketChannel.class)
 
                 // 3. TCP参数优化
-                .option(ChannelOption.TCP_NODELAY, true)
-                .option(ChannelOption.SO_KEEPALIVE, true)
                 .option(ChannelOption.SO_REUSEADDR, true) // 允许端口复用
                 .option(ChannelOption.SO_RCVBUF, 10* 1024 * 1024) // 接收缓冲区1MB
-                .option(ChannelOption.SO_SNDBUF, 10* 1024 * 1024) // 发送缓冲区1MB
                 .handler(new ChannelInitializer<NioSocketChannel>() {
                     @Override
                     protected void initChannel(NioSocketChannel ch) throws Exception {
