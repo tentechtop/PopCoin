@@ -373,85 +373,11 @@ public class SynchronizedBlocksImpl {
      *    根据合并后的差异建立同步任务  并行执行
      *    将下载的区块暂存到 下载数据库
      *    检查全部下载完就开始从开始位置慢慢补充到主链
-     *
      *    要检查开始高度 和开始高度hash
      *    如果不重叠且间隙 hash一致 也就是 [100 hasha1 - 200 hash2] [101hash3-200hash4]
-     *    hash3的父hash是hash2 就允许创建一个新的任务
-     *
+     *    hash3的父hash是hash2 就允许创建一个新的任务  也就是两个任务 必须高度连续 区块连续
+     *    如果一个任务A是[100 hasha1 - 200 hash2] 任务B是[301 hash3 - 400 hash4] 此时如果A正在同步 则要拒绝B任务 因为不连续 无法合到主链
      */
-    public CompletableFuture<SyncTaskRecord> SubmitDifference(NodeInfo remoteNode,long localHeight, long remoteHeight,byte[] localWork,byte[] remoteWork,byte[] localHash,byte[] remoteHash) {
-        List<ExternalNodeInfo> candidateNodes = kademliaNodeServer.getRoutingTable().findClosest();
-
-
-
-
-
-
-
-
-
-
-        long newTaskStart = localHeight + 1;
-        // 2. 检查并处理与已有任务的重叠
-        List<SyncTaskRecord> overlappingTasks = findOverlappingTasks(newTaskStart, remoteHeight);
-        // 计算需要修剪的起始高度（取所有重叠任务的最大结束高度 + 1）
-        long adjustedStart = newTaskStart;
-        if (!overlappingTasks.isEmpty()) {
-            long maxEndHeight = overlappingTasks.stream()
-                    .mapToLong(SyncTaskRecord::getTargetHeight)
-                    .max()
-                    .orElse(newTaskStart - 1);
-
-            adjustedStart = maxEndHeight + 1;
-            log.info("检测到与{}个任务重叠，调整新任务起始高度从{}到{}",
-                    overlappingTasks.size(), newTaskStart, adjustedStart);
-        }
-
-        // 如果调整后起始高度超过结束高度，说明无需创建新任务
-        if (adjustedStart > remoteHeight) {
-            log.info("新任务范围已被已有任务完全覆盖，无需创建新任务");
-            return CompletableFuture.completedFuture(null);
-        }
-
-        // 3. 筛选高评分节点（评分>40）
-        List<ExternalNodeInfo> validNodes = candidateNodes.stream()
-                .filter(node -> getNodeScore(node.getId()) > 40)
-                .sorted(Comparator.comparingInt(node -> -getNodeScore(node.getId()))) // 按评分降序
-                .toList();
-        if (validNodes.isEmpty()) {
-            log.error("无可用高评分节点，同步任务创建失败");
-            return CompletableFuture.failedFuture(new IllegalStateException("无可用同步节点"));
-        }
-
-        // 4. 创建修剪后的新任务
-        SyncTaskRecord task = createSyncProgresses(adjustedStart, remoteHeight, validNodes);
-        log.info("创建新同步任务：{}", task);
-        activeTasks.put(task.getTaskId(), task);
-        popStorage.saveSyncTaskRecord(task);
-        activeTasks.put(task.getTaskId(), task);
-        // 5. 检查并发限制，提交任务执行
-        if (activeTaskCount.get() >= MAX_CONCURRENT_TASKS) {
-            log.warn("达到最大并发任务数({})，任务[{}]进入等待队列", MAX_CONCURRENT_TASKS, task.getTaskId());
-        }
-        CompletableFuture<SyncTaskRecord> taskFuture = executeSyncTask(task).whenComplete((completedTask, ex) -> {
-            activeTaskCount.decrementAndGet();
-            if (ex != null) {
-                log.error("任务[{}]执行失败", task.getTaskId(), ex);
-                completedTask.setStatus(SyncStatus.FAILED);
-                completedTask.setErrorMsg(ex.getMessage());
-            } else {
-                log.info("任务[{}]执行完成", task.getTaskId());
-            }
-            // 持久化任务状态
-            popStorage.saveSyncTaskRecord(completedTask);
-        });
-        taskFutureMap.put(task.getTaskId(), taskFuture);
-        activeTaskCount.incrementAndGet();
-        return taskFuture;
-    }
-
-
-
     public CompletableFuture<SyncTaskRecord> SubmitDifference(long localHeight, long remoteHeight) {
         List<ExternalNodeInfo> candidateNodes = kademliaNodeServer.getRoutingTable().findClosest();
         log.info("提交差异：本地高度={}, 远程高度={}", localHeight, remoteHeight);
@@ -537,39 +463,6 @@ public class SynchronizedBlocksImpl {
 
     private void detectAndSync() {
         printRunningSyncTasks();
-        long localHeight = localBlockChainService.getMainLatestHeight();
-        byte[] localWork = localBlockChainService.getMainLatestBlock().getChainWork();
-        // 获取所有邻居节点，筛选健康节点（评分>60分）
-        List<ExternalNodeInfo> allNodes = kademliaNodeServer.getRoutingTable().findClosest();
-
-        log.info("离自己最近的节点{}", allNodes);
-        // 对每个健康节点发起同步（并发控制由syncService保证）
-        for (ExternalNodeInfo externalNodeInfo : allNodes) {
-            NodeInfo node = BeanCopyUtils.copyObject(externalNodeInfo, NodeInfo.class);
-            try {
-                // 探测节点最新状态
-                RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, node);
-                BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
-                long remoteHeight = remoteService.getMainLatestHeight();
-                byte[] remoteWork = remoteService.getMainLatestBlock().getChainWork();
-                long mainLatestHeight = localBlockChainService.getMainLatestHeight();
-                log.info("探测 节点{}最新高度为: {}", node.getId(), remoteHeight);
-                // 记录节点性能（探测延迟）
-                long start = System.currentTimeMillis();
-                boolean success = remoteHeight > 0; // 简单判断探测是否成功
-                long latency = System.currentTimeMillis() - start;
-                // 若远程链更优，触发同步
-                if (remoteHeight > localHeight) {
-                    log.info("探测 节点{}链更优，开始同步", node.getId());
-                    SubmitDifference(remoteHeight,mainLatestHeight);
-                }
-            } catch (Exception e) {
-                // 记录失败，降低节点评分
-                log.warn("节点{}探测失败，降低评分", node.getId());
-                //删除
-                kademliaNodeServer.removeNode(node.getId());
-            }
-        }
     }
 
 
