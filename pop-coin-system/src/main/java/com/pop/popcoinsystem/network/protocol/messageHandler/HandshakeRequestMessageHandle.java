@@ -19,7 +19,7 @@ import java.io.Serializable;
 import java.net.ConnectException;
 import java.util.Arrays;
 
-import static com.pop.popcoinsystem.constant.BlockChainConstants.GENESIS_BLOCK_HASH_HEX;
+
 
 @Slf4j
 public class HandshakeRequestMessageHandle implements MessageHandler{
@@ -43,7 +43,7 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
         Block block = blockChainService.getMainLatestBlock();
 
         byte[] genesisBlockHash = handshake.getGenesisBlockHash();
-        byte[] genesisHsh = CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX);
+        byte[] genesisHsh = kademliaNodeServer.getBlockChainService().GENESIS_BLOCK_HASH();
         if (!Arrays.equals(genesisHsh, genesisBlockHash)){
             log.error("链信息不一致");
             //删除节点
@@ -82,7 +82,7 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
         //返回握手响应 携带自己的节点信息 和区块链信息 用于对方是否需要同步
         Handshake handshakeResponse = new Handshake();
         handshakeResponse.setExternalNodeInfo(kademliaNodeServer.getExternalNodeInfo());
-        handshakeResponse.setGenesisBlockHash(CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX));
+        handshakeResponse.setGenesisBlockHash(kademliaNodeServer.getBlockChainService().GENESIS_BLOCK_HASH());
         handshakeResponse.setLatestBlockHash(block.getHash());
         handshakeResponse.setLatestBlockHeight(block.getHeight());
         handshakeResponse.setChainWork(block.getChainWork());

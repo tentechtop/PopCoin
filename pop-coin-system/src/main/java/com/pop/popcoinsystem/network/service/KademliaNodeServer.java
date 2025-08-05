@@ -49,7 +49,6 @@ import java.net.InetSocketAddress;
 import java.util.*;
 import java.util.concurrent.*;
 
-import static com.pop.popcoinsystem.constant.BlockChainConstants.GENESIS_BLOCK_HASH_HEX;
 import static com.pop.popcoinsystem.constant.BlockChainConstants.NET_VERSION;
 // 替换为带容量限制的LRU Map（需引入Guava或自定义）
 
@@ -310,7 +309,7 @@ public class KademliaNodeServer {
                 Block mainLatestBlock = blockChainService.getMainLatestBlock();
                 Handshake handshake = new Handshake();
                 handshake.setExternalNodeInfo(this.getExternalNodeInfo());//携带我的节点信息
-                handshake.setGenesisBlockHash(CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX));
+                handshake.setGenesisBlockHash(blockChainService.GENESIS_BLOCK_HASH());
                 handshake.setLatestBlockHash(mainLatestBlock.getHash());
                 handshake.setLatestBlockHeight(mainLatestBlock.getHeight());
                 handshake.setChainWork(mainLatestBlock.getChainWork());
@@ -332,7 +331,7 @@ public class KademliaNodeServer {
         }
         // 捕获其他非网络异常
         catch (Exception e) {
-            log.error("连接引导节点时发生未知错误", e);
+            log.error("连接引导节点时发生错误: {}", e.getMessage());
         }
     }
 

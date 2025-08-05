@@ -103,21 +103,56 @@ public class BlockChainServiceImpl implements BlockChainService {
 
     @PostConstruct
     private void initBlockChain() throws Exception {
-        Block genesisBlock = getBlockByHash(GENESIS_BLOCK_HASH);
-        if (getBlockByHash(GENESIS_BLOCK_HASH) == null) {
+        Block genesisBlock = getMainBlockByHeight(0);
+        if (genesisBlock == null) {
             genesisBlock = createGenesisBlock();
-            byte[] bytes = genesisBlock.computeHash();
+            // 寻找符合难度的nonce
+            log.info("开始挖掘创世区块（难度目标：前4字节为0）...");
+            int nonce = 0;
+            byte[] validHash = null;
+            while (true) {
+                genesisBlock.setNonce(nonce);
+                // 计算区块哈希
+                byte[] blockHash = genesisBlock.computeHash();
+                if (DifficultyUtils.isValidHash(blockHash, DifficultyUtils.difficultyToCompact(1L))) {
+                    validHash = blockHash;
+                    log.info("创世区块挖掘成功！nonce={}, 哈希={}",
+                            nonce, CryptoUtil.bytesToHex(blockHash));
+                    break;
+                }
+                // 防止无限循环（实际可根据需求调整最大尝试次数）
+                if (nonce % 100000 == 0) {
+                    log.debug("已尝试{}次，继续寻找有效nonce...", nonce);
+                }
+                nonce++;
+                // 安全限制：最多尝试1亿次（防止极端情况）
+                if (nonce >= 100_000_000_0) {
+                    throw new RuntimeException("创世区块挖矿超时，未找到有效nonce");
+                }
+            }
+            // 9. 设置计算得到的哈希和nonce
+            genesisBlock.setHash(validHash);
+            genesisBlock.setNonce(nonce);
             //保存区块
             popStorage.addBlock(genesisBlock);
             //保存最新的区块hash
-            popStorage.updateMainLatestBlockHash(bytes);
+            popStorage.updateMainLatestBlockHash(validHash);
             //最新区块高度
             popStorage.updateMainLatestHeight(genesisBlock.getHeight());
             //保存主链中 高度高度到 hash的索引
-            popStorage.addMainHeightToBlockIndex(genesisBlock.getHeight(), GENESIS_BLOCK_HASH);
+            popStorage.addMainHeightToBlockIndex(genesisBlock.getHeight(), validHash);
+            applyBlock(genesisBlock);
         }
     }
 
+
+    public String GENESIS_BLOCK_HASH_HEX() {
+        return CryptoUtil.bytesToHex(popStorage.getMainBlockHashByHeight(0));
+    }
+
+    public byte[] GENESIS_BLOCK_HASH() {
+        return popStorage.getMainBlockHashByHeight(0);
+    }
 
     //main void
     public static void main(String[] args) {
@@ -331,9 +366,9 @@ public class BlockChainServiceImpl implements BlockChainService {
         genesisBlock.setTime(genesisTime);
         genesisBlock.setMedianTime(genesisTime);
 
-        // 3. 设置难度相关参数（创世区块难度通常较低）
+        // 设置难度相关参数（创世区块难度通常较低）
         genesisBlock.setDifficulty(1);
-        // 比特币创世区块难度目标：0x1d00ffff（这里使用相同值）
+        // 创世区块难度目标
         genesisBlock.setDifficultyTarget(DifficultyUtils.difficultyToCompact(1L));
         genesisBlock.setChainWork(ByteUtils.toBytes(1L));
 
@@ -357,11 +392,10 @@ public class BlockChainServiceImpl implements BlockChainService {
         // 7. 计算区块哈希（需要找到符合难度的nonce）
         // 创世区块的nonce是固定值，通过暴力计算得到
         genesisBlock.setNonce(1); // 示例nonce值（类似比特币创世块）
-        genesisBlock.setHash(GENESIS_BLOCK_HASH);
+        genesisBlock.setHash(GENESIS_BLOCK_HASH());
 
         genesisBlock.calculateAndSetSize();
         genesisBlock.calculateAndSetWeight();
-        log.info("创世区块创建成功，哈希: {}", GENESIS_BLOCK_HASH_HEX);
         return genesisBlock;
     }
 
@@ -1199,7 +1233,7 @@ public class BlockChainServiceImpl implements BlockChainService {
      */
     @Override
     public byte[] getGenesisBlockHash() {
-        return GENESIS_BLOCK_HASH;
+        return GENESIS_BLOCK_HASH();
     }
 
     /**
@@ -1208,7 +1242,7 @@ public class BlockChainServiceImpl implements BlockChainService {
      */
     @Override
     public Block getGenesisBlock() {
-        return popStorage.getBlockByHash(GENESIS_BLOCK_HASH);
+        return popStorage.getBlockByHash(GENESIS_BLOCK_HASH());
     }
 
 

@@ -18,7 +18,6 @@ import java.io.Serializable;
 import java.net.ConnectException;
 import java.util.Arrays;
 
-import static com.pop.popcoinsystem.constant.BlockChainConstants.GENESIS_BLOCK_HASH_HEX;
 
 @Slf4j
 public class HandshakeResponseMessageHandle implements MessageHandler{
@@ -44,7 +43,7 @@ public class HandshakeResponseMessageHandle implements MessageHandler{
         Block block = blockChainService.getMainLatestBlock();
 
         byte[] genesisBlockHash = handshake.getGenesisBlockHash();
-        byte[] genesisHsh = CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX);
+        byte[] genesisHsh = kademliaNodeServer.getBlockChainService().GENESIS_BLOCK_HASH();
         if (!Arrays.equals(genesisHsh, genesisBlockHash)){
             log.error("链信息不一致");
             //删除节点

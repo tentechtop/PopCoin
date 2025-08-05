@@ -36,7 +36,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-import static com.pop.popcoinsystem.constant.BlockChainConstants.GENESIS_BLOCK_HASH_HEX;
+
 import static com.pop.popcoinsystem.constant.BlockChainConstants.RPC_TIMEOUT;
 import static com.pop.popcoinsystem.data.block.Block.validateBlockHeaderPoW;
 
@@ -517,7 +517,7 @@ public class SynchronizedBlocksImpl {
                                 Block mainLatestBlock = localBlockChainService.getMainLatestBlock();
                                 Handshake handshake = new Handshake();
                                 handshake.setExternalNodeInfo(kademliaNodeServer.getExternalNodeInfo());//携带我的节点信息
-                                handshake.setGenesisBlockHash(CryptoUtil.hexToBytes(GENESIS_BLOCK_HASH_HEX));
+                                handshake.setGenesisBlockHash(kademliaNodeServer.getBlockChainService().GENESIS_BLOCK_HASH());
                                 handshake.setLatestBlockHash(mainLatestBlock.getHash());
                                 handshake.setLatestBlockHeight(mainLatestBlock.getHeight());
                                 handshake.setChainWork(mainLatestBlock.getChainWork());
