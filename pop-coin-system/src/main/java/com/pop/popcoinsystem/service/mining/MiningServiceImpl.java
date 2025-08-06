@@ -17,10 +17,7 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.OperatingSystemMXBean;
 import java.security.SecureRandom;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 
 import static com.pop.popcoinsystem.constant.BlockChainConstants.*;
 import static java.lang.Thread.sleep;
@@ -40,22 +37,6 @@ public class MiningServiceImpl {
     private volatile int miningPerformance = 30;
     // CPU保护机制相关变量
     private volatile double lastCpuLoad = 0;
-    private static final long CPU_MONITOR_INTERVAL = 5000; // 5秒检测一次
-    private long lastCpuCheckTime = 0;
-
-    private final Queue<Double> cpuLoadHistory = new LinkedList<>();
-    private static final int CPU_HISTORY_SIZE = 5; // 保存最近5次的CPU负载数据
-
-    // CPU负载阈值配置
-    private static final double HIGH_CPU_THRESHOLD = 80.0; // 高负载阈值
-    private static final double MEDIUM_CPU_THRESHOLD = 60.0; // 中等负载阈值
-    private static final double LOW_CPU_THRESHOLD = 40.0; // 低负载阈值
-
-    // 性能调整步长
-    private static final int PERFORMANCE_ADJUST_STEP = 5; // 每次调整5%
-    private static final int MAX_PERFORMANCE = 100;
-    private static final int MIN_PERFORMANCE = 30; // 最低保留30%性能，避免过度限制
-
 
     //矿工信息
     public static Miner miner;
@@ -78,6 +59,7 @@ public class MiningServiceImpl {
             return Result.error("ERROR: The node is already mining ! ");
         }
         log.info("开始初始化挖矿服务...");
+        initBlockChain();
         byte[] mainLatestBlockHash = blockChainService.getMainLatestBlockHash();
         Block block = blockChainService.getBlockByHash(mainLatestBlockHash);
         // 初始化成功
@@ -88,7 +70,6 @@ public class MiningServiceImpl {
         log.info("最新区块难度目标: {}", CryptoUtil.bytesToHex(block.getDifficultyTarget()));
         log.info("最新区块难度: {}", currentDifficulty);
         initExecutor();
-
         //获取矿工信息
         miner = storageService.getMiner();
         log.info("本节点矿工信息: {}", miner);
@@ -165,123 +146,75 @@ public class MiningServiceImpl {
 
 
 
-
+    public void initBlockChain(){
+        Block genesisBlock = blockChainService.getMainBlockByHeight(0);
+        if (genesisBlock == null) {
+            genesisBlock = blockChainService.createGenesisBlock();
+            // 寻找符合难度的nonce
+            log.info("开始挖掘创世区块（难度目标：前4字节为0）...");
+            int nonce = 0;
+            byte[] validHash = null;
+            while (true) {
+                genesisBlock.setNonce(nonce);
+                // 计算区块哈希
+                byte[] blockHash = genesisBlock.computeHash();
+                if (DifficultyUtils.isValidHash(blockHash, DifficultyUtils.difficultyToCompact(1L))) {
+                    validHash = blockHash;
+                    log.info("创世区块挖掘成功！nonce={}, 哈希={}",
+                            nonce, CryptoUtil.bytesToHex(blockHash));
+                    break;
+                }
+                // 防止无限循环（实际可根据需求调整最大尝试次数）
+                if (nonce % 100000 == 0) {
+                    log.debug("已尝试{}次，继续寻找有效nonce...", nonce);
+                }
+                nonce++;
+                // 安全限制：最多尝试1亿次（防止极端情况）
+                if (nonce >= 100_000_000_0) {
+                    throw new RuntimeException("创世区块挖矿超时，未找到有效nonce");
+                }
+            }
+            // 9. 设置计算得到的哈希和nonce
+            genesisBlock.setHash(validHash);
+            genesisBlock.setNonce(nonce);
+            //保存区块
+            storageService.addBlock(genesisBlock);
+            //保存最新的区块hash
+            storageService.updateMainLatestBlockHash(validHash);
+            //最新区块高度
+            storageService.updateMainLatestHeight(genesisBlock.getHeight());
+            //保存主链中 高度高度到 hash的索引
+            storageService.addMainHeightToBlockIndex(genesisBlock.getHeight(), validHash);
+            blockChainService.applyBlock(genesisBlock);
+        }
+    }
     private void initExecutor() {
         if (executor == null || executor.isShutdown() || executor.isTerminated()) {
-            executor = Executors.newFixedThreadPool(threadCount);
+            int corePoolSize = Runtime.getRuntime().availableProcessors(); // CPU核心数
+            int maximumPoolSize = corePoolSize; // 固定线程数
+            long keepAliveTime = 0L; // 核心线程不超时（因长期运行）
+            TimeUnit unit = TimeUnit.MILLISECONDS;
+            BlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>(); // 无界队列，缓存待执行的挖矿任务
+            ThreadFactory threadFactory = r -> {
+                Thread t = new Thread(r, "mining-thread-" + UUID.randomUUID().toString().substring(0, 8));
+                t.setPriority(Thread.NORM_PRIORITY); // 挖矿线程优先级设为正常（避免抢占系统资源）
+                t.setDaemon(false); // 非守护线程（确保挖矿可独立运行，不受主线程影响）
+                return t;
+            };
+            RejectedExecutionHandler handler = new ThreadPoolExecutor.CallerRunsPolicy(); // 任务满时让提交者（主线程）执行，避免任务丢失
+            executor = new ThreadPoolExecutor(
+                    corePoolSize,
+                    maximumPoolSize,
+                    keepAliveTime,
+                    unit,
+                    workQueue,
+                    threadFactory,
+                    handler
+            );
         }
     }
 
 
-
-
-
-
-
-
-    /**
-     * CPU保护机制 - 动态监控CPU负载并调整挖矿性能
-     */
-    private void monitorCpuLoad() {
-        long currentTime = System.currentTimeMillis();
-        if (currentTime - lastCpuCheckTime > CPU_MONITOR_INTERVAL) {
-            double cpuLoad = getSmoothedCpuLoad();
-            lastCpuCheckTime = currentTime;
-            // 多级调整策略
-            if (cpuLoad > HIGH_CPU_THRESHOLD) {
-                // 高负载：快速降低性能
-                adjustPerformance(-PERFORMANCE_ADJUST_STEP * 2);
-            } else if (cpuLoad > MEDIUM_CPU_THRESHOLD) {
-                // 中等负载：缓慢降低性能
-                adjustPerformance(-PERFORMANCE_ADJUST_STEP);
-                log.info("CPU中等负载({}%)，降低挖矿性能至{}%",
-                        String.format("%.1f", cpuLoad), miningPerformance);
-            } else if (cpuLoad < LOW_CPU_THRESHOLD) {
-                // 低负载：逐步恢复性能
-                adjustPerformance(PERFORMANCE_ADJUST_STEP);
-            }
-        }
-    }
-
-    /**
-     * 获取平滑后的CPU负载值（使用移动平均）
-     */
-    private double getSmoothedCpuLoad() {
-        double currentLoad = getSystemCpuLoad();
-        // 维护历史记录队列
-        if (cpuLoadHistory.size() >= CPU_HISTORY_SIZE) {
-            cpuLoadHistory.poll();
-        }
-        cpuLoadHistory.add(currentLoad);
-        // 计算平均值
-        double sum = 0;
-        for (double load : cpuLoadHistory) {
-            sum += load;
-        }
-        return sum / cpuLoadHistory.size();
-    }
-
-    /**
-     * 调整挖矿性能
-     * @param adjustment 调整量（正值增加性能，负值降低性能）
-     */
-    private synchronized void adjustPerformance(int adjustment) {
-        int newPerformance = miningPerformance + adjustment;
-        newPerformance = Math.max(MIN_PERFORMANCE, Math.min(MAX_PERFORMANCE, newPerformance));
-        if (newPerformance != miningPerformance) {
-            miningPerformance = newPerformance;
-            log.info("挖矿性能调整为: {}%", miningPerformance);
-        }
-    }
-
-
-    /**
-     * 获取系统CPU负载
-     */
-    private double getSystemCpuLoad() {
-        try {
-            OperatingSystemMXBean osBean = ManagementFactory.getOperatingSystemMXBean();
-            if (osBean instanceof com.sun.management.OperatingSystemMXBean) {
-                return ((com.sun.management.OperatingSystemMXBean) osBean).getCpuLoad() * 100;
-            }
-            return osBean.getSystemLoadAverage();
-        } catch (Exception e) {
-            log.error("获取CPU负载失败", e);
-            return 0.0;
-        }
-    }
-
-
-    /**
-     * 设置挖矿性能
-     * @param performance 0-100（百分比）
-     */
-    public synchronized Result<String> setMiningPerformance(int performance) {
-        if (performance >= 0 && performance <= 100) {
-            this.miningPerformance = performance;
-            log.info("挖矿性能设置为: {}%", performance);
-            return Result.ok("挖矿性能已设置为: " + performance + "%");
-        } else {
-            log.error("无效的性能值: {}", performance);
-            return Result.error("性能值必须在0-100之间");
-        }
-    }
-
-
-    /**
-     * 获取挖矿状态
-     */
-    public Map<String, Object> getMiningStatus() {
-        Map<String, Object> status = new LinkedHashMap<>();
-        status.put("isMining", isMining);
-        status.put("performance", miningPerformance + "%");
-        status.put("threads", threadCount);
-        status.put("cpuLoad", String.format("%.1f%%", lastCpuLoad));
-        status.put("difficulty", currentDifficulty);
-        status.put("transactionPoolSize", transactions.size());
-        status.put("transactionPoolUsage", String.format("%.1f%%", (currentSize * 100.0 / MAX_SIZE_BYTES)));
-        return status;
-    }
 
     /**
      * 添加交易到交易池 该交易已经验证
@@ -607,8 +540,4 @@ public class MiningServiceImpl {
         isMining = false;
         return Result.ok();
     }
-
-
-
-
 }
