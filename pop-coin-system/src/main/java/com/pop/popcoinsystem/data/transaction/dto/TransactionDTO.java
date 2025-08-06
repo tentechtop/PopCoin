@@ -49,11 +49,6 @@ public class TransactionDTO {
     private long lockTime  = 0;
 
     /**
-     * 交易创建时间
-     */
-    private long time = System.currentTimeMillis();
-
-    /**
      * 交易输入
      */
     private List<TXInputDTO> inputs = new ArrayList<>();;//交易的输入。可以有多个输入，每一个输入都说明了他是引用的哪一比交易的输出。这里可以理解为 我本次交易的钱是从哪来的。

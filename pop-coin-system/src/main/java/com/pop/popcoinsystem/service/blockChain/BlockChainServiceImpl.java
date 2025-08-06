@@ -782,7 +782,6 @@ public class BlockChainServiceImpl implements BlockChainService {
      * 处理区块
      */
     private void processValidBlock(Block block) {
-        log.info("处理区块: {}", block.getTransactions());
         // 保存区块到数据库
         popStorage.addBlock(block);
         // 获取主链最新信息
@@ -1485,41 +1484,29 @@ public class BlockChainServiceImpl implements BlockChainService {
         Transaction coinbaseTx = new Transaction();
         byte[] zeroTxId = new byte[32]; // 32字节 = 256位
         Arrays.fill(zeroTxId, (byte) 0);
-        ScriptSig scriptSig = null;
-        Witness witness = null;
-        //如果是普通地址就创建普通地址的脚本
-        //如果是隔离见证就闯一个见证数据
-        //coinBase的输入的交易ID
-        // 1. 获取当前时间毫秒数
-        long currentTimeMillis = System.currentTimeMillis();
-        // 2. 将时间毫秒数转换为字节数组
+        // 获取当前时间毫秒数
+        long currentTimeMillis = TransactionTimeGenerator.generateUniqueTransactionTime();
+        // 将时间毫秒数转换为字节数组
         byte[] timeBytes = ByteUtils.toBytes(currentTimeMillis);
-        // 3. 对时间字节数组进行第一次SHA256哈希
+        // 对时间字节数组进行第一次SHA256哈希
         byte[] firstHash = CryptoUtil.applySHA256(timeBytes);
-        // 4. 生成随机数（使用安全随机数生成器）
+        // 生成随机数（使用安全随机数生成器）
         SecureRandom secureRandom = new SecureRandom();
         long randomNumber = secureRandom.nextLong();
         byte[] randomBytes = ByteUtils.toBytes(randomNumber);
-        // 5. 拼接第一次哈希结果和随机数字节数组
+        // 拼接第一次哈希结果和随机数字节数组
         byte[] combined = new byte[firstHash.length + randomBytes.length];
         System.arraycopy(firstHash, 0, combined, 0, firstHash.length);
         System.arraycopy(randomBytes, 0, combined, firstHash.length, randomBytes.length);
-        // 6. 对拼接后的数组进行第二次SHA256哈希
+        // 对拼接后的数组进行第二次SHA256哈希
         byte[] secondHash = CryptoUtil.applyRIPEMD160(combined);
         byte[] extraNonce = Arrays.copyOfRange(secondHash, 0, 8);
-        if (addressType == AddressType.P2WPKH || addressType == AddressType.P2WSH){
-            witness = new Witness();
-            witness.addItem(extraNonce);
-        }
-        scriptSig = new ScriptSig(extraNonce);//解锁脚本必须有随机字符 同一个矿工的coinBase会一模一样
-        ArrayList<Witness> witnesses = new ArrayList<>();
+        ScriptSig scriptSig = new ScriptSig(extraNonce);//解锁脚本必须有随机字符 同一个矿工的coinBase会一模一样
         TXInput input = new TXInput(zeroTxId, 0, scriptSig);
         // 创建输出，将奖励发送到指定地址
         TXOutput output = new TXOutput(calculateBlockReward(height)+totalFee, scriptPubKey);
         coinbaseTx.setVersion(TRANSACTION_VERSION_1);
         coinbaseTx.getInputs().add(input);
-        witnesses.add(witness);
-        coinbaseTx.setWitnesses(witnesses);
         coinbaseTx.getOutputs().add(output);
         // 计算并设置交易ID
         coinbaseTx.setTxId(coinbaseTx.calculateTxId());
@@ -1653,7 +1640,6 @@ public class BlockChainServiceImpl implements BlockChainService {
                 log.error("{} UTXO查询返回空结果 -> cursor: {}", address, cursor);
                 break;
             }
-            log.info("查询结果:{}",pageResult.getData());
             UTXOSearch searchResult = pageResult.getData();
             if (searchResult == null) {
                 log.warn("{} UTXO分页数据为空 -> cursor: {}", address, cursor);

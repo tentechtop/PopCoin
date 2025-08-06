@@ -1244,7 +1244,6 @@ public class StorageService {
 
 
     public TPageResult<UTXOSearch> selectUtxoAmountsByScriptHash(byte[] scriptHash, int pageSize, String lastUtxoKey) {
-        log.info("参数"+CryptoUtil.bytesToHex(scriptHash)+"--"+pageSize+"--"+lastUtxoKey);
         if (scriptHash == null || scriptHash.length != 20) {
             throw new IllegalArgumentException("脚本哈希必须为20字节");
         }
