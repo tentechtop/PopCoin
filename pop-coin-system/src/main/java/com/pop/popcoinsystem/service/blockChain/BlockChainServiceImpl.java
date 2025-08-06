@@ -1511,7 +1511,7 @@ public class BlockChainServiceImpl implements BlockChainService {
             witness = new Witness();
             witness.addItem(extraNonce);
         }
-        scriptSig = new ScriptSig(extraNonce);
+        scriptSig = new ScriptSig(extraNonce);//解锁脚本必须有随机字符 同一个矿工的coinBase会一模一样
         ArrayList<Witness> witnesses = new ArrayList<>();
         TXInput input = new TXInput(zeroTxId, 0, scriptSig);
         // 创建输出，将奖励发送到指定地址

@@ -126,7 +126,6 @@ public class MiningServiceImpl {
                 }
                 Transaction coinBaseTransaction = BlockChainServiceImpl.createCoinBaseTransaction(miner.getAddress(), blockHeight+1, totalFee);
                 log.info("创建CoinBase交易 矿工地址 : {}", miner.getAddress());
-
                 blockTransactions.add(coinBaseTransaction);
                 blockTransactions.addAll(transactions);
                 newBlock.setTransactions(blockTransactions);
