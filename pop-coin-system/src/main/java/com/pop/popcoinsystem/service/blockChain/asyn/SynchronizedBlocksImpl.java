@@ -194,7 +194,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
     private void adjustThreadPools() {
         try {
             double cpuUsage = getSystemCpuUsage(); // 获取系统CPU使用率
-
             // 根据CPU使用率调整下载线程池
             adjustThreadPool("下载线程池", downloadExecutor, cpuUsage, 0.5, 0.2);
             // 根据CPU使用率调整处理线程池

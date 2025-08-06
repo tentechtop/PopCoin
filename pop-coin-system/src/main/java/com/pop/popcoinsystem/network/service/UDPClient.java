@@ -38,7 +38,7 @@ public class UDPClient {
                 Runtime.getRuntime().availableProcessors() * 2,
                 200,
                 60L, TimeUnit.SECONDS,
-                new SynchronousQueue<>(),
+                new LinkedBlockingQueue<>(1024),
                 new ThreadFactory() {
                     private final AtomicInteger counter = new AtomicInteger();
                     @Override
