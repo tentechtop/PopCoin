@@ -65,7 +65,7 @@ public class BlockChainConstants {
     public static final long MONEY_SUPPLY = 2100000000;
 
     //区块生成时间
-    public static final long BLOCK_GENERATION_TIME = 20; //600是600秒 10分钟
+    public static final long BLOCK_GENERATION_TIME = 30; //600是600秒 10分钟
 
     //减半周期
     public static final int HALVING_PERIOD = 21000000;

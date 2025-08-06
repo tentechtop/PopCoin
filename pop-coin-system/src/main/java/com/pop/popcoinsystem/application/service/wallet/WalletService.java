@@ -606,9 +606,9 @@ public class WalletService {
         }
         transaction.setSize(transaction.calculateTotalSize());
         transaction.calculateWeight();
-        transaction.setTxId(Transaction.calculateTxId(transaction));
+        transaction.setTxId(transaction.calculateTxId());
         if (!witnesses.isEmpty()) {
-            transaction.setWtxId(Transaction.calculateWtxId(transaction));
+            transaction.setWtxId(transaction.calculateWtxId());
             log.info("隔离见证交易ID: {}", CryptoUtil.bytesToHex(transaction.getWtxId()));
         }
         log.info("交易ID: {}", CryptoUtil.bytesToHex(transaction.getTxId()));

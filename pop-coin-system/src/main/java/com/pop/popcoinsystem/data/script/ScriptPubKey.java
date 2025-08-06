@@ -234,4 +234,16 @@ public class ScriptPubKey extends Script implements Serializable {
 
 
 
+    public ScriptPubKey copy() {
+        ScriptPubKey scriptPubKey = new ScriptPubKey();
+        List<ScriptElement> elements1 = this.getElements();
+        for (ScriptElement element : elements1) {
+            if (element.isOpCode()) {
+                scriptPubKey.addOpCode(element.getOpCode());
+            } else {
+                scriptPubKey.addData(element.getData());
+            }
+        }
+        return scriptPubKey;
+    }
 }

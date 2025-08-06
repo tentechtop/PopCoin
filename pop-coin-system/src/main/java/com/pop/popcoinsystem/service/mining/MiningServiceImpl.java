@@ -3,6 +3,7 @@ package com.pop.popcoinsystem.service.mining;
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockHeader;
 import com.pop.popcoinsystem.data.miner.Miner;
+import com.pop.popcoinsystem.data.transaction.TransactionTimeGenerator;
 import com.pop.popcoinsystem.service.blockChain.BlockChainServiceImpl;
 import com.pop.popcoinsystem.service.blockChain.asyn.SynchronizedBlocksImpl;
 import com.pop.popcoinsystem.storage.StorageService;
@@ -46,7 +47,7 @@ public class MiningServiceImpl {
     private volatile int miningPerformance = 5;
 
     //矿工信息
-    public static Miner miner;
+    volatile public Miner miner;
     // 当前难度目标（前导零的数量）
     private static long currentDifficulty = 1;
     //是否启动挖矿服务 用于停止挖矿的标志
@@ -123,7 +124,9 @@ public class MiningServiceImpl {
                 for (Transaction transaction : transactions) {
                     totalFee += blockChainService.getFee(transaction);
                 }
-                Transaction coinBaseTransaction = blockChainService.createCoinBaseTransaction(miner.getAddress(), blockHeight+1, totalFee);
+                Transaction coinBaseTransaction = BlockChainServiceImpl.createCoinBaseTransaction(miner.getAddress(), blockHeight+1, totalFee);
+                log.info("创建CoinBase交易 矿工地址 : {}", miner.getAddress());
+
                 blockTransactions.add(coinBaseTransaction);
                 blockTransactions.addAll(transactions);
                 newBlock.setTransactions(blockTransactions);

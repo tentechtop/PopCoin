@@ -13,6 +13,8 @@ import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.Serializable;
 import java.security.KeyPair;
@@ -33,22 +35,42 @@ import static com.pop.popcoinsystem.constant.BlockChainConstants.*;
 //非见证数据：包含版本号、输入输出结构、锁定时间等固定信息。
 //见证数据：包含签名、公钥等证明交易合法性的信息。
 
+/**
+ * 交易 ID（txid）的计算机制
+ * 核心逻辑：
+ * txid 是对交易的 完整非见证数据（包括 nLockTime、输入输出、版本号等）进行 双重 SHA-256 哈希 的结果。
+ * 计算公式：txid = SHA256(SHA256(非见证数据))。
+ * 非见证数据范围：
+ * 包括版本号、输入（不含见证数据）、输出、nLockTime 等，但不包含隔离见证的见证数据。
+ * 时间的影响：
+ * nLockTime 直接参与哈希计算，若交易的 nLockTime 被修改，即使其他字段不变，txid 也会完全不同。
+ *
+ *
+ *核心逻辑：
+ * wtxid 是对交易的 完整数据（包括非见证数据和见证数据）进行 双重 SHA-256 哈希 的结果。
+ * 计算公式：wtxid = SHA256(SHA256(完整数据))。
+ * 完整数据范围：
+ * 包括版本号、输入（含见证数据）、输出、nLockTime、见证数据等所有字段。
+ * 时间的影响：
+ * nLockTime 和见证数据中的时间相关信息（如签名时间戳）均会影响 wtxid 的计算。
+ *
+ */
+
+
 @Slf4j
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 public class Transaction implements Serializable {
     /**
-     * 交易ID（txid）：
-     * - 非隔离见证交易：整个交易数据（不含见证数据，因无见证数据）的双重SHA256哈希
-     * - 隔离见证交易：仅非见证数据（版本、输入输出结构、锁定时间等）的双重SHA256哈希
+     * 交易ID（txid）：基于非见证数据的双重SHA256哈希
+     * 非见证数据范围：版本号 + 输入列表（不含见证数据） + 输出列表 + 锁定时间 + 交易创建时间
      */
     private byte[] txId;  //基于非见证数据计算（版本、输入输出、锁定时间等，不含见证数据）
 
     /**
-     * 见证交易ID（wtxid）：
-     * - 非隔离见证交易：与txid相同
-     * - 隔离见证交易：包含所有数据（非见证数据+见证数据）的双重SHA256哈希
+     * 隔离见证ID（wtxid）：基于完整数据的双重SHA256哈希
+     * 完整数据范围：非见证数据 + 见证数据（隔离见证交易）/ 与txid一致（普通交易）
      */
     private byte[] wtxId; //基于完整数据（含见证数据）计算，非隔离见证交易与txId一致
 
@@ -66,6 +88,7 @@ public class Transaction implements Serializable {
      * 权重
      */
     private long weight;
+
 
     /**
      * 锁定时间
@@ -86,6 +109,229 @@ public class Transaction implements Serializable {
      * 见证数据
      */
     private List<Witness> witnesses = new ArrayList<>(); // 每个输入对应一个Witness
+
+
+
+
+
+
+
+
+
+    // ------------------------------ 核心：ID计算逻辑重构 ------------------------------
+    public byte[] calculateTxId() {
+        // 1. 生成非见证数据快照（仅包含计算txid必需的字段）
+        Transaction nonWitnessTx = createNonWitnessSnapshot();
+        // 2. 序列化非见证数据（严格按规范字段顺序）
+        byte[] nonWitnessBytes = nonWitnessTx.serializeNonWitnessData();
+        // 3. 双重SHA256哈希
+        return doubleHash256(nonWitnessBytes);
+    }
+
+    /**
+     * 计算隔离见证ID（wtxid）：基于完整数据的双重SHA256哈希
+     * 完整数据 = 非见证数据 + 见证数据（隔离见证交易）；普通交易与txid一致
+     */
+    public byte[] calculateWtxId() {
+        if (!isSegWit()) {
+            return calculateTxId(); // 普通交易wtxid与txid相同
+        }
+        // 1. 生成完整数据快照（包含所有字段，包括见证数据）
+        Transaction fullTx = createFullSnapshot();
+        // 2. 序列化完整数据（非见证数据 + 见证数据）
+        byte[] fullBytes = fullTx.serializeFullData();
+        // 3. 双重SHA256哈希
+        return doubleHash256(fullBytes);
+    }
+
+
+    // ------------------------------ 快照创建：严格控制数据范围 ------------------------------
+    /**
+     * 创建非见证数据快照（仅用于txid计算）
+     * 确保快照中不包含任何见证数据，且核心字段与原交易严格一致
+     */
+    private Transaction createNonWitnessSnapshot() {
+        Transaction snapshot = new Transaction();
+        // 复制基础字段（不可变）
+        snapshot.version = this.version;
+        snapshot.lockTime = this.lockTime;
+
+        // 复制输入列表（清空scriptSig以外的无关数据，且不含见证数据）
+        List<TXInput> inputSnapshots = new ArrayList<>();
+        for (TXInput input : this.inputs) {
+            TXInput inputSnapshot = new TXInput();
+            inputSnapshot.setTxId(Arrays.copyOf(input.getTxId(), input.getTxId().length)); // 深拷贝前序交易ID
+            inputSnapshot.setVout(input.getVout());
+            inputSnapshot.setSequence(input.getSequence());
+            inputSnapshot.setScriptSig(input.getScriptSig() != null ? input.getScriptSig().copy() : null); // 深拷贝脚本
+            inputSnapshots.add(inputSnapshot);
+        }
+        snapshot.inputs = inputSnapshots;
+
+        // 复制输出列表（完整保留，输出不含见证数据）
+        List<TXOutput> outputSnapshots = new ArrayList<>();
+        for (TXOutput output : this.outputs) {
+            TXOutput outputSnapshot = new TXOutput();
+            outputSnapshot.setValue(output.getValue());
+            outputSnapshot.setScriptPubKey(output.getScriptPubKey() != null ? output.getScriptPubKey().copy() : null); // 深拷贝脚本
+            outputSnapshots.add(outputSnapshot);
+        }
+        snapshot.outputs = outputSnapshots;
+
+        // 强制清空见证数据（非见证快照核心特征）
+        snapshot.witnesses = new ArrayList<>();
+        return snapshot;
+    }
+
+    /**
+     * 创建完整数据快照（仅用于wtxid计算）
+     * 包含所有字段（非见证数据 + 见证数据），确保与原交易完全一致
+     */
+    private Transaction createFullSnapshot() {
+        Transaction snapshot = this.copy(); // 利用深拷贝机制复制所有字段
+        // 清除临时计算的ID，避免干扰序列化
+        snapshot.txId = null;
+        snapshot.wtxId = null;
+        return snapshot;
+    }
+
+
+    // ------------------------------ 序列化：严格遵循规范格式 ------------------------------
+
+
+    /**
+     * 序列化非见证数据（用于txid计算）
+     * 格式：版本号（4字节小端）→ 输入数量（VarInt）→ 输入列表 → 输出数量（VarInt）→ 输出列表 → 锁定时间（4字节小端）→ 交易时间（8字节小端）
+     */
+    private byte[] serializeNonWitnessData() {
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
+             DataOutputStream dos = new DataOutputStream(baos)) {
+
+            // 1. 版本号（32位整数，小端序）
+            dos.writeInt(Integer.reverseBytes(version));
+
+            // 2. 输入数量（VarInt编码）
+            writeVarInt(dos, inputs.size());
+
+            // 3. 输入列表
+            for (TXInput input : inputs) {
+                // 3.1 前序交易ID（32字节，小端序）
+                byte[] txId = input.getTxId();
+                if (txId != null) {
+                    dos.write(Arrays.copyOf(txId, 32)); // 确保32字节长度
+                } else {
+                    dos.write(new byte[32]); // 空ID填0
+                }
+
+                // 3.2 前序输出索引（32位整数，小端序）
+                dos.writeInt(Integer.reverseBytes(input.getVout()));
+
+                // 3.3 解锁脚本（ScriptSig）：长度（VarInt）+ 脚本字节
+                ScriptSig scriptSig = input.getScriptSig();
+                byte[] scriptSigBytes = scriptSig != null ? scriptSig.getScriptBytes() : new byte[0];
+                writeVarInt(dos, scriptSigBytes.length);
+                dos.write(scriptSigBytes);
+
+                // 3.4 序列号（32位整数，小端序）
+                dos.writeInt(Integer.reverseBytes((int) input.getSequence()));
+            }
+
+            // 4. 输出数量（VarInt编码）
+            writeVarInt(dos, outputs.size());
+
+            // 5. 输出列表
+            for (TXOutput output : outputs) {
+                // 5.1 金额（64位整数，小端序）
+                dos.writeLong(Long.reverseBytes(output.getValue()));
+
+                // 5.2 锁定脚本（ScriptPubKey）：长度（VarInt）+ 脚本字节
+                ScriptPubKey scriptPubKey = output.getScriptPubKey();
+                byte[] scriptPubKeyBytes = scriptPubKey != null ? scriptPubKey.getScriptBytes() : new byte[0];
+                writeVarInt(dos, scriptPubKeyBytes.length);
+                dos.write(scriptPubKeyBytes);
+            }
+
+            // 6. 锁定时间（32位整数，小端序）
+            dos.writeInt(Integer.reverseBytes((int) lockTime));
+
+
+
+            return baos.toByteArray();
+        } catch (IOException e) {
+            throw new RuntimeException("非见证数据序列化失败", e);
+        }
+    }
+
+    /**
+     * 序列化完整数据（用于wtxid计算）
+     * 格式：非见证数据 + 隔离见证标记（0x0001） + 见证数据列表
+     */
+    private byte[] serializeFullData() {
+        try (java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+             java.io.DataOutputStream dos = new java.io.DataOutputStream(baos)) {
+
+            // 1. 先写入非见证数据
+            baos.write(serializeNonWitnessData());
+
+            // 2. 隔离见证标记（0x0001，仅隔离见证交易需要）
+            dos.writeShort(0x0001); // 固定标记，区分隔离见证交易
+
+            // 3. 见证数据列表（每个输入对应一个见证）
+            for (Witness witness : witnesses) {
+                if (witness == null) {
+                    writeVarInt(dos, 0); // 空见证
+                    continue;
+                }
+                // 3.1 见证项数量（VarInt）
+                writeVarInt(dos, witness.getStack().size());
+                // 3.2 每个见证项：长度（VarInt）+ 数据
+                for (byte[] item : witness.getStack()) {
+                    if (item == null) {
+                        writeVarInt(dos, 0);
+                    } else {
+                        writeVarInt(dos, item.length);
+                        dos.write(item);
+                    }
+                }
+            }
+
+            return baos.toByteArray();
+        } catch (IOException e) {
+            throw new RuntimeException("完整数据序列化失败", e);
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+    /**
+     * 写入VarInt编码（比特币变量长度整数编码）
+     * 格式：<0xfd → 1字节；0xfd-0xffff → 0xfd + 2字节小端；0x10000-0xffffffff → 0xfe + 4字节小端；更大 → 0xff + 8字节小端
+     */
+    private void writeVarInt(DataOutputStream dos, int value) throws IOException {
+        if (value < 0xfd) {
+            dos.writeByte(value);
+        } else if (value <= 0xffff) {
+            dos.writeByte(0xfd);
+            dos.writeShort(Short.reverseBytes((short) value));
+        } else if (value <= 0xffffffffL) {
+            dos.writeByte(0xfe);
+            dos.writeInt(Integer.reverseBytes(value));
+        } else {
+            dos.writeByte(0xff);
+            dos.writeLong(Long.reverseBytes(value));
+        }
+    }
+
+
+
+
 
 
     //设置交易大小
@@ -172,35 +418,14 @@ public class Transaction implements Serializable {
 
 
 
-    /**
-     * 计算交易txid（核心方法，统一逻辑）
-     * 无论是否为隔离见证交易，均基于非见证数据计算
-     */
-    public static byte[] calculateTxId(Transaction transaction) {
-        // 复制交易并移除见证数据（确保计算基础为非见证数据）
-        Transaction nonWitnessTx = copyWithoutWitness(transaction);
-        // 序列化非见证数据
-        byte[] nonWitnessData = SerializeUtils.serialize(nonWitnessTx);
-        // 双重SHA256计算txid
-        return doubleHash256(nonWitnessData);
-    }
 
-    /**
-     * 计算交易wtxid（核心方法，统一逻辑）
-     * 隔离见证交易包含见证数据，非隔离见证交易与txid一致
-     */
-    public static byte[] calculateWtxId(Transaction transaction) {
-        if (!transaction.isSegWit()) {
-            // 非隔离见证交易：wtxid = txid
-            return calculateTxId(transaction);
-        }
-        Transaction copy = transaction.copy();
-        copy.setWtxId(null);
-        // 隔离见证交易：序列化完整交易（含见证数据）
-        byte[] fullData = SerializeUtils.serialize(copy);
-        // 双重SHA256计算wtxid
-        return doubleHash256(fullData);
-    }
+
+
+
+
+
+
+
 
 
 
@@ -215,7 +440,7 @@ public class Transaction implements Serializable {
             inputCopy.setTxId(input.getTxId() != null ? Arrays.copyOf(input.getTxId(), input.getTxId().length) : null);
             inputCopy.setVout(input.getVout());
             inputCopy.setSequence(input.getSequence());
-            inputCopy.setScriptSig(null); // 排除scriptSig（见证数据相关）
+            inputCopy.setScriptSig(input.getScriptSig());
             inputs.add(inputCopy);
         }
         copy.setInputs(inputs);
@@ -226,35 +451,6 @@ public class Transaction implements Serializable {
         return copy;
     }
 
-
-
-
-
-
-
-
-    // 移除见证数据的辅助方法
-    private static Transaction removeWitnessData(Transaction tx) {
-        Transaction copy = new Transaction();
-        copy.setVersion(tx.getVersion());
-        copy.setLockTime(tx.getLockTime());
-        // 复制输入（不包含见证数据）
-        List<TXInput> inputs = new ArrayList<>();
-        for (TXInput input : tx.getInputs()) {
-            TXInput copyInput = new TXInput();
-            copyInput.setTxId(input.getTxId());
-            copyInput.setVout(input.getVout());
-            copyInput.setScriptSig(null);
-            copyInput.setSequence(input.getSequence());
-            inputs.add(copyInput);
-        }
-        copy.setInputs(inputs);
-        // 复制输出
-        copy.setOutputs(new ArrayList<>(tx.getOutputs()));
-        // 清空见证数据
-        copy.setWitnesses(new ArrayList<>());
-        return copy;
-    }
 
 
     // 双重SHA256哈希计算
@@ -393,58 +589,7 @@ public class Transaction implements Serializable {
 
 
 
-    // 创建一个普通交易用于测试
-    private static Transaction createRegularTransaction() {
-        KeyPair keyPair = CryptoUtil.ECDSASigner.generateKeyPair();
-        PrivateKey privateKey = keyPair.getPrivate();
-        PublicKey publicKey = keyPair.getPublic();
-        // 模拟输入：引用之前的交易输出
-        TXInput input = new TXInput(
-                publicKey.getEncoded(),
-                0,
-                new ScriptSig()
-        );
-        input.setSequence(0xFFFFFFFF);
 
-        // 模拟输出：支付给接收方和找零
-        TXOutput output1 = new TXOutput(
-                95000000, // 95000000 聪 = 0.95 BTC
-                new ScriptPubKey(publicKey.getEncoded())
-        );
-        TXOutput output2 = new TXOutput(
-                4900000, // 4900000 聪 = 0.049 BTC (找零)
-                new ScriptPubKey(publicKey.getEncoded())
-        );
-
-        Transaction tx = new Transaction();
-        tx.setVersion(1);
-        tx.getInputs().add(input);
-        tx.getOutputs().add(output1);
-        tx.getOutputs().add(output2);
-        tx.setTxId(calculateTxId(tx));
-
-        return tx;
-    }
-
-    // 创建一个隔离见证交易用于测试
-    private static Transaction createSegWitTransaction() {
-        KeyPair keyPair = CryptoUtil.ECDSASigner.generateKeyPair();
-        PrivateKey privateKey = keyPair.getPrivate();
-        PublicKey publicKey = keyPair.getPublic();
-
-        Transaction tx = createRegularTransaction();
-
-        // 添加见证数据
-        Witness witness = new Witness();
-        witness.addItem(privateKey.getEncoded());
-        witness.addItem(publicKey.getEncoded());
-        tx.getWitnesses().add(witness);
-
-        // 重新计算交易ID（隔离见证交易的ID计算方式不同）
-        tx.setTxId(calculateTxId(tx));
-
-        return tx;
-    }
 
 
     public Transaction copy() {
@@ -455,10 +600,11 @@ public class Transaction implements Serializable {
         copy.setWeight(this.weight);
         copy.setLockTime(this.lockTime);
 
-        // 深拷贝 txId 数组（避免引用同一数组）
-        if (this.txId != null) {
-            copy.setTxId(Arrays.copyOf(this.txId, this.txId.length));
-        }
+        // 深拷贝txId和wtxId
+        copy.txId = this.txId != null ? Arrays.copyOf(this.txId, this.txId.length) : null;
+        copy.wtxId = this.wtxId != null ? Arrays.copyOf(this.wtxId, this.wtxId.length) : null;
+
+
         // 深拷贝输入列表（包含每个 TXInput 的拷贝）
         List<TXInput> copiedInputs = new ArrayList<>();
         for (TXInput input : this.inputs) {
@@ -536,6 +682,17 @@ public class Transaction implements Serializable {
 
         return copy;
     }
+
+    /**
+     * 交易数据更新时强制刷新ID（如修改输入/输出/见证数据后调用）
+     */
+    public void refreshIds() {
+        this.txId = calculateTxId();
+        this.wtxId = calculateWtxId();
+        this.setSize();
+        this.calculateWeight();
+    }
+
 
     /**
      * 计算交易的总字节大小（包含所有数据：基础数据 + 见证数据）
@@ -690,8 +847,8 @@ public class Transaction implements Serializable {
      * 交易数据更新时调用（如修改输入输出、添加见证数据），强制重新计算ID
      */
     public void updateData() {
-        this.txId = calculateTxId(this);
-        this.wtxId = calculateWtxId(this);
+        this.txId = calculateTxId();
+        this.wtxId = calculateWtxId();
         this.setSize(); // 同步更新大小
         this.calculateWeight(); // 同步更新权重
     }
@@ -699,14 +856,14 @@ public class Transaction implements Serializable {
     // 修正ID获取与更新逻辑
     public byte[] getTxId() {
         if (txId == null) {
-            txId = calculateTxId(this);
+            txId = calculateTxId();
         }
         return txId;
     }
 
     public byte[] getWtxId() {
         if (wtxId == null) {
-            wtxId = calculateWtxId(this);
+            wtxId = calculateWtxId();
         }
         return wtxId;
     }
@@ -718,7 +875,7 @@ public class Transaction implements Serializable {
         java.io.DataOutputStream dos = new java.io.DataOutputStream(baos);
         try {
             // 1. 写入版本号
-            //dos.writeInt(this.getVersion());
+            dos.writeInt(this.getVersion());
 
             // 2. 处理输入（根据ANYONECANPAY标志）
             boolean anyoneCanPay = (sigHashType.getValue() & 0x80) != 0;

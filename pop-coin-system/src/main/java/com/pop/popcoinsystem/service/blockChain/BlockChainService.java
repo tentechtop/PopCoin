@@ -29,6 +29,11 @@ public interface BlockChainService {
     boolean verifyTransaction(Transaction transaction);
 
     /**
+     * 验证区块合法性（包括交易、PoW、链连续性等）
+     */
+    boolean verifyBlock(Block block, boolean broadcastMessage);
+
+    /**
      * 创建创世区块
      */
     Block createGenesisBlock();
@@ -38,10 +43,7 @@ public interface BlockChainService {
      */
     boolean verifyAndAddTradingPool(Transaction transaction,boolean broadcastMessage);
 
-    /**
-     * 验证区块合法性（包括交易、PoW、链连续性等）
-     */
-    boolean verifyBlock(Block block, boolean broadcastMessage);
+
 
     /**
      * 验证区块头
@@ -183,4 +185,8 @@ public interface BlockChainService {
     byte[] getBlockHash(long mid);
 
     void refreshLatestHeight();
+
+    Result<BlockDTO> getTransactionBlock(String txId);
+
+    Result getAllUTXO();
 }

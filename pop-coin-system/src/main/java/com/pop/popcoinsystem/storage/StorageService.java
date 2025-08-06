@@ -899,6 +899,7 @@ public class StorageService {
 
     //UTXO操作........................................................................................................
     public void putUTXO(UTXO utxo) {
+        rwLock.writeLock().lock();
         byte[] serialize = SerializeUtils.serialize(utxo);
         try {
             //保存原始UTXO
@@ -925,9 +926,14 @@ public class StorageService {
             long count = bytes == null ? 0 : ByteUtils.bytesToLong(bytes);
             db.put(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_UTXO_COUNT, ByteUtils.toBytes(count + 1));
 
+            log.info("总数是{}",  count + 1);
+            //根据脚本查询
+
 
         } catch (RocksDBException e) {
             throw new RuntimeException(e);
+        }finally {
+            rwLock.writeLock().unlock();
         }
     }
     public void putUTXOBatch(List<UTXO> batch) {
@@ -1042,7 +1048,6 @@ public class StorageService {
                 byte[] scriptHash = calculateScriptHash(utxo.getScriptPubKey());
                 String indexKey = generateScriptHashUtxoKey(scriptHash, utxoKey);
                 writeBatch.delete(ColumnFamily.SCRIPT_UTXO.getHandle(), indexKey.getBytes());
-
                 writeBatch.delete(ColumnFamily.UTXO.getHandle(), utxoKey.getBytes());
             }
             db.write(writeOptions, writeBatch);
@@ -1088,6 +1093,16 @@ public class StorageService {
                 return null; // 不存在返回null，避免抛出异常
             }
             return (UTXO)SerializeUtils.deSerialize(valueBytes);
+        } catch (RocksDBException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public long getAllUTXO() {
+        try {
+            byte[] countBytes = db.get(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_UTXO_COUNT);
+            long count = countBytes == null ? 0 : ByteUtils.bytesToLong(countBytes);
+            return count;
         } catch (RocksDBException e) {
             throw new RuntimeException(e);
         }
@@ -1233,6 +1248,7 @@ public class StorageService {
 
 
     public TPageResult<UTXOSearch> selectUtxoAmountsByScriptHash(byte[] scriptHash, int pageSize, String lastUtxoKey) {
+        log.info("参数"+CryptoUtil.bytesToHex(scriptHash)+"--"+pageSize+"--"+lastUtxoKey);
         if (scriptHash == null || scriptHash.length != 20) {
             throw new IllegalArgumentException("脚本哈希必须为20字节");
         }

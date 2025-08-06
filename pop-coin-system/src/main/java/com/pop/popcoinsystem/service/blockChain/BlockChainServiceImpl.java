@@ -80,8 +80,6 @@ public class BlockChainServiceImpl implements BlockChainService {
     private static final int PARENT_BLOCK_SYNC_TIMEOUT = 30000; // 30秒
     // 可重入锁，支持中断和超时，兼容同步任务和广播处理
     // 拆分锁：主链操作锁和同步锁，避免死锁
-    private final ReentrantLock mainChainLock = new ReentrantLock(true); // 主链操作锁
-    private final ReentrantLock syncLock = new ReentrantLock(true); // 同步操作锁
 
     //孤儿区块池  key是父区块hash   value是一个 hashMap
     private final Cache<byte[], ConcurrentHashMap<byte[],Block>> orphanBlocks = CacheBuilder.newBuilder()
@@ -157,7 +155,7 @@ public class BlockChainServiceImpl implements BlockChainService {
         }
         // 验证SegWit交易ID
         byte[] wtxId = transaction.getWtxId();
-        byte[] calculatedWtxId = Transaction.calculateWtxId(transaction);
+        byte[] calculatedWtxId = transaction.calculateWtxId();
         if (!Arrays.equals(wtxId, calculatedWtxId)) {
             log.error("SegWit交易wtxid不匹配");
             return false;
@@ -165,11 +163,68 @@ public class BlockChainServiceImpl implements BlockChainService {
         return true;
     }
 
+
     /**
-     * 验证交易是否在merkleRoot
-     * @param transaction
-     * @return
+     * 验证区块
+     * UTXO 并非仅在交易验证成功后产生，而是在交易被成功打包进区块并经过网络确认后，才成为有效的 UTXO。
      */
+    @Override
+    synchronized  public boolean verifyBlock(Block block, boolean broadcastMessage) {
+        // 验证区块合法性
+        if (!validateBlock(block)) {
+            log.warn("区块验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
+            return false;
+        }
+        if (!block.validatePoW()){
+            log.warn("区块 PoW 验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
+            return false;
+        }
+        // 检查是否是已知区块
+        if (getBlockByHash(block.getHash()) != null) {
+            log.info("区块已存在，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
+            return true;
+        }
+        //验证中位置时间
+        if (!validateMedianTime(block)){
+            log.warn("中位置时间验证失败，中位置时间：{}", block.getMedianTime());
+            return false;
+        }
+        // 防止未来时间（允许超前最多2小时）
+        // 注意：block.getTime() 是秒级时间戳，需转换为毫秒后再比较
+        long maxAllowedTime = (System.currentTimeMillis()/1000) + (2 * 60 * 60);
+        long blockTimeInMillis = block.getTime();
+        if (blockTimeInMillis > maxAllowedTime) {
+            log.warn("区块时间戳超前过多，区块时间（秒）：{}，当前系统时间：{}，允许的最大时间：{}",
+                    block.getTime(), System.currentTimeMillis(), maxAllowedTime);
+            return false;
+        }
+        Block parentBlock = getBlockByHash(block.getPreviousHash());
+        if (parentBlock == null) {
+            return false;
+        }
+        if (parentBlock.getHeight() + 1 != block.getHeight()) {
+            log.warn("区块高度不连续，父区块高度：{}，当前区块高度：{}", parentBlock.getHeight(), block.getHeight());
+            return false;
+        }
+        // 验证区块中的交易
+        if (!validateTransactionsInBlock(block)) {
+            log.warn("区块中的交易验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
+            return false;
+        }
+        // 处理区块（保存、更新UTXO等）  只要区块通过验证就 保存区块 保存区块产生的UTXO
+        processValidBlock(block);
+        //广播区块
+        if (broadcastMessage){
+            if (kademliaNodeServer.isRunning()){
+                log.info("区块验证成功,广播区块");
+                BlockMessage blockMessage = new BlockMessage();
+                blockMessage.setSender(kademliaNodeServer.getNodeInfo());
+                blockMessage.setData(block);
+                kademliaNodeServer.broadcastMessage(blockMessage);
+            }
+        }
+        return true;
+    }
 
 
 
@@ -277,7 +332,7 @@ public class BlockChainServiceImpl implements BlockChainService {
     private boolean validateTransactionId(Transaction transaction) {
         Transaction copy = transaction.copy();
         byte[] originalTxId = copy.getTxId();
-        byte[] calculatedTxId = Transaction.calculateTxId(copy);
+        byte[] calculatedTxId = copy.calculateTxId();
         log.info("原始交易ID:{}", CryptoUtil.bytesToHex(originalTxId));
         log.info("验证时交易ID:{}", CryptoUtil.bytesToHex(calculatedTxId));
         if (!Arrays.equals(calculatedTxId, originalTxId)) {
@@ -361,99 +416,26 @@ public class BlockChainServiceImpl implements BlockChainService {
     @Override
     synchronized public boolean verifyAndAddTradingPool(Transaction transaction, boolean broadcastMessage) {
         log.info("您的交易已提交,正在验证交易...");
-        if (verifyTransaction(transaction)) {
-            byte[] blockHashByTxId = getBlockHashByTxId(transaction.getTxId());
-            if (blockHashByTxId == null){
-                //防止双花
-                mining.addTransaction(transaction);
-            }
-            if (kademliaNodeServer.isRunning()){
-                log.info("交易验证成功,广播交易");
-                TransactionMessage transactionKademliaMessage = new TransactionMessage();
-                transactionKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());
-                transactionKademliaMessage.setData(transaction);
-                kademliaNodeServer.broadcastMessage(transactionKademliaMessage);
-            }
+        boolean b = verifyTransaction(transaction);
+        if ( !b){
+            return false;
+        }
+        byte[] blockHashByTxId = getBlockHashByTxId(transaction.getTxId());
+        if (blockHashByTxId == null){
+            //防止双花
+            mining.addTransaction(transaction);
+        }
+        if (kademliaNodeServer.isRunning()){
+            log.info("交易验证成功,广播交易");
+            TransactionMessage transactionKademliaMessage = new TransactionMessage();
+            transactionKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());
+            transactionKademliaMessage.setData(transaction);
+            kademliaNodeServer.broadcastMessage(transactionKademliaMessage);
         }
         return true;
     }
 
 
-    /**
-     * 验证区块
-     * UTXO 并非仅在交易验证成功后产生，而是在交易被成功打包进区块并经过网络确认后，才成为有效的 UTXO。
-     */
-    @Override
-    synchronized  public boolean verifyBlock(Block block, boolean broadcastMessage) {
-        // 验证区块合法性
-        if (!validateBlock(block)) {
-            log.warn("区块验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
-            return false;
-        }
-        if (!block.validatePoW()){
-            log.warn("区块 PoW 验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
-            return false;
-        }
-        // 检查是否是已知区块
-        if (getBlockByHash(block.getHash()) != null) {
-            log.info("区块已存在，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
-            return true;
-        }
-        //验证中位置时间
-        if (!validateMedianTime(block)){
-            log.warn("中位置时间验证失败，中位置时间：{}", block.getMedianTime());
-            return false;
-        }
-        // 防止未来时间（允许超前最多2小时）
-        // 注意：block.getTime() 是秒级时间戳，需转换为毫秒后再比较
-        long maxAllowedTime = (System.currentTimeMillis()/1000) + (2 * 60 * 60);
-        long blockTimeInMillis = block.getTime();
-        if (blockTimeInMillis > maxAllowedTime) {
-            log.warn("区块时间戳超前过多，区块时间（秒）：{}，当前系统时间：{}，允许的最大时间：{}",
-                    block.getTime(), System.currentTimeMillis(), maxAllowedTime);
-            return false;
-        }
-
-        Block parentBlock = getBlockByHash(block.getPreviousHash());
-        if (parentBlock == null) {
-            return false;
-        }
-        if (parentBlock.getHeight() + 1 != block.getHeight()) {
-            log.warn("区块高度不连续，父区块高度：{}，当前区块高度：{}", parentBlock.getHeight(), block.getHeight());
-            return false;
-        }
-        // 验证区块中的交易
-        if (!validateTransactionsInBlock(block)) {
-            log.warn("区块中的交易验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
-            return false;
-        }
-        // 处理区块（保存、更新UTXO等）  只要区块通过验证就 保存区块 保存区块产生的UTXO
-        try {
-            if (!mainChainLock.tryLock(5, TimeUnit.SECONDS)) {
-                log.warn("获取区块验证锁超时，可能存在并发冲突");
-                return false;
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return false;
-        }
-        try {
-            processValidBlock(block);
-        } finally {
-            mainChainLock.unlock(); // 确保锁释放
-        }
-        //广播区块
-        if (broadcastMessage){
-            if (kademliaNodeServer.isRunning()){
-                log.info("区块验证成功,广播区块");
-                BlockMessage blockMessage = new BlockMessage();
-                blockMessage.setSender(kademliaNodeServer.getNodeInfo());
-                blockMessage.setData(block);
-                kademliaNodeServer.broadcastMessage(blockMessage);
-            }
-        }
-        return true;
-    }
 
 
     /**
@@ -800,12 +782,12 @@ public class BlockChainServiceImpl implements BlockChainService {
      * 处理区块
      */
     private void processValidBlock(Block block) {
+        log.info("处理区块: {}", block.getTransactions());
         // 保存区块到数据库
         popStorage.addBlock(block);
         // 获取主链最新信息
         long currentHeight = getMainLatestHeight();
         byte[] currentMainHash = getMainLatestBlockHash();
-
         List<Transaction> transactions = block.getTransactions();
         for (Transaction transaction : transactions) {
             if (!isCoinBaseTransaction(transaction)){
@@ -885,7 +867,7 @@ public class BlockChainServiceImpl implements BlockChainService {
         outputs.add(output);
         coinbaseTx.setOutputs(outputs);
         // 计算交易ID
-        byte[] txId = Transaction.calculateTxId(coinbaseTx);
+        byte[] txId = coinbaseTx.calculateTxId();
         coinbaseTx.setTxId(txId);
         coinbaseTx.calculateWeight();
         return coinbaseTx;
@@ -909,7 +891,6 @@ public class BlockChainServiceImpl implements BlockChainService {
             return false;
         }
         log.info("coinBase交易在区块中：{}", CryptoUtil.bytesToHex(coinbaseTx.getTxId()));
-
         // 3按顺序验证所有交易（不包括CoinBase）
         for (int i = 1; i < transactions.size(); i++) {
             Transaction tx = block.getTransactions().get(i);
@@ -958,25 +939,6 @@ public class BlockChainServiceImpl implements BlockChainService {
 
     private void updateMainChainHeight(long blockHeight) {
         popStorage.updateMainLatestHeight(blockHeight);
-    }
-
-    /**
-     * 比较两个哈希的难度，返回true如果第一个哈希难度更大
-     */
-    private boolean isDifficultyGreater(byte[] hash1, byte[] hash2) {
-        log.info("比较两个哈希的难度");
-        if (hash1 == null || hash2 == null) {
-            return false;
-        }
-        // 比较两个哈希的大小，值越小难度越大
-        for (int i = 0; i < hash1.length; i++) {
-            if (hash1[i] < hash2[i]) {
-                return true;
-            } else if (hash1[i] > hash2[i]) {
-                return false;
-            }
-        }
-        return false;
     }
 
     /**
@@ -1520,23 +1482,47 @@ public class BlockChainServiceImpl implements BlockChainService {
         AddressType addressType = CryptoUtil.ECDSASigner.getAddressType(to);
         byte[] bytes = CryptoUtil.ECDSASigner.getAddressHash(to);//地址哈希
         ScriptPubKey scriptPubKey = createScriptPubKey(addressType, bytes);
-        //coinBase的输入的交易ID
+        Transaction coinbaseTx = new Transaction();
         byte[] zeroTxId = new byte[32]; // 32字节 = 256位
         Arrays.fill(zeroTxId, (byte) 0);
-        //额外随机数
-        byte[] extraNonce = new byte[8];
-        SecureRandom random = new SecureRandom();
-        random.nextBytes(extraNonce);
-        ScriptSig scriptSig = new ScriptSig(extraNonce);
+        ScriptSig scriptSig = null;
+        Witness witness = null;
+        //如果是普通地址就创建普通地址的脚本
+        //如果是隔离见证就闯一个见证数据
+        //coinBase的输入的交易ID
+        // 1. 获取当前时间毫秒数
+        long currentTimeMillis = System.currentTimeMillis();
+        // 2. 将时间毫秒数转换为字节数组
+        byte[] timeBytes = ByteUtils.toBytes(currentTimeMillis);
+        // 3. 对时间字节数组进行第一次SHA256哈希
+        byte[] firstHash = CryptoUtil.applySHA256(timeBytes);
+        // 4. 生成随机数（使用安全随机数生成器）
+        SecureRandom secureRandom = new SecureRandom();
+        long randomNumber = secureRandom.nextLong();
+        byte[] randomBytes = ByteUtils.toBytes(randomNumber);
+        // 5. 拼接第一次哈希结果和随机数字节数组
+        byte[] combined = new byte[firstHash.length + randomBytes.length];
+        System.arraycopy(firstHash, 0, combined, 0, firstHash.length);
+        System.arraycopy(randomBytes, 0, combined, firstHash.length, randomBytes.length);
+        // 6. 对拼接后的数组进行第二次SHA256哈希
+        byte[] secondHash = CryptoUtil.applyRIPEMD160(combined);
+        byte[] extraNonce = Arrays.copyOfRange(secondHash, 0, 8);
+        if (addressType == AddressType.P2WPKH || addressType == AddressType.P2WSH){
+            witness = new Witness();
+            witness.addItem(extraNonce);
+        }
+        scriptSig = new ScriptSig(extraNonce);
+        ArrayList<Witness> witnesses = new ArrayList<>();
         TXInput input = new TXInput(zeroTxId, 0, scriptSig);
         // 创建输出，将奖励发送到指定地址
         TXOutput output = new TXOutput(calculateBlockReward(height)+totalFee, scriptPubKey);
-        Transaction coinbaseTx = new Transaction();
         coinbaseTx.setVersion(TRANSACTION_VERSION_1);
         coinbaseTx.getInputs().add(input);
+        witnesses.add(witness);
+        coinbaseTx.setWitnesses(witnesses);
         coinbaseTx.getOutputs().add(output);
         // 计算并设置交易ID
-        coinbaseTx.setTxId(Transaction.calculateTxId(coinbaseTx));
+        coinbaseTx.setTxId(coinbaseTx.calculateTxId());
         coinbaseTx.setSize(coinbaseTx.calculateBaseSize());
         coinbaseTx.calculateWeight();
         return coinbaseTx;
@@ -1578,9 +1564,6 @@ public class BlockChainServiceImpl implements BlockChainService {
         }
         return Result.OK(blockDTOS);
     }
-
-
-
 
 
 
@@ -1665,10 +1648,12 @@ public class BlockChainServiceImpl implements BlockChainService {
             TPageResult<UTXOSearch> pageResult = null;
             // 带重试的分页查询
             pageResult = selectUtxoAmountsByScriptHash(scriptHash, PAGE_SIZE, cursor);
+
             if (pageResult == null) {
                 log.error("{} UTXO查询返回空结果 -> cursor: {}", address, cursor);
                 break;
             }
+            log.info("查询结果:{}",pageResult.getData());
             UTXOSearch searchResult = pageResult.getData();
             if (searchResult == null) {
                 log.warn("{} UTXO分页数据为空 -> cursor: {}", address, cursor);
@@ -1735,40 +1720,25 @@ public class BlockChainServiceImpl implements BlockChainService {
             return;
         }
         // 3. 加锁处理链状态更新（确保并发安全）
-        try {
-            if (!mainChainLock.tryLock(5, TimeUnit.SECONDS)) {
-                log.warn("获取主链锁超时，区块头哈希：{}", CryptoUtil.bytesToHex(header.getHash()));
-                return;
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        // 4. 处理父区块头依赖
+        BlockHeader parentHeader = getBlockHeaderByHash(header.getPreviousHash());
+        if (parentHeader == null) {
+            log.info("父区块头不存在，加入孤儿头池，当前区块头哈希：{}，父哈希：{}",
+                    CryptoUtil.bytesToHex(header.getHash()),
+                    CryptoUtil.bytesToHex(header.getPreviousHash()));
+
             return;
         }
-
-        try {
-            // 4. 处理父区块头依赖
-            BlockHeader parentHeader = getBlockHeaderByHash(header.getPreviousHash());
-            if (parentHeader == null) {
-                log.info("父区块头不存在，加入孤儿头池，当前区块头哈希：{}，父哈希：{}",
-                        CryptoUtil.bytesToHex(header.getHash()),
-                        CryptoUtil.bytesToHex(header.getPreviousHash()));
-
-                return;
-            }
-            long parentH = getBlockHeaderHeight(parentHeader);
-            long sonH = getBlockHeaderHeight(header);
-            // 5. 验证高度连续性（父区块高度+1必须等于当前区块高度）
-            if (parentH + 1 != sonH) {
-                log.error("区块头高度不连续，父高度：{}，当前高度：{}，哈希：{}",
-                        parentH, sonH, CryptoUtil.bytesToHex(header.getHash()));
-                return;
-            }
-
-            // 8. 处理主链延伸或分叉
-            handleHeaderChainExtension(header, parentHeader,height, hash);
-        } finally {
-            mainChainLock.unlock();
+        long parentH = getBlockHeaderHeight(parentHeader);
+        long sonH = getBlockHeaderHeight(header);
+        // 5. 验证高度连续性（父区块高度+1必须等于当前区块高度）
+        if (parentH + 1 != sonH) {
+            log.error("区块头高度不连续，父高度：{}，当前高度：{}，哈希：{}",
+                    parentH, sonH, CryptoUtil.bytesToHex(header.getHash()));
+            return;
         }
+        // 8. 处理主链延伸或分叉
+        handleHeaderChainExtension(header, parentHeader,height, hash);
     }
 
     @Override
@@ -1793,6 +1763,17 @@ public class BlockChainServiceImpl implements BlockChainService {
     @Override
     public void refreshLatestHeight() {
 
+    }
+
+    @Override
+    public Result<BlockDTO> getTransactionBlock(String txId) {
+        Block blockByTxId = popStorage.getBlockByTxId(CryptoUtil.hexToBytes(txId));
+        return Result.ok(getBlockDto(blockByTxId));
+    }
+
+    @Override
+    public Result getAllUTXO() {
+        return Result.ok(popStorage.getAllUTXO());
     }
 
     private void handleHeaderChainExtension(BlockHeader header, BlockHeader parentHeader ,long height, byte[] hash) {

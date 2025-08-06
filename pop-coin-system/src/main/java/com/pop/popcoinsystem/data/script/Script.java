@@ -76,6 +76,8 @@ public class Script implements Serializable {
     }
 
 
+
+
     // 脚本元素类
     public static class ScriptElement {
         private int opCode;

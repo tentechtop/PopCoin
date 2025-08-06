@@ -203,7 +203,16 @@ public class ScriptSig extends Script implements Serializable {
     }
 
 
-
-
-
+    public ScriptSig copy() {
+        ScriptSig scriptSig = new ScriptSig();
+        List<ScriptElement> elements1 = this.getElements();
+        for (ScriptElement element : elements1) {
+            if (element.isOpCode()) {
+                scriptSig.addOpCode(element.getOpCode());
+            } else {
+                scriptSig.addData(element.getData());
+            }
+        }
+        return scriptSig;
+    }
 }

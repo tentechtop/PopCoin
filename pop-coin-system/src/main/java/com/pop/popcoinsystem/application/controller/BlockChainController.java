@@ -56,6 +56,14 @@ public class BlockChainController {
     }
 
 
+    @GetMapping("/getTransactionBlock/{txId}")
+    public Result<BlockDTO> getTransactionBlock(@PathVariable("txId") String txId) {
+        if (txId == null){
+            return Result.error("参数错误");
+        }
+        return blockChainService.getTransactionBlock(txId);
+    }
+
     /**
      * 查询交易
      */
@@ -87,6 +95,14 @@ public class BlockChainController {
     public Result getBlockByRange(@PathVariable("start") Long start , @PathVariable("end") Long end) {
         return blockChainService.getBlockByRange(start, end);
     }
+
+
+    @GetMapping("/getAllUTXO")
+    public Result getAllUTXO() {
+        return blockChainService.getAllUTXO();
+    }
+
+
 
 
     /**
