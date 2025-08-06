@@ -3,7 +3,6 @@ package com.pop.popcoinsystem.service.mining;
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockHeader;
 import com.pop.popcoinsystem.data.miner.Miner;
-import com.pop.popcoinsystem.data.transaction.TransactionTimeGenerator;
 import com.pop.popcoinsystem.service.blockChain.BlockChainServiceImpl;
 import com.pop.popcoinsystem.service.blockChain.asyn.SynchronizedBlocksImpl;
 import com.pop.popcoinsystem.storage.StorageService;
@@ -19,12 +18,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.lang.management.ManagementFactory;
-import java.lang.management.OperatingSystemMXBean;
-import java.nio.ByteBuffer;
-import java.security.SecureRandom;
 import java.util.*;
 import java.util.concurrent.*;
 

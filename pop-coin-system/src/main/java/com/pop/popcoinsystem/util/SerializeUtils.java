@@ -25,7 +25,6 @@ import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.*;
 
-import org.objenesis.strategy.StdInstantiatorStrategy; // 关键：引入Objenesis的策略
 
 /**
  * 序列化工具类（Kryo 5.x 适配，无KryoPool版本）

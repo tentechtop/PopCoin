@@ -34,9 +34,3 @@ kademlia:
   node:
     tcpPort: 8333
     udpPort: 8334
-  #配置引导节点
-  bootstrap:
-    - ip: 192.168.137.102
-      tcpPort: 8333
-      udpPort: 8334
-      nodeId: 0

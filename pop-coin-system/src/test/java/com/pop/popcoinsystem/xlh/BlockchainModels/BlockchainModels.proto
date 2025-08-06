@@ -1,0 +1,231 @@
+syntax = "proto3";
+
+package com.pop.popcoinsystem.util;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/any.proto";
+
+// 基础类型包装
+message BigIntegerProto {
+  bytes value = 1;
+}
+
+message UUIDProto {
+  string uuid = 1;
+}
+
+message PrivateKeyProto {
+  bytes encoded = 1;
+  string algorithm = 2;
+}
+
+message PublicKeyProto {
+  bytes encoded = 1;
+  string algorithm = 2;
+}
+
+// 脚本相关
+message ScriptElementProto {
+  oneof value {
+    bytes data = 1;
+    int32 opcode = 2;
+  }
+}
+
+message ScriptProto {
+  repeated ScriptElementProto elements = 1;
+}
+
+message ScriptPubKeyProto {
+  ScriptProto script = 1;
+}
+
+message ScriptSigProto {
+  ScriptProto script = 1;
+}
+
+// 交易相关
+message TXInputProto {
+  bytes txId = 1;
+  int32 vout = 2;
+  ScriptSigProto scriptSig = 3;
+  int32 sequence = 4;
+}
+
+message TXOutputProto {
+  int64 value = 1;
+  ScriptPubKeyProto scriptPubKey = 2;
+}
+
+message WitnessProto {
+  repeated bytes data = 1;
+}
+
+message WitnessDTOProto {
+  repeated bytes data = 1;
+}
+
+message TransactionProto {
+  int32 version = 1;
+  repeated TXInputProto inputs = 2;
+  repeated TXOutputProto outputs = 3;
+  int32 lockTime = 4;
+  repeated WitnessProto witnesses = 5;
+  bytes txId = 6;
+}
+
+message UTXOProto {
+  bytes txId = 1;
+  int32 index = 2;
+  int64 value = 3;
+  ScriptPubKeyProto scriptPubKey = 4;
+  bool isSpent = 5;
+}
+
+// 区块相关
+message BlockHeaderProto {
+  int32 version = 1;
+  bytes prevBlockHash = 2;
+  bytes merkleRoot = 3;
+  int64 timestamp = 4;
+  int32 bits = 5;
+  int64 nonce = 6;
+  bytes hash = 7;
+}
+
+message BlockBodyProto {
+  repeated TransactionProto transactions = 1;
+}
+
+message BlockProto {
+  BlockHeaderProto header = 1;
+  BlockBodyProto body = 2;
+  int32 height = 3;
+}
+
+// 钱包相关
+message WalletProto {
+  string address = 1;
+  PrivateKeyProto privateKey = 2;
+  PublicKeyProto publicKey = 3;
+  repeated UTXOProto utxos = 4;
+  int64 balance = 5;
+}
+
+// 网络协议相关
+message ExternalNodeInfoProto {
+  string ip = 1;
+  int32 port = 2;
+  bytes nodeId = 3;
+}
+
+message HandshakeProto {
+  string version = 1;
+  bytes nodeId = 2;
+  int64 timestamp = 3;
+  ExternalNodeInfoProto nodeInfo = 4;
+}
+
+message HeadersRequestParamProto {
+  bytes startHash = 1;
+  int32 count = 2;
+}
+
+// 消息类型
+message KademliaMessageProto {
+  string messageId = 1;
+  string senderId = 2;
+  int64 timestamp = 3;
+}
+
+message PingKademliaMessageProto {
+  KademliaMessageProto base = 1;
+  int64 nonce = 2;
+}
+
+message PongKademliaMessageProto {
+  KademliaMessageProto base = 1;
+  int64 nonce = 2;
+}
+
+message HandshakeRequestMessageProto {
+  KademliaMessageProto base = 1;
+  HandshakeProto handshake = 2;
+}
+
+message HandshakeResponseMessageProto {
+  KademliaMessageProto base = 1;
+  bool accepted = 2;
+  string reason = 3;
+  HandshakeProto handshake = 4;
+}
+
+message TransactionMessageProto {
+  KademliaMessageProto base = 1;
+  TransactionProto transaction = 2;
+}
+
+message RpcRequestMessageProto {
+  KademliaMessageProto base = 1;
+  string method = 2;
+  string params = 3;
+}
+
+message RpcResponseMessageProto {
+  KademliaMessageProto base = 1;
+  bool success = 2;
+  string result = 3;
+  string error = 4;
+}
+
+// 通用包装消息，用于处理多类型对象
+message AnyMessage {
+  oneof value {
+    // 基础类型
+    string stringValue = 1;
+    int32 int32Value = 2;
+    int64 int64Value = 3;
+    bool boolValue = 4;
+    double doubleValue = 5;
+    bytes bytesValue = 6;
+    BigIntegerProto bigIntegerValue = 7;
+    UUIDProto uuidValue = 8;
+    google.protobuf.Timestamp dateValue = 9;
+    PrivateKeyProto privateKeyValue = 10;
+    PublicKeyProto publicKeyValue = 11;
+
+    // 列表类型
+    repeated AnyMessage listValue = 12;
+
+    // 网络协议相关
+    KademliaMessageProto kademliaMessage = 13;
+    PingKademliaMessageProto pingKademliaMessage = 14;
+    PongKademliaMessageProto pongKademliaMessage = 15;
+    HandshakeRequestMessageProto handshakeRequestMessage = 16;
+    HandshakeResponseMessageProto handshakeResponseMessage = 17;
+    TransactionMessageProto transactionMessage = 18;
+    RpcRequestMessageProto rpcRequestMessage = 19;
+    RpcResponseMessageProto rpcResponseMessage = 20;
+    HeadersRequestParamProto headersRequestParam = 21;
+    HandshakeProto handshake = 22;
+    ExternalNodeInfoProto externalNodeInfo = 23;
+
+    // 区块和交易相关
+    BlockProto block = 24;
+    BlockBodyProto blockBody = 25;
+    BlockHeaderProto blockHeader = 26;
+    TransactionProto transaction = 27;
+    TXInputProto txInput = 28;
+    TXOutputProto txOutput = 29;
+    UTXOProto utxo = 30;
+    WitnessProto witness = 31;
+    WitnessDTOProto witnessDTO = 32;
+    WalletProto wallet = 33;
+
+    // 脚本相关
+    ScriptProto script = 34;
+    ScriptElementProto scriptElement = 35;
+    ScriptPubKeyProto scriptPubKey = 36;
+    ScriptSigProto scriptSig = 37;
+  }
+}

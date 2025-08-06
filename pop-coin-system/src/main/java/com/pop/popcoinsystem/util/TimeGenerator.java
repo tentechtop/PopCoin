@@ -1,9 +1,9 @@
-package com.pop.popcoinsystem.data.transaction;
+package com.pop.popcoinsystem.util;
 
 import java.security.SecureRandom;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class TransactionTimeGenerator {
+public class TimeGenerator {
     // 原子变量存储上次生成的时间戳（纳秒级），确保线程安全和单调递增
     private static final AtomicLong LAST_TIMESTAMP = new AtomicLong(0);
     // 安全随机数生成器，用于极端情况补充唯一性

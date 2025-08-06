@@ -41,11 +41,9 @@ import java.net.ConnectException;
 import java.security.SecureRandom;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.locks.ReentrantLock;
 
 import static com.pop.popcoinsystem.constant.BlockChainConstants.TRANSACTION_VERSION_1;
 import static com.pop.popcoinsystem.constant.BlockChainConstants.*;
-import static com.pop.popcoinsystem.storage.StorageService.getInstance;
 import static com.pop.popcoinsystem.storage.StorageService.getUTXOKey;
 import static com.pop.popcoinsystem.data.transaction.Transaction.calculateBlockReward;
 import static com.pop.popcoinsystem.util.CryptoUtil.ECDSASigner.getLockingScriptByAddress;
@@ -1485,7 +1483,7 @@ public class BlockChainServiceImpl implements BlockChainService {
         byte[] zeroTxId = new byte[32]; // 32字节 = 256位
         Arrays.fill(zeroTxId, (byte) 0);
         // 获取当前时间毫秒数
-        long currentTimeMillis = TransactionTimeGenerator.generateUniqueTransactionTime();
+        long currentTimeMillis = TimeGenerator.generateUniqueTransactionTime();
         // 将时间毫秒数转换为字节数组
         byte[] timeBytes = ByteUtils.toBytes(currentTimeMillis);
         // 对时间字节数组进行第一次SHA256哈希
