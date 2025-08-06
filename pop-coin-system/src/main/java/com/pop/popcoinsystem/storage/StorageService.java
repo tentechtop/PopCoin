@@ -926,10 +926,6 @@ public class StorageService {
             long count = bytes == null ? 0 : ByteUtils.bytesToLong(bytes);
             db.put(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_UTXO_COUNT, ByteUtils.toBytes(count + 1));
 
-            log.info("总数是{}",  count + 1);
-            //根据脚本查询
-
-
         } catch (RocksDBException e) {
             throw new RuntimeException(e);
         }finally {
