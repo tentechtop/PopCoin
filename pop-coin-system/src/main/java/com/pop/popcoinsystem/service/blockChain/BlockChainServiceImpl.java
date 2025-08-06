@@ -323,40 +323,28 @@ public class BlockChainServiceImpl implements BlockChainService {
         genesisBlock.setHeight(0); // 创世区块高度为0
         genesisBlock.setPreviousHash(new byte[32]); // 前序哈希为全零
         genesisBlock.setVersion(1); // 版本号
-
         // 2. 设置时间戳（使用比特币创世时间类似的格式，这里使用系统启动时间）
         long genesisTime = 1754287472;
         genesisBlock.setTime(genesisTime);
         genesisBlock.setMedianTime(genesisTime);
-
         // 设置难度相关参数（创世区块难度通常较低）
         genesisBlock.setDifficulty(1);
         // 创世区块难度目标
         genesisBlock.setDifficultyTarget(DifficultyUtils.difficultyToCompact(1L));
         genesisBlock.setChainWork(ByteUtils.toBytes(1L));
-
-        // 4. 创建创世区块的CoinBase交易（唯一交易）
+        // 创建创世区块的CoinBase交易（唯一交易）
         Transaction coinbaseTx = createGenesisCoinbaseTransaction();
         List<Transaction> transactions = new ArrayList<>();
         transactions.add(coinbaseTx);
         genesisBlock.setTransactions(transactions);
         genesisBlock.setTxCount(1);
-
-        // 5. 计算默克尔根（仅一个交易，默克尔根就是该交易的哈希）
+        // 计算默克尔根（仅一个交易，默克尔根就是该交易的哈希）
         byte[] merkleRoot = Block.calculateMerkleRoot(transactions);
         genesisBlock.setMerkleRoot(merkleRoot);
-
-        // 6. 设置区块大小信息
-        genesisBlock.setWitnessSize(285); // 示例值
-
-        genesisBlock.setSize(285);
-        genesisBlock.setWeight(1140); // 4倍size（隔离见证权重计算）
-
-        // 7. 计算区块哈希（需要找到符合难度的nonce）
         // 创世区块的nonce是固定值，通过暴力计算得到
         genesisBlock.setNonce(1); // 示例nonce值（类似比特币创世块）
-        genesisBlock.setHash(GENESIS_BLOCK_HASH());
-
+        genesisBlock.setHash(null);
+        genesisBlock.setWitnessSize(genesisBlock.calculateWitnessSize());
         genesisBlock.calculateAndSetSize();
         genesisBlock.calculateAndSetWeight();
         return genesisBlock;
@@ -881,7 +869,6 @@ public class BlockChainServiceImpl implements BlockChainService {
         byte[] bytes = "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks".getBytes();
         ScriptSig scriptSig = new ScriptSig(bytes);
         input.setScriptSig(scriptSig);
-        input.setScriptSig(null); // 创世信息   解锁脚本
         List<TXInput> inputs = new ArrayList<>();
         inputs.add(input);
         coinbaseTx.setInputs(inputs);

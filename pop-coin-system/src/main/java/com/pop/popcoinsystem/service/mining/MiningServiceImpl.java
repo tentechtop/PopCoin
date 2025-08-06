@@ -43,7 +43,7 @@ public class MiningServiceImpl {
     private BlockChainServiceImpl blockChainService;
 
     // 挖矿性能控制（0-100，默认85%）
-    private volatile int miningPerformance = 30;
+    private volatile int miningPerformance = 5;
 
     //矿工信息
     public static Miner miner;
@@ -105,8 +105,6 @@ public class MiningServiceImpl {
                         return;
                     }
                 }
-
-
                 List<Transaction> transactions = getTransactionsByPriority();
                 if (transactions.isEmpty()) {
                     log.info("没有可用的交易");
@@ -529,7 +527,7 @@ public class MiningServiceImpl {
                 try {
                     for (int nonce = startNonce; nonce < endNonce && !result.found; nonce++) {
                         // 每5000次计算执行一次概率休眠
-                        if (nonce % 5000 == 0 && miningPerformance < 100) {
+                        if (nonce % 1000 == 0 && miningPerformance < 100) {
                             // 性能控制：计算休眠概率（性能越低，休眠概率越高）
                             double sleepProbability = (100.0 - miningPerformance) / 100.0;
                             // 生成0-1之间的随机数，判断是否需要休眠
