@@ -129,5 +129,33 @@ public class ByteUtils {
     }
 
 
+    /**
+     * 将两个字节数组合并成一个新的字节数组
+     * @param currentHash 第一个字节数组（放在前面）
+     * @param pathHash 第二个字节数组（放在后面）
+     * @return 合并后的新字节数组
+     */
+    public static byte[] concat(byte[] currentHash, byte[] pathHash) {
+        // 处理空数组情况
+        if (currentHash == null && pathHash == null) {
+            return new byte[0];
+        }
+        if (currentHash == null) {
+            return pathHash.clone();
+        }
+        if (pathHash == null) {
+            return currentHash.clone();
+        }
 
+        // 创建新数组，长度为两个输入数组长度之和
+        byte[] result = new byte[currentHash.length + pathHash.length];
+
+        // 复制第一个数组
+        System.arraycopy(currentHash, 0, result, 0, currentHash.length);
+
+        // 复制第二个数组到第一个数组后面
+        System.arraycopy(pathHash, 0, result, currentHash.length, pathHash.length);
+
+        return result;
+    }
 }

@@ -123,6 +123,11 @@ public class KademliaServiceStart {
     }
 
 
+    //  bootstrap:
+    //    - ip: 192.168.137.102
+    //      tcpPort: 8333
+    //      udpPort: 8334
+    //      nodeId: 0
 
     @Bean
     public CommandLineRunner registerRpcService(RpcServiceRegistry registry) {
@@ -131,8 +136,6 @@ public class KademliaServiceStart {
                 log.info("正在启动网络......");
                 kademliaNodeServer.setRpcServiceRegistry(registry);
                 kademliaNodeServer.start();  // 启动服务器
-
-
                 try {
                     log.info("正在连接引导节点......:{}",bootstrap);
                     if (bootstrap != null && !bootstrap.isEmpty()) {

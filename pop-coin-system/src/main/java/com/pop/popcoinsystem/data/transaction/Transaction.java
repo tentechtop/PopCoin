@@ -1,5 +1,6 @@
 package com.pop.popcoinsystem.data.transaction;
 
+import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.enums.SigHashType;
 import com.pop.popcoinsystem.data.script.Script;
 import com.pop.popcoinsystem.data.script.ScriptPubKey;
@@ -899,4 +900,6 @@ public class Transaction implements Serializable {
         }
         return copiedInputs;
     }
+
+
 }

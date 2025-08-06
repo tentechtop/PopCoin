@@ -61,9 +61,7 @@ import static com.pop.popcoinsystem.util.CryptoUtil.ECDSASigner.getLockingScript
  * UTXO 集的内存缓存（chainstate）。
  * 所有修改主链状态的操作（如添加新区块、处理分叉、回滚区块）都必须持有cs_main，确保这些操作的原子性。例如：
  *
- *
  * 验证新区块时，先加锁检查区块是否已存在，再执行添加逻辑；
- *
  * 处理分叉切换时，整个 “回滚旧链→应用新链” 的过程被cs_main包裹，避免中途被其他线程打断。
  * 交易池锁（cs_mempool）
  * 保护内存中的交易池（mempool），防止并发添加 / 删除交易导致的不一致：
@@ -103,6 +101,15 @@ public class BlockChainServiceImpl implements BlockChainService {
     @Autowired
     private SynchronizedBlocksImpl blockSynchronizer; // 复用异步同步器
 
+    @PostConstruct
+    private void initBlockChain() throws Exception {
+        Block genesisBlock = getMainBlockByHeight(0);
+        if (genesisBlock == null){
+            popStorage.updateMainLatestHeight(-1);
+            popStorage.updateMainLatestBlockHash(GENESIS_PREV_BLOCK_HASH);
+        }
+    }
+
 
     public String GENESIS_BLOCK_HASH_HEX() {
         return CryptoUtil.bytesToHex(popStorage.getMainBlockHashByHeight(0));
@@ -111,7 +118,6 @@ public class BlockChainServiceImpl implements BlockChainService {
     public byte[] GENESIS_BLOCK_HASH() {
         return popStorage.getMainBlockHashByHeight(0);
     }
-
 
     /**
      * 验证交易
@@ -158,6 +164,14 @@ public class BlockChainServiceImpl implements BlockChainService {
         }
         return true;
     }
+
+    /**
+     * 验证交易是否在merkleRoot
+     * @param transaction
+     * @return
+     */
+
+
 
     private boolean isDoubleSpend(Transaction transaction) {
         byte[] blockHashByTxId = getBlockHashByTxId(transaction.getTxId());
@@ -398,10 +412,10 @@ public class BlockChainServiceImpl implements BlockChainService {
             return true;
         }
         //验证中位置时间
-   /*     if (!validateMedianTime(block)){
+        if (!validateMedianTime(block)){
             log.warn("中位置时间验证失败，中位置时间：{}", block.getMedianTime());
             return false;
-        }*/
+        }
         // 防止未来时间（允许超前最多2小时）
         // 注意：block.getTime() 是秒级时间戳，需转换为毫秒后再比较
         long maxAllowedTime = (System.currentTimeMillis()/1000) + (2 * 60 * 60);
@@ -425,7 +439,6 @@ public class BlockChainServiceImpl implements BlockChainService {
             log.warn("区块中的交易验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
             return false;
         }
-
         // 处理区块（保存、更新UTXO等）  只要区块通过验证就 保存区块 保存区块产生的UTXO
         try {
             if (!mainChainLock.tryLock(5, TimeUnit.SECONDS)) {
@@ -505,7 +518,7 @@ public class BlockChainServiceImpl implements BlockChainService {
 
     @Override
     public boolean verifyBlockHeader(BlockHeader blockHeader) {
-
+        byte[] bytes = blockHeader.computeHash();
 
         return false;
     }
@@ -903,9 +916,23 @@ public class BlockChainServiceImpl implements BlockChainService {
             log.error("区块中 CoinBase交易无效");
             return false;
         }
-        // 3. 按顺序验证所有交易（不包括CoinBase）
+        boolean b1 = verifyTransactionInBlockUsingHeader(block.extractHeader(), coinbaseTx.getTxId(), block.generateMerklePath(coinbaseTx.getTxId()));
+        if (!b1){
+            log.error("coinBase交易不在区块中");
+            return false;
+        }
+        log.info("coinBase交易在区块中：{}", CryptoUtil.bytesToHex(coinbaseTx.getTxId()));
+
+        // 3按顺序验证所有交易（不包括CoinBase）
         for (int i = 1; i < transactions.size(); i++) {
             Transaction tx = block.getTransactions().get(i);
+            //验证是否在区块中
+            boolean b = verifyTransactionInBlockUsingHeader(block.extractHeader(), tx.getTxId(), block.generateMerklePath(tx.getTxId()));
+            if (!b){
+                log.error("交易不在区块中");
+                return false;
+            }
+            log.info("交易在区块中：{}", tx.getTxId());
             if (!verifyTransaction(tx)) {
                 log.error("区块中打包的交易无效");
                 return false;
@@ -913,6 +940,18 @@ public class BlockChainServiceImpl implements BlockChainService {
         }
         log.info("区块中的所有交易验证成功");
         return true;
+    }
+
+    /**
+     * 仅使用区块头验证交易是否存在于区块中
+     *
+     * @param blockHeader 区块头
+     * @param transactionId 交易ID（哈希值）
+     * @param merklePath 默克尔路径，即从交易哈希到默克尔根所需的哈希列表
+     * @return 如果交易存在于区块中返回true，否则返回false
+     */
+    public boolean verifyTransactionInBlockUsingHeader(BlockHeader blockHeader, byte[] transactionId, MerklePath merklePath) {
+        return Block.verifyTransactionInBlock(blockHeader, transactionId, merklePath);
     }
 
 

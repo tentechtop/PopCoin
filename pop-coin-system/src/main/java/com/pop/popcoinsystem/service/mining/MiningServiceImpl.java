@@ -1,26 +1,35 @@
 package com.pop.popcoinsystem.service.mining;
 
 import com.pop.popcoinsystem.data.block.Block;
+import com.pop.popcoinsystem.data.block.BlockHeader;
 import com.pop.popcoinsystem.data.miner.Miner;
 import com.pop.popcoinsystem.service.blockChain.BlockChainServiceImpl;
+import com.pop.popcoinsystem.service.blockChain.asyn.SynchronizedBlocksImpl;
 import com.pop.popcoinsystem.storage.StorageService;
 import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.DifficultyUtils;
+import jcuda.Pointer;
+import jcuda.Sizeof;
+import jcuda.driver.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.OperatingSystemMXBean;
+import java.nio.ByteBuffer;
 import java.security.SecureRandom;
 import java.util.*;
 import java.util.concurrent.*;
 
 import static com.pop.popcoinsystem.constant.BlockChainConstants.*;
 import static java.lang.Thread.sleep;
+import static jcuda.driver.JCudaDriver.*;
 
 @Slf4j
 @Service
@@ -35,21 +44,25 @@ public class MiningServiceImpl {
 
     // 挖矿性能控制（0-100，默认85%）
     private volatile int miningPerformance = 30;
-    // CPU保护机制相关变量
-    private volatile double lastCpuLoad = 0;
 
     //矿工信息
     public static Miner miner;
     // 当前难度目标（前导零的数量）
     private static long currentDifficulty = 1;
-
     //是否启动挖矿服务 用于停止挖矿的标志
     public static boolean isMining = false;
     //交易池
     private final Map<byte[], Transaction> transactions = new ConcurrentHashMap<>();
     private long currentSize = 0;
     private static int threadCount =  Runtime.getRuntime().availableProcessors();
-    private static ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+    private static ExecutorService executor;
+
+    @Autowired
+    private SynchronizedBlocksImpl syncService; // 同步服务，需自行实现
+    // 记录同步前的挖矿状态，用于同步完成后恢复
+    private volatile boolean wasMiningBeforeSync = false;
+
+
 
     /**
      * 启动挖矿
@@ -70,6 +83,7 @@ public class MiningServiceImpl {
         log.info("最新区块难度目标: {}", CryptoUtil.bytesToHex(block.getDifficultyTarget()));
         log.info("最新区块难度: {}", currentDifficulty);
         initExecutor();
+        initCuda();
         //获取矿工信息
         miner = storageService.getMiner();
         log.info("本节点矿工信息: {}", miner);
@@ -81,6 +95,18 @@ public class MiningServiceImpl {
         new Thread(() -> {
             Thread.currentThread().setPriority(Thread.NORM_PRIORITY);//NORM_PRIORITY  MIN_PRIORITY
             while (isMining) {
+                // 关键：每次循环都检查是否正在同步，若同步则等待
+                while (syncService.isSyncing()) {
+                    log.info("检测到区块链正在同步，暂停挖矿等待同步完成...");
+                    try {
+                        Thread.sleep(3000); // 每3秒检查一次同步状态
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+                }
+
+
                 List<Transaction> transactions = getTransactionsByPriority();
                 if (transactions.isEmpty()) {
                     log.info("没有可用的交易");
@@ -118,7 +144,8 @@ public class MiningServiceImpl {
                 newBlock.setWitnessSize(newBlock.calculateWitnessSize());
                 log.info("\n开始挖矿新区块 #" + newBlock.getHeight() +
                         " (难度: " + newBlock.getDifficulty() + ", 交易数: " + transactions.size() + ", 手续费: "+ totalFee+  ")");
-                MiningResult result = mineBlock(newBlock);
+                BlockHeader blockHeader = newBlock.extractHeader();
+                MiningResult result = cpuMineBlock(blockHeader);
                 if (result != null && result.found) {
                     newBlock.setNonce(result.nonce);
                     newBlock.setHash(result.hash);
@@ -131,21 +158,11 @@ public class MiningServiceImpl {
                     blockChainService.verifyBlock(newBlock,true);
                 } else {
                     log.info("区块 #" + newBlock.getHeight() + " 挖矿失败，重新生成区块并打包...");
-
-                    try {
-                        sleep(1000); // 1秒后重试
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        break; // 中断时退出循环
-                    }
                 }
             }
         }).start();
         return Result.ok();
     }
-
-
-
     public void initBlockChain(){
         Block genesisBlock = blockChainService.getMainBlockByHeight(0);
         if (genesisBlock == null) {
@@ -191,7 +208,7 @@ public class MiningServiceImpl {
     private void initExecutor() {
         if (executor == null || executor.isShutdown() || executor.isTerminated()) {
             int corePoolSize = Runtime.getRuntime().availableProcessors(); // CPU核心数
-            int maximumPoolSize = corePoolSize; // 固定线程数
+            int maximumPoolSize = corePoolSize * 1; // 固定线程数
             long keepAliveTime = 0L; // 核心线程不超时（因长期运行）
             TimeUnit unit = TimeUnit.MILLISECONDS;
             BlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>(); // 无界队列，缓存待执行的挖矿任务
@@ -213,6 +230,43 @@ public class MiningServiceImpl {
             );
         }
     }
+
+    private void initCuda(){
+        try {
+            // 初始化CUDA驱动
+            JCudaDriver.setExceptionsEnabled(true);
+            cuInit(0);
+
+            // 获取GPU设备
+            int[] deviceCount = new int[1];
+            cuDeviceGetCount(deviceCount);
+            if (deviceCount[0] == 0) {
+                log.warn("未检测到GPU设备，将使用CPU挖矿");
+                return;
+            }
+
+            CUdevice device = new CUdevice();
+            cuDeviceGet(device, 0);  // 使用第1块GPU
+
+            // 创建上下文
+            CUcontext context = new CUcontext();
+            cuCtxCreate(context, 0, device);
+
+            // 获取GPU信息
+            byte[] name = new byte[256];
+            cuDeviceGetName(name, name.length, device);
+            log.info("CUDA初始化成功，使用GPU设备: " + new String(name).trim());
+        } catch (Exception e) {
+            log.error("CUDA初始化失败（可能无GPU或驱动问题）", e);
+            log.warn("将自动降级为CPU挖矿");
+        }
+    }
+
+
+
+
+
+
 
 
 
@@ -276,8 +330,6 @@ public class MiningServiceImpl {
             log.info("No transaction with lower feePerByte than the new transaction");
         }
     }
-
-
 
     /**
      * 获取总大小小于1MB的高优先级交易列表
@@ -346,84 +398,156 @@ public class MiningServiceImpl {
         return isMining;
     }
 
+
+
+
+
+
+
+    /**
+     * GPU挖矿核心方法（修正版）
+     */
+    public MiningResult gpuMineBlock(BlockHeader blockHeader) {
+        MiningResult result = new MiningResult();
+        CUmodule module = null;
+        CUfunction kernelFunction = null;
+        CUdeviceptr dHeader = null; // 在外部声明，以便在finally中访问
+        CUdeviceptr dFound = null;
+        CUdeviceptr dNonce = null;
+        CUdeviceptr dHash = null;
+
+        try {
+            // 1. 加载GPU内核（PTX文件）
+            module = new CUmodule();
+            cuModuleLoad(module, "miningKernel.ptx");
+            kernelFunction = new CUfunction();
+            cuModuleGetFunction(kernelFunction, module, "mineKernel");
+
+            // 2. 准备区块头数据（复制到GPU可访问的内存）
+            byte[] headerData = Block.serializeBlockHeader(blockHeader);
+            dHeader = new CUdeviceptr();
+            cuMemAlloc(dHeader, headerData.length);
+            cuMemcpyHtoD(dHeader, Pointer.to(headerData), headerData.length);
+
+            // 3. 设置nonce范围
+            int blockSize = 256;
+            int gridSize = 1024;
+            int totalThreads = gridSize * blockSize;
+            int startNonce = 0;
+            int endNonce = startNonce + totalThreads;
+
+            // 4. 配置内核参数
+            Pointer kernelParams = Pointer.to(
+                    Pointer.to(dHeader),
+                    Pointer.to(new int[]{startNonce}),
+                    Pointer.to(new int[]{endNonce})
+            );
+
+            // 5. 启动GPU内核
+            cuLaunchKernel(
+                    kernelFunction,
+                    gridSize, 1, 1,
+                    blockSize, 1, 1,
+                    0, null,
+                    kernelParams, null
+            );
+            cuCtxSynchronize();
+
+            // 6. 读取GPU结果
+            dFound = getGlobalVariable(module, "found");
+            int[] found = new int[1];
+            cuMemcpyDtoH(Pointer.to(found), dFound, Sizeof.INT);
+
+            if (found[0] == 1) {
+                dNonce = getGlobalVariable(module, "foundNonce");
+                int[] nonce = new int[1];
+                cuMemcpyDtoH(Pointer.to(nonce), dNonce, Sizeof.INT);
+
+                dHash = getGlobalVariable(module, "foundHash");
+                byte[] hash = new byte[32];
+                cuMemcpyDtoH(Pointer.to(hash), dHash, 32);
+
+                result.found = true;
+                result.nonce = nonce[0];
+                result.hash = hash;
+                log.info("GPU找到有效哈希！nonce={}, hash={}", nonce[0], CryptoUtil.bytesToHex(hash));
+            }
+
+        } catch (Exception e) {
+            log.error("GPU挖矿异常", e);
+            // 发生异常时可考虑降级为CPU挖矿
+            return cpuMineBlock(blockHeader);
+        } finally {
+            // 释放所有CUDA资源
+            if (dHash != null) {
+                try { cuMemFree(dHash); } catch (Exception e) { log.warn("释放dHash失败", e); }
+            }
+            if (dNonce != null) {
+                try { cuMemFree(dNonce); } catch (Exception e) { log.warn("释放dNonce失败", e); }
+            }
+            if (dFound != null) {
+                try { cuMemFree(dFound); } catch (Exception e) { log.warn("释放dFound失败", e); }
+            }
+            if (dHeader != null) {
+                try { cuMemFree(dHeader); } catch (Exception e) { log.warn("释放dHeader失败", e); }
+            }
+            if (module != null) {
+                try { cuModuleUnload(module); } catch (Exception e) { log.warn("卸载module失败", e); }
+            }
+        }
+
+        return result.found ? result : null;
+    }
+
+    /**
+     * 辅助方法：获取CUDA全局变量地址
+     */
+    private CUdeviceptr getGlobalVariable(CUmodule module, String name) {
+        CUdeviceptr ptr = new CUdeviceptr();
+        long[] size = new long[1];
+        cuModuleGetGlobal(ptr, size, module, name);
+        return ptr;
+    }
+
+
     /**
      * 打包交易，进行挖矿
      */
-    public MiningResult mineBlock(Block block) {
+    public MiningResult cpuMineBlock(BlockHeader blockHeader) {
         MiningResult result = new MiningResult();
         Future<?>[] futures = new Future[threadCount];
         int nonceRange = Integer.MAX_VALUE / threadCount;
         // 重置结果状态
         result.found = false;
-        // 提前计算性能控制参数（避免每次循环都计算）
-        final boolean needsThrottling = miningPerformance < 100;
-        final double baseSleepProbability = needsThrottling ? (1.0 - miningPerformance / 100.0) : 0.0;
-        final double targetLoad = needsThrottling ? (50 + miningPerformance * 0.3) : 0.0;
-        // 负载控制状态（每N次计算更新一次）
-        class ThrottleState {
-            double sleepProbability = 0.2; // 默认中等概率
-            int sleepMillis = 2;           // 默认2ms休眠
-            long lastUpdateTime = System.currentTimeMillis();
-            int updateInterval = 1000;     // 更新频率（每1000次计算）
-
-            // 每N次计算更新一次负载控制参数
-            void updateIfNeeded(int nonce) {
-                if (nonce % updateInterval != 0) return;
-
-                // 紧急保护：如果CPU负载超过90%，启用最大休眠
-                if (lastCpuLoad > 95) {
-                    sleepProbability = 0.8;
-                    sleepMillis = 5 + (int) ((lastCpuLoad - 90) * 0.5);
-                    return;
-                }
-
-                // 每5秒动态调整更新频率（负载高时增加采样频率）
-                long now = System.currentTimeMillis();
-                if (now - lastUpdateTime > 5000) {
-                    updateInterval = Math.max(500, Math.min(5000, (int) (2000 * (100 - lastCpuLoad) / 60)));
-                    lastUpdateTime = now;
-                }
-
-                // 动态调整休眠参数（简化版）
-                double loadDiff = lastCpuLoad - targetLoad;
-                double adjustmentFactor = 1.0;
-
-                if (loadDiff > 10) {
-                    adjustmentFactor = 1.0 + Math.min(0.2, loadDiff / 50); // 最多增加20%休眠
-                } else if (loadDiff < -10) {
-                    adjustmentFactor = Math.max(0.8, 0.8 - loadDiff / 100); // 最多减少20%休眠
-                }
-
-                // 最终休眠概率（限制在合理范围）
-                sleepProbability = Math.min(0.6, Math.max(0.1, baseSleepProbability * adjustmentFactor));
-
-                // 动态休眠时间（负载越高，休眠越长）
-                sleepMillis = 2 + Math.min(3, Math.max(0, (int) ((lastCpuLoad - 40) / 20)));
-            }
-        }
-        // 每个线程独立的负载控制状态
-        ThreadLocal<ThrottleState> throttleState = ThreadLocal.withInitial(ThrottleState::new);
         // 提交所有线程任务
         for (int i = 0; i < threadCount; i++) {
+            BlockHeader clone = blockHeader.clone();
             final int startNonce = i * nonceRange;
             final int endNonce = (i == threadCount - 1) ? Integer.MAX_VALUE : (i + 1) * nonceRange;
             futures[i] = executor.submit(() -> {
-                byte[] difficultyTarget = block.getDifficultyTarget();
+                byte[] difficultyTarget = clone.getDifficultyTarget();
                 try {
                     for (int nonce = startNonce; nonce < endNonce && !result.found; nonce++) {
-                        // 每50次计算检查一次负载控制（减少检查频率）
-                        if (needsThrottling && nonce % 50 == 0) {
-                            ThrottleState state = throttleState.get();
-                            state.updateIfNeeded(nonce);
-
-                            // 执行概率性休眠
-                            if (Math.random() < state.sleepProbability) {
-                                sleep(state.sleepMillis);
+                        // 每5000次计算执行一次概率休眠
+                        if (nonce % 5000 == 0 && miningPerformance < 100) {
+                            // 性能控制：计算休眠概率（性能越低，休眠概率越高）
+                            double sleepProbability = (100.0 - miningPerformance) / 100.0;
+                            // 生成0-1之间的随机数，判断是否需要休眠
+                            if (Math.random() < sleepProbability) {
+                                try {
+                                    // 休眠时长：性能越低，基础休眠时间越长（50ms ~ 200ms）
+                                    // 性能为0时休眠200ms，性能100时休眠0ms（实际不会进入此分支）
+                                    long sleepMs = (long) (200 - (miningPerformance * 1.5));
+                                    sleepMs = Math.max(50, sleepMs); // 确保最小休眠50ms，避免频繁切换
+                                    Thread.sleep(sleepMs);
+                                } catch (InterruptedException e) {
+                                    Thread.currentThread().interrupt(); // 保留中断状态
+                                    return; // 中断时退出当前线程的挖矿任务
+                                }
                             }
                         }
-
-                        block.setNonce(nonce);
-                        byte[] hash = block.computeHash();
+                        clone.setNonce(nonce);
+                        byte[] hash = clone.computeHash();
                         if ( DifficultyUtils.isValidHash(hash, difficultyTarget)) {
                             synchronized (result) {
                                 if (!result.found) {
@@ -436,8 +560,6 @@ public class MiningServiceImpl {
                             return;
                         }
                     }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
                 } catch (Exception e) {
                     log.error("线程 " + Thread.currentThread().getName() + " 计算哈希时异常", e);
                     Thread.currentThread().interrupt();
@@ -458,7 +580,6 @@ public class MiningServiceImpl {
                     }
                 }
             }
-
             for (Future<?> future : futures) {
                 if (future != null && !future.isDone()) {
                     future.cancel(true);
@@ -472,12 +593,8 @@ public class MiningServiceImpl {
                 }
             }
         }
-
         return result.found ? result : null;
     }
-
-
-
 
     private void adjustDifficulty() {
         long blockHeight = blockChainService.getMainLatestHeight();
@@ -496,15 +613,11 @@ public class MiningServiceImpl {
         if (actualTimeTaken <= 0) actualTimeTaken = 1;
 
         long targetTime = DIFFICULTY_ADJUSTMENT_INTERVAL * BLOCK_GENERATION_TIME; //600秒 10分钟
-
-
-
         // 修正方向：目标时间/实际时间
         double factor = (double) targetTime / actualTimeTaken;
         factor = Math.max(0.25, Math.min(4.0, factor));  // 保持限制范围
         long newDifficulty = (long) (currentDifficulty * factor);
         newDifficulty = Math.max(1L, newDifficulty);
-
         log.info("\n难度调整:" +
                 "\n目标总时间: " +  targetTime + "秒" +
                 "\n实际" + DIFFICULTY_ADJUSTMENT_INTERVAL + "个区块总生成时间: " + actualTimeTaken + "秒" +
@@ -520,15 +633,12 @@ public class MiningServiceImpl {
         return transactions;
     }
 
-
     // 挖矿结果类
     static class MiningResult {
         byte[] hash;
         int nonce;
         boolean found = false;
     }
-
-
 
     /**
      * 停止挖矿
@@ -540,4 +650,37 @@ public class MiningServiceImpl {
         isMining = false;
         return Result.ok();
     }
+
+
+    /**
+     * 因同步暂停挖矿，记录原状态
+     */
+    public void pauseMiningForSync() {
+        if (isMining) {
+            wasMiningBeforeSync = true;
+            try {
+                stopMining(); // 调用已有的停止挖矿方法
+                log.info("因区块链同步，已暂停挖矿");
+            } catch (Exception e) {
+                log.error("同步时停止挖矿失败", e);
+            }
+        }
+    }
+
+    /**
+     * 同步完成后恢复挖矿（若同步前在挖矿）
+     */
+    public void resumeMiningAfterSync() {
+        if (wasMiningBeforeSync && !isMining) {
+            try {
+                startMining(); // 调用已有的启动挖矿方法
+                log.info("区块链同步完成，已恢复挖矿");
+                wasMiningBeforeSync = false; // 重置状态
+            } catch (Exception e) {
+                log.error("同步后恢复挖矿失败", e);
+            }
+        }
+    }
+
+
 }

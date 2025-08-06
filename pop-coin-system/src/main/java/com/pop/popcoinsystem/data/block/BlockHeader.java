@@ -54,4 +54,17 @@ public class BlockHeader {
     public byte[] getHash() {
         return computeBlockHeaderHash(this);
     }
+
+
+    public BlockHeader clone() {
+        BlockHeader blockHeaderCopy = new BlockHeader();
+        blockHeaderCopy.setTime(this.getTime() );
+        blockHeaderCopy.setPreviousHash(this.getPreviousHash());
+        blockHeaderCopy.setMerkleRoot(this.getMerkleRoot());
+        blockHeaderCopy.setNonce(this.getNonce());
+        blockHeaderCopy.setDifficultyTarget(this.getDifficultyTarget());
+        blockHeaderCopy.setVersion(this.getVersion());
+        return blockHeaderCopy;
+    }
+
 }

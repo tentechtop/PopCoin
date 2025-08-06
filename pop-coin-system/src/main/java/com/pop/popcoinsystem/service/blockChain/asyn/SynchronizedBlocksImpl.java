@@ -16,6 +16,7 @@ import com.pop.popcoinsystem.service.blockChain.BlockChainServiceImpl;
 import com.pop.popcoinsystem.service.blockChain.asyn.SyncProgress;
 import com.pop.popcoinsystem.service.blockChain.asyn.SyncStatus;
 import com.pop.popcoinsystem.service.blockChain.asyn.SyncTaskRecord;
+import com.pop.popcoinsystem.service.mining.MiningServiceImpl;
 import com.pop.popcoinsystem.storage.StorageService;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
@@ -56,6 +57,9 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
     @Lazy
     @Autowired
     private BlockChainService localBlockChainService;
+    @Lazy
+    @Autowired
+    private MiningServiceImpl miningService;
 
     // 配置参数：通过外部配置注入，方便调整
     @Value("${system.blockchain.sync.healthy-node-score-threshold:60}")
@@ -105,10 +109,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
     Map<String, CompletableFuture<SyncTaskRecord>> taskFutureMap = new ConcurrentHashMap<>();
 
 
-
-
-
-
     // 1. 下载线程池（处理区块头/RPC下载，IO密集）
     private  ThreadPoolExecutor downloadExecutor;
 
@@ -123,8 +123,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
 
     // 5. 调度器（单线程，负责定时任务）
     private ScheduledExecutorService scheduler;
-
-
 
     // 同步中标记（避免并发冲突）
     private volatile boolean isSyncing = false;
@@ -311,25 +309,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
 
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     public void compareAndSync(NodeInfo remoteNode,
                                 long localHeight, byte[] localHash, byte[] localTotalWork,
                                 long remoteHeight, byte[] remoteHash, byte[] remoteTotalWork)
@@ -339,8 +318,8 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
             List<SyncTaskRecord> runningTasks = activeTasks.values().stream()
                     .filter(task -> task.getStatus() == SyncStatus.RUNNING)
                     .toList();
-
             log.info("节点正在同步中，不处理新请求");
+            return;
         }
 
         // 情况1：本地节点未初始化（无区块数据）仅仅一个创世区块
@@ -495,15 +474,13 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
             log.error("远程节点信息为空，无法启动同步");
             return;
         }
-
         // 标记同步开始
         if (isSyncing) {
             log.warn("已有同步任务在执行中，当前任务将排队等待");
             return;
         }
-        isSyncing = true;
+        startSync();
         log.info("开始从远程节点[{}]同步区块，起始高度: {}", remoteNode.getId().toString().substring(0, 8), startHeight);
-
         // 异步执行同步流程（避免阻塞调用线程）
         CompletableFuture.runAsync(() -> {
             RpcProxyFactory proxyFactory = null;
@@ -548,7 +525,9 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 }
             } finally {
                 // 无论成功失败，标记同步结束
-                isSyncing = false;
+                if (isSyncing) {
+                    finishSync(); // 同步结束（包括异常终止），恢复挖矿
+                }
                 log.info("从远程节点[{}]的同步流程结束", remoteNode.getId().toString().substring(0, 8));
             }
         }, detectExecutor);
@@ -821,6 +800,8 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                     popStorage.saveSyncTaskRecord(completedTask);
                     // 自动删除内存中的任务记录
                     removeTask(task.getTaskId());
+                    // 关键：同步任务完全完成后，恢复挖矿
+                    finishSync();
                 });
     }
 
@@ -1128,7 +1109,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
         // 1. 按高度升序排序当前批次的区块头（关键：保证输入顺序）
         List<Map.Entry<Long, BlockHeader>> sortedEntries = new ArrayList<>(heightToHeaderMap.entrySet());
         sortedEntries.sort(Comparator.comparingLong(Map.Entry::getKey));
-
         // 2. 创建一个顺序执行的任务（整个批次作为一个任务提交）
 /*        CompletableFuture<Boolean> batchFuture = CompletableFuture.supplyAsync(() -> {
             int validCount = 0;
@@ -1160,8 +1140,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
             log.error("批次验证失败", e);
             return false;
         }*/
-
-
         int validCount = 0;
         int invalidCount = 0;
         int missingCount = 0; // 新增：记录缺失的区块头数量
@@ -1870,9 +1848,24 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
             // 异常情况下尝试返回已找到的临时分叉点（可能不准确，但避免完全失败）
             return forkHeight != -1 ? forkHeight : -1;
         }
-
         return forkHeight;
     }
 
+
+    // 同步服务中开始同步的方法
+    public void startSync() {
+        if (!isSyncing) {
+            isSyncing = true;
+            // 通知挖矿服务停止挖矿，并记录原状态
+            miningService.pauseMiningForSync();
+        }
+    }
+
+    // 同步服务中结束同步的方法
+    public void finishSync() {
+        isSyncing = false;
+        // 同步完成后，若同步前在挖矿，则恢复挖矿
+        miningService.resumeMiningAfterSync();
+    }
 
 }

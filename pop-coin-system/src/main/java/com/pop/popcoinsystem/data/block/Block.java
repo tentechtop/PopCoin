@@ -1,7 +1,9 @@
 package com.pop.popcoinsystem.data.block;
 
+import com.pop.popcoinsystem.data.transaction.MerklePath;
 import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
+import com.pop.popcoinsystem.util.ByteUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.DifficultyUtils;
 import lombok.AllArgsConstructor;
@@ -13,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.Serializable;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -210,13 +213,6 @@ public class Block implements Serializable {
 
 
 
-
-
-
-
-
-
-
     /**
      * 计算见证数据大小（以字节为单位）
      * @return 见证数据大小
@@ -344,6 +340,12 @@ public class Block implements Serializable {
         }
     }
 
+
+    // ------------------------------
+    // 默克尔树（Merkle Tree）相关方法
+    // 包含：构建默克尔树、计算默克尔根、生成默克尔路径
+    // ------------------------------
+
     /**
      * 计算并设置当前区块的默克尔根
      */
@@ -351,71 +353,253 @@ public class Block implements Serializable {
         this.merkleRoot = calculateMerkleRoot(this.transactions);
     }
 
+
     /**
-     * 计算交易列表的默克尔根
-     * @param transactions 区块中的交易列表
-     * @return 默克尔根哈希（字节数组）
+     * 计算交易列表的默克尔根哈希
+     * @param transactions 区块中的交易列表（可为空，空列表返回32字节零数组）
+     * @return 默克尔根哈希（32字节数组）
      */
     public static byte[] calculateMerkleRoot(List<Transaction> transactions) {
         if (transactions == null || transactions.isEmpty()) {
-            return new byte[32]; // 返回32字节的零数组
+            return new byte[32]; // 空交易列表返回零哈希
         }
-        // 1. 计算所有交易的哈希值
-        List<byte[]> transactionHashes = transactions.stream()
-                .map(Transaction::getTxId) // 方法返回交易哈希
+        // 1. 提取所有交易的哈希（txId）作为默克尔树的叶子节点
+        List<byte[]> leafHashes = transactions.stream()
+                .map(Transaction::getTxId) // 每个交易的txId作为叶子哈希
                 .collect(Collectors.toList());
-        // 2. 开始构建默克尔树
-        return buildMerkleTree(transactionHashes);
+        // 2. 递归构建默克尔树并返回根哈希
+        return buildMerkleTree(leafHashes);
     }
 
     /**
      * 递归构建默克尔树并返回根哈希
-     * @param hashes 当前层的哈希列表
-     * @return 根哈希
+     * 核心逻辑：逐层合并哈希对，每对哈希拼接后做双SHA-256，最终得到根哈希
+     * @param hashes 当前层级的哈希列表（初始为叶子节点哈希）
+     * @return 默克尔树根哈希（32字节数组）
      */
     private static byte[] buildMerkleTree(List<byte[]> hashes) {
-        // 如果列表为空，返回空哈希
-        if (hashes.isEmpty()) {
-            return new byte[32];
-        }
-
-        // 过滤掉所有null值
-        hashes = hashes.stream()
+        // 过滤无效哈希（null值）
+        List<byte[]> validHashes = hashes.stream()
                 .filter(hash -> hash != null)
                 .collect(Collectors.toList());
 
-        // 如果过滤后没有有效哈希，返回空哈希
-        if (hashes.isEmpty()) {
+        // 边界情况：空列表返回零哈希
+        if (validHashes.isEmpty()) {
             return new byte[32];
         }
 
-        // 如果只有一个哈希，那就是根哈希（特殊情况，如创世块）
-        if (hashes.size() == 1) {
-            return hashes.get(0);
+        // 边界情况：单哈希直接作为根（如创世块仅含1笔交易）
+        if (validHashes.size() == 1) {
+            return validHashes.get(0);
         }
 
-        // 存储下一层的哈希值
+        // 构建下一层哈希列表
         List<byte[]> nextLevel = new ArrayList<>();
-
-        // 处理当前层的哈希对
-        for (int i = 0; i < hashes.size(); i += 2) {
-            // 获取左右节点
-            byte[] left = hashes.get(i);
-            byte[] right = (i + 1 < hashes.size()) ? hashes.get(i + 1) : left; // 奇数节点时使用自身
-
-            // 合并两个哈希并计算新哈希
-            byte[] merged = new byte[left.length + right.length];
-            System.arraycopy(left, 0, merged, 0, left.length);
-            System.arraycopy(right, 0, merged, left.length, right.length);
-
-            // 计算双SHA-256哈希
-            byte[] combinedHash = doubleSHA256(merged);
-            nextLevel.add(combinedHash);
+        for (int i = 0; i < validHashes.size(); i += 2) {
+            byte[] left = validHashes.get(i);
+            // 若为奇数个哈希，最后一个哈希与自身合并
+            byte[] right = (i + 1 < validHashes.size()) ? validHashes.get(i + 1) : left;
+            // 拼接哈希对并计算双SHA-256
+            byte[] merged = ByteUtils.concat(left, right);
+            byte[] parentHash = doubleSHA256(merged);
+            nextLevel.add(parentHash);
         }
 
         // 递归处理下一层
         return buildMerkleTree(nextLevel);
     }
+
+    /**
+     * 生成指定交易在当前区块中的默克尔路径
+     * 默克尔路径：从交易哈希（叶子节点）到默克尔根的所有兄弟哈希 + 交易索引
+     * @param targetTxId 目标交易的txId（需在当前区块的交易列表中）
+     * @return MerklePath对象（含路径哈希列表和索引），交易不存在则返回null
+     */
+    public MerklePath generateMerklePath(byte[] targetTxId) {
+        if (transactions == null || transactions.isEmpty()) {
+            log.warn("区块中无交易，无法生成默克尔路径");
+            return null;
+        }
+
+        // 1. 提取所有交易的哈希作为叶子节点
+        List<byte[]> leafHashes = new ArrayList<>();
+        for (Transaction tx : transactions) {
+            leafHashes.add(tx.getTxId());
+        }
+
+        // 2. 查找目标交易在叶子节点中的索引
+        int index = -1;
+        for (int i = 0; i < leafHashes.size(); i++) {
+            if (Arrays.equals(leafHashes.get(i), targetTxId)) {
+                index = i;
+                break;
+            }
+        }
+        if (index == -1) {
+            log.warn("交易不在当前区块中，txId: {}", CryptoUtil.bytesToHex(targetTxId));
+            return null;
+        }
+        // 3. 构建完整默克尔树（所有层级的哈希列表）
+        List<List<byte[]>> merkleTree = buildFullMerkleTree(leafHashes);
+        // 4. 收集从叶子到根的所有兄弟哈希（默克尔路径）
+        List<byte[]> pathHashes = new ArrayList<>();
+        int currentIndex = index;
+
+        // 遍历每一层（除根节点层）
+        for (int level = 0; level < merkleTree.size() - 1; level++) {
+            List<byte[]> currentLevel = merkleTree.get(level);
+            // 计算当前节点的兄弟节点索引
+            int siblingIndex = (currentIndex % 2 == 0) ? currentIndex + 1 : currentIndex - 1;
+
+            // 若兄弟节点不存在（当前层为奇数个节点），用当前节点哈希代替
+            if (siblingIndex >= currentLevel.size()) {
+                siblingIndex = currentIndex;
+            }
+
+            // 添加兄弟哈希到路径
+            pathHashes.add(currentLevel.get(siblingIndex));
+
+            // 计算上一层的索引（当前节点在父节点中的位置）
+            currentIndex = currentIndex / 2;
+        }
+
+        return new MerklePath(pathHashes, index);
+    }
+
+
+    /**
+     * 构建完整的默克尔树（包含所有层级的哈希列表）
+     * 辅助方法，用于generateMerklePath生成路径时获取各层哈希
+     * @param leafHashes 叶子节点哈希列表（交易txId）
+     * @return 默克尔树所有层级（从叶子到根）
+     */
+    private List<List<byte[]>> buildFullMerkleTree(List<byte[]> leafHashes) {
+        List<List<byte[]>> tree = new ArrayList<>();
+        // 第0层：叶子节点
+        tree.add(new ArrayList<>(leafHashes));
+
+        // 逐层构建直到根节点
+        while (tree.get(tree.size() - 1).size() > 1) {
+            List<byte[]> currentLevel = tree.get(tree.size() - 1);
+            List<byte[]> nextLevel = new ArrayList<>();
+
+            for (int i = 0; i < currentLevel.size(); i += 2) {
+                byte[] left = currentLevel.get(i);
+                byte[] right = (i + 1 < currentLevel.size()) ? currentLevel.get(i + 1) : left;
+                byte[] merged = ByteUtils.concat(left, right);
+                byte[] parentHash = doubleSHA256(merged);
+                nextLevel.add(parentHash);
+            }
+
+            tree.add(nextLevel);
+        }
+
+        return tree;
+    }
+
+
+    /**
+     * 验证交易是否存在于指定区块中（基于默克尔路径和区块头）
+     * 核心逻辑：通过交易哈希、默克尔路径计算默克尔根，与区块头中的默克尔根比对
+     *
+     * @param blockHeader 区块头（含默克尔根，用于验证基准）
+     * @param transactionId 待验证交易的ID（txId，32字节哈希）
+     * @param merklePath 该交易在区块中的默克尔路径（由generateMerklePath方法生成）
+     * @return 验证通过返回true，否则返回false
+     */
+    public static boolean verifyTransactionInBlock(BlockHeader blockHeader, byte[] transactionId, MerklePath merklePath) {
+        // 1. 验证输入参数有效性
+        if (blockHeader == null) {
+            log.error("验证失败：区块头不能为空");
+            return false;
+        }
+        if (transactionId == null || transactionId.length != 32) {
+            log.error("验证失败：交易ID无效（必须为32字节哈希）");
+            return false;
+        }
+        if (merklePath == null) {
+            log.error("验证失败：默克尔路径不能为空");
+            return false;
+        }
+        List<byte[]> pathHashes = merklePath.getPathHashes();
+        int index = merklePath.getIndex();
+        if (pathHashes == null || pathHashes.isEmpty()) {
+            // 特殊情况：区块中只有1笔交易时，默克尔路径为空
+            log.debug("默克尔路径为空，检查是否为单交易区块");
+        } else {
+            // 验证路径哈希是否均为32字节
+            for (byte[] hash : pathHashes) {
+                if (hash == null || hash.length != 32) {
+                    log.error("验证失败：默克尔路径包含无效哈希（必须为32字节）");
+                    return false;
+                }
+            }
+        }
+
+        // 2. 从区块头获取基准默克尔根
+        byte[] merkleRootFromHeader = blockHeader.getMerkleRoot();
+        if (merkleRootFromHeader == null || merkleRootFromHeader.length != 32) {
+            log.error("验证失败：区块头中的默克尔根无效（必须为32字节）");
+            return false;
+        }
+
+        // 3. 基于交易哈希和默克尔路径计算默克尔根
+        byte[] calculatedRoot = calculateRootFromPath(transactionId, pathHashes, index);
+        if (calculatedRoot == null) {
+            log.error("验证失败：计算默克尔根时发生错误");
+            return false;
+        }
+
+        // 4. 比对计算结果与区块头中的默克尔根
+        boolean isValid = Arrays.equals(calculatedRoot, merkleRootFromHeader);
+        if (!isValid) {
+            log.warn("验证失败：计算的默克尔根与区块头不一致\n计算值: {}\n区块头值: {}",
+                    CryptoUtil.bytesToHex(calculatedRoot),
+                    CryptoUtil.bytesToHex(merkleRootFromHeader));
+        }
+        return isValid;
+    }
+
+    /**
+     * 根据交易哈希、默克尔路径和索引计算默克尔根
+     *
+     * @param transactionHash 交易哈希（叶子节点哈希）
+     * @param pathHashes 默克尔路径中的兄弟哈希列表
+     * @param index 交易在默克尔树中的索引（叶子节点位置）
+     * @return 计算得到的默克尔根（32字节），失败返回null
+     */
+    private static byte[] calculateRootFromPath(byte[] transactionHash, List<byte[]> pathHashes, int index) {
+        if (transactionHash == null || transactionHash.length != 32) {
+            log.error("交易哈希无效，无法计算默克尔根");
+            return null;
+        }
+        if (index < 0) {
+            log.error("交易索引不能为负数");
+            return null;
+        }
+
+        // 初始哈希为交易哈希（叶子节点）
+        byte[] currentHash = transactionHash;
+        int currentIndex = index;
+
+        // 逐层向上计算哈希，直到根节点
+        for (byte[] siblingHash : pathHashes) {
+            // 根据当前索引判断当前哈希在左还是右
+            if (currentIndex % 2 == 0) {
+                // 索引为偶数：当前哈希在左，兄弟哈希在右
+                currentHash = doubleSHA256(ByteUtils.concat(currentHash, siblingHash));
+            } else {
+                // 索引为奇数：兄弟哈希在左，当前哈希在右
+                currentHash = doubleSHA256(ByteUtils.concat(siblingHash, currentHash));
+            }
+            // 计算上一层的索引（当前节点在父节点中的位置）
+            currentIndex = currentIndex / 2;
+        }
+
+        return currentHash;
+    }
+
+
 
     /**
      * 执行双SHA-256哈希计算（两次SHA-256）
@@ -453,9 +637,9 @@ public class Block implements Serializable {
             }
             dos.write(reverseBytes(merkleRoot)); // 反转字节序为小端
 
-            // 4. 时间戳（4字节，小端，比特币使用32位时间戳）
+            // 4. 时间戳（8字节，小端）
             long timestamp = blockHeader.getTime();
-            if (timestamp < 0 || timestamp > Integer.MAX_VALUE) {
+            if (timestamp < 0) {
                 throw new IllegalArgumentException("时间戳必须为32位正整数（秒级Unix时间）");
             }
             dos.writeInt(Integer.reverseBytes((int) timestamp));

@@ -23,6 +23,7 @@ public class ScriptSig extends Script implements Serializable {
     //创建
     public ScriptSig(byte[] embeddedMessage) {
         super();
+        addOpCode(OP_RETURN);
         addData(embeddedMessage);
     }
 
