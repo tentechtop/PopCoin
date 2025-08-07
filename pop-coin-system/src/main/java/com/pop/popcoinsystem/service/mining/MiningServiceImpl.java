@@ -475,12 +475,10 @@ public class MiningServiceImpl {
             log.warn("CUDA静态资源未初始化，使用CPU挖矿");
             return cpuMineBlock(blockHeader);
         }
-
         log.info("正在使用GPU挖矿");
         MiningResult result = new MiningResult();
         CUdeviceptr dHeader = null;
         CUdeviceptr dResult = null;
-
         try {
             // 切换到已初始化的CUDA上下文
             cuCtxSetCurrent(cudaContext);
@@ -505,7 +503,7 @@ public class MiningServiceImpl {
             batchNonce = Math.max(1000, batchNonce);
             int startNonce = 0;
             int endNonce = Integer.MAX_VALUE;
-            int actualGridSize = (int) (256  * (gpuMiningPerformance / 100.0));// 从1024降低
+            int actualGridSize = (int) (128  * (gpuMiningPerformance / 100.0));// 从1024降低
             actualGridSize = Math.max(1, actualGridSize);
 
             // 3. 配置内核参数（使用静态加载的kernelFunction）
