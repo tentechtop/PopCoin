@@ -49,7 +49,7 @@ public class MiningServiceImpl {
     // CPU挖矿性能控制（0-100，默认85%）
     private volatile int miningPerformance = 15;
     // GPU挖矿性能控制（0-100，默认100%）
-    private volatile int gpuMiningPerformance = 80;
+    private volatile int gpuMiningPerformance = 50;
 
     //GPU挖矿还是CPU挖矿
     private volatile boolean isGPUMining = true;
@@ -163,7 +163,9 @@ public class MiningServiceImpl {
                 BlockHeader blockHeader = newBlock.extractHeader();
                 MiningResult result = null;
                 if (isGPUMining){
+                    long start = System.currentTimeMillis();
                     result =  gpuMineBlock(blockHeader);
+                    controlGpuPerformance(System.currentTimeMillis() -start);
                 }else {
                     result = cpuMineBlock(blockHeader);
                 }
@@ -323,8 +325,42 @@ public class MiningServiceImpl {
     }
 
 
+    /**
+     * GPU性能控制：根据性能参数控制休眠时间，限制挖矿频率
+     */
+    private void controlGpuPerformance(long actualComputeTime) {
+        if (gpuMiningPerformance >= 100) {
+            return; // 100%性能：不休眠
+        }
+        if (gpuMiningPerformance <= 0) {
+            try {
+                Thread.sleep(1000); // 0%性能：强制休眠1秒
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return;
+        }
 
+        // 目标：工作时间占总周期（工作+休眠）的比例 = 性能百分比
+        // 公式：总周期 = 工作时间 / (性能百分比/100)
+        // 休眠时间 = 总周期 - 工作时间
+        double targetRatio = gpuMiningPerformance / 100.0;
+        long totalCycleTime = (long) (actualComputeTime / targetRatio);
+        long sleepTime = totalCycleTime - actualComputeTime;
 
+        // 限制最小/最大休眠时间（避免极端值）
+        sleepTime = Math.max(50, sleepTime); // 至少休眠50ms，避免频繁启动
+        sleepTime = Math.min(2000, sleepTime); // 最多休眠2秒，避免响应过慢
+
+        try {
+            if (!isMining) return;
+            Thread.sleep(sleepTime);
+            log.debug("GPU性能控制：计算耗时{}ms，休眠{}ms（目标占比{}%）",
+                    actualComputeTime, sleepTime, gpuMiningPerformance);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
 
     /**
      * 添加交易到交易池 该交易已经验证
@@ -485,14 +521,12 @@ public class MiningServiceImpl {
         try {
             // 切换到已初始化的CUDA上下文
             cuCtxSetCurrent(cudaContext);
-
             // 1. 准备区块头数据（序列化并复制到GPU内存）
             byte[] headerData = Block.serializeBlockHeader(blockHeader);
             if (headerData.length != 80) {
                 log.error("区块头序列化错误，长度应为80字节，实际：" + headerData.length);
                 return result;
             }
-
             dHeader = new CUdeviceptr();
             int allocResult = cuMemAlloc(dHeader, headerData.length);
             if (allocResult != CUDA_SUCCESS) {
@@ -502,13 +536,13 @@ public class MiningServiceImpl {
             cuMemcpyHtoD(dHeader, Pointer.to(headerData), headerData.length);
 
             // 2. 设置挖矿参数（nonce范围）
-            int baseBlockSize = 256;
-            int baseBatchNonce = 1_000_000;
+            int baseBlockSize = 64;// 从256降低，减少并行线程数
+            int baseBatchNonce = 100_000;// 从1,000,000降低，减少单次计算的nonce数量
             int batchNonce = (int) (baseBatchNonce * (gpuMiningPerformance / 100.0));
             batchNonce = Math.max(1000, batchNonce);
             int startNonce = 0;
             int endNonce = Integer.MAX_VALUE;
-            int actualGridSize = (int) (1024 * (gpuMiningPerformance / 100.0));
+            int actualGridSize = (int) (256  * (gpuMiningPerformance / 100.0));// 从1024降低
             actualGridSize = Math.max(1, actualGridSize);
 
             // 3. 配置内核参数（使用静态加载的kernelFunction）
