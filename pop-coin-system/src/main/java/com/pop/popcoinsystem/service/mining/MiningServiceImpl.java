@@ -18,10 +18,15 @@ import jcuda.driver.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
+import java.io.File;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -44,7 +49,7 @@ public class MiningServiceImpl {
     // CPU挖矿性能控制（0-100，默认85%）
     private volatile int miningPerformance = 15;
     // GPU挖矿性能控制（0-100，默认100%）
-    private volatile int gpuMiningPerformance = 50;
+    private volatile int gpuMiningPerformance = 80;
 
     //矿工信息
     volatile public Miner miner;
@@ -58,12 +63,19 @@ public class MiningServiceImpl {
     private static int threadCount =  Runtime.getRuntime().availableProcessors();
     private static ExecutorService executor;
 
+    // 静态加载的CUDA模块和函数（整个挖矿过程复用）
+    private CUmodule ptxModule;
+    private CUfunction kernelFunction;
+    // 静态缓存的临时PTX文件（整个挖矿过程保持存在）
+    private File tempPtxFile;
+    private CUcontext cudaContext; // 类成员变量
+
     @Autowired
     private SynchronizedBlocksImpl syncService; // 同步服务，需自行实现
     // 记录同步前的挖矿状态，用于同步完成后恢复
     private volatile boolean wasMiningBeforeSync = false;
 
-    private CUcontext cudaContext; // 类成员变量
+
 
     /**
      * 启动挖矿
@@ -85,6 +97,7 @@ public class MiningServiceImpl {
         log.info("最新区块难度: {}", currentDifficulty);
         initExecutor();
         initCuda();
+
         //获取矿工信息
         miner = storageService.getMiner();
         log.info("本节点矿工信息: {}", miner);
@@ -257,15 +270,46 @@ public class MiningServiceImpl {
             byte[] name = new byte[256];
             cuDeviceGetName(name, name.length, device);
             log.info("CUDA初始化成功，使用GPU设备: " + new String(name).trim());
+
+            //加载执行文件
+            // 1. 加载resources/cuda目录下的PTX文件
+            ClassPathResource ptxResource = new ClassPathResource("cuda/miningKernel.ptx");
+            if (!ptxResource.exists()) {
+                throw new RuntimeException("PTX文件不存在: resources/cuda/miningKernel.ptx");
+            }
+
+
+            // 2. 复制到临时文件（整个挖矿过程中保持存在）
+            tempPtxFile = File.createTempFile("miningKernel-", ".ptx");
+            tempPtxFile.deleteOnExit(); // JVM退出时自动删除
+            try (InputStream is = ptxResource.getInputStream();
+                 OutputStream os = Files.newOutputStream(tempPtxFile.toPath())) {
+                byte[] buffer = new byte[1024];
+                int bytesRead;
+                while ((bytesRead = is.read(buffer)) != -1) {
+                    os.write(buffer, 0, bytesRead);
+                }
+            }
+            log.info("PTX文件静态加载到临时路径: {}", tempPtxFile.getAbsolutePath());
+
+            // 3. 加载CUDA模块和函数（缓存到成员变量）
+            ptxModule = new CUmodule();
+            int loadResult = cuModuleLoad(ptxModule, tempPtxFile.getAbsolutePath());
+            if (loadResult != CUDA_SUCCESS) {
+                throw new RuntimeException("CUDA模块加载失败，错误码: " + loadResult);
+            }
+            kernelFunction = new CUfunction();
+            int getFuncResult = cuModuleGetFunction(kernelFunction, ptxModule, "findValidNonceGPU");
+            if (getFuncResult != 0) {
+                throw new RuntimeException("获取CUDA函数失败，错误码: " + getFuncResult);
+            }
+            log.info("PTX模块和函数静态加载成功");
         } catch (Exception e) {
             log.error("CUDA初始化失败（可能无GPU或驱动问题）", e);
             log.warn("将自动降级为CPU挖矿");
+            cleanCudaResources();
         }
     }
-
-
-
-
 
 
 
@@ -411,38 +455,27 @@ public class MiningServiceImpl {
     //nvcc -ptx miningKernel.cu -o miningKernel.ptx -arch=compute_89 -code=sm_89,compute_89 -allow-unsupported-compiler --disable-warnings --diag-suppress 1002
 
 
+
     /**
-     * GPU挖矿核心方法（修正版）
+     * GPU挖矿核心方法（复用静态加载的PTX资源）
      */
     public MiningResult gpuMineBlock(BlockHeader blockHeader) {
-        // 检查上下文是否有效，无效则直接降级到CPU
-        if (cudaContext == null) {
-            log.warn("CUDA上下文未初始化，使用CPU挖矿");
+        // 检查静态资源是否有效，无效则降级到CPU
+        if (cudaContext == null || ptxModule == null || kernelFunction == null) {
+            log.warn("CUDA静态资源未初始化，使用CPU挖矿");
             return cpuMineBlock(blockHeader);
         }
+
         log.info("正在使用GPU挖矿");
         MiningResult result = new MiningResult();
-        CUmodule module = null;
-        CUfunction kernelFunction = null;
-        CUdeviceptr dHeader = null; // 在外部声明，以便在finally中访问
-        CUdeviceptr dResult = null; // 新增：用于读取devResult结构体
+        CUdeviceptr dHeader = null;
+        CUdeviceptr dResult = null;
+
         try {
+            // 切换到已初始化的CUDA上下文
             cuCtxSetCurrent(cudaContext);
-            // 1. 加载GPU内核（PTX文件）
-            module = new CUmodule();
-            int loadResult = cuModuleLoad(module, "F:\\workSpace\\p2p\\PopCoin\\pop-coin-system\\src\\main\\java\\com\\pop\\popcoinsystem\\service\\mining\\miningKernel.ptx");
-            if (loadResult != CUDA_SUCCESS) {
-                log.error("cuModuleLoad失败，错误码：" + loadResult); // 0表示成功
-                return result;
-            }
-            log.info("加载GPU内核成功");
-            kernelFunction = new CUfunction();
-            int getFuncResult = cuModuleGetFunction(kernelFunction, module, "findValidNonceGPU");
-            if (getFuncResult != 0) {
-                log.error("cuModuleGetFunction失败，错误码：" + getFuncResult);
-            }
-            log.info("获取GPU内核成功");
-            // 2. 准备区块头数据（复制到GPU可访问的内存）
+
+            // 1. 准备区块头数据（序列化并复制到GPU内存）
             byte[] headerData = Block.serializeBlockHeader(blockHeader);
             if (headerData.length != 80) {
                 log.error("区块头序列化错误，长度应为80字节，实际：" + headerData.length);
@@ -450,88 +483,111 @@ public class MiningServiceImpl {
             }
 
             dHeader = new CUdeviceptr();
-            int allocResult  = cuMemAlloc(dHeader, headerData.length);
-            if (allocResult != 0) {
-                log.error("cuMemAlloc失败，错误码：" + allocResult + "，申请尺寸：" + headerData.length);
+            int allocResult = cuMemAlloc(dHeader, headerData.length);
+            if (allocResult != CUDA_SUCCESS) {
+                log.error("GPU内存分配失败，错误码：" + allocResult);
+                return result;
             }
-            log.info("分配内存成功");
             cuMemcpyHtoD(dHeader, Pointer.to(headerData), headerData.length);
 
-            // 3. 设置nonce范围
-            int baseBlockSize = 256; // 保持blockSize不变（通常为2的幂，如256/512）
-            int gridSize = 1024;
-            int startNonce = 1;
-            int baseGridSize = 1024; // 基础网格大小
-            int actualGridSize = (int) (baseGridSize * (gpuMiningPerformance / 100.0));
-            actualGridSize = Math.max(1, actualGridSize); // 确保至少1个网格
+            // 2. 设置挖矿参数（nonce范围）
+            int baseBlockSize = 256;
+            int baseBatchNonce = 1_000_000;
+            int batchNonce = (int) (baseBatchNonce * (gpuMiningPerformance / 100.0));
+            batchNonce = Math.max(1000, batchNonce);
+            int startNonce = 0;
             int endNonce = Integer.MAX_VALUE;
+            int actualGridSize = (int) (1024 * (gpuMiningPerformance / 100.0));
+            actualGridSize = Math.max(1, actualGridSize);
 
-            // 6. 配置内核参数（序列化区块头指针、startNonce、endNonce）
+            // 3. 配置内核参数（使用静态加载的kernelFunction）
             Pointer kernelParams = Pointer.to(
                     Pointer.to(dHeader),
                     Pointer.to(new int[]{startNonce}),
                     Pointer.to(new int[]{endNonce})
             );
 
-            // 7. 启动GPU内核
-            int launchResult  = cuLaunchKernel(
+            // 4. 启动GPU内核（复用静态函数）
+            int launchResult = cuLaunchKernel(
                     kernelFunction,
                     actualGridSize, 1, 1,
                     baseBlockSize, 1, 1,
                     0, null,
                     kernelParams, null
             );
-            if (launchResult != 0) {
-                log.error("cuLaunchKernel失败，错误码：" + launchResult);
+            if (launchResult != CUDA_SUCCESS) {
+                log.error("GPU内核启动失败，错误码：" + launchResult);
+                return result;
             }
-            log.info("启动GPU内核成功");
+
             // 等待内核执行完成
             cuCtxSynchronize();
             log.info("GPU内核执行完成");
 
-            // 9. 读取结果（关键修改：读取devResult结构体）
-            dResult = getGlobalVariable(module, "devResult"); // 获取结构体地址
-            // 结构体布局：int found(4字节) + uint32_t nonce(4字节) + uint8_t hash[32](32字节)，共40字节
-            byte[] resultBuffer = new byte[40];
+            // 5. 读取挖矿结果
+            dResult = getGlobalVariable(ptxModule, "devResult");
+            byte[] resultBuffer = new byte[40]; // 结构体大小：4+4+32=40字节
             cuMemcpyDtoH(Pointer.to(resultBuffer), dResult, 40);
 
             // 解析结果
-            // ① 解析found（前4字节，小端int）
             int found = ByteBuffer.wrap(resultBuffer, 0, 4).order(ByteOrder.LITTLE_ENDIAN).getInt();
-            // ② 解析nonce（接下来4字节，小端uint32）
             int nonce = ByteBuffer.wrap(resultBuffer, 4, 4).order(ByteOrder.LITTLE_ENDIAN).getInt();
-            // ③ 解析hash（接下来32字节）
             byte[] hash = new byte[32];
             System.arraycopy(resultBuffer, 8, hash, 0, 32);
-            // 填充结果对象
+
             result.found = (found == 1);
             result.nonce = nonce;
             result.hash = hash;
+
             if (result.found) {
                 log.info("GPU找到有效哈希！nonce={}, hash={}", nonce, CryptoUtil.bytesToHex(hash));
             } else {
-                log.info("GPU未找到有效哈希，最后尝试nonce={}, hash={}", nonce, CryptoUtil.bytesToHex(hash));
-            }
-            return result;
-        } catch (Exception e) {
-            log.error("GPU挖矿异常", e);
-            // 发生异常时可考虑降级为CPU挖矿
-            return cpuMineBlock(blockHeader);
-        }finally {
-            // 1. 只释放通过 cuMemAlloc 分配的内存（dHeader）
-            if (dHeader != null) {
-                cuMemFree(dHeader); // 正确：释放手动分配的区块头内存
-                dHeader = null; // 避免重复释放
+                log.info("GPU未找到有效哈希，最后尝试nonce={}", nonce);
             }
 
-            // 2. 卸载模块（如果已加载）
-            if (module != null) {
-                cuModuleUnload(module); // 卸载模块，全局变量会随模块卸载自动清理
-                module = null;
+            return result;
+
+        } catch (Exception e) {
+            log.error("GPU挖矿异常", e);
+            return cpuMineBlock(blockHeader); // 异常时降级到CPU
+        } finally {
+            // 释放本次挖矿的临时资源（保留静态资源）
+            if (dHeader != null) {
+                cuMemFree(dHeader);
             }
         }
     }
 
+    /**
+     * 清理CUDA资源（用于初始化失败时）
+     */
+    private void cleanCudaResources() {
+        if (ptxModule != null) {
+            try {
+                cuModuleUnload(ptxModule);
+            } catch (Exception e) {
+                log.error("卸载CUDA模块失败", e);
+            }
+            ptxModule = null;
+        }
+        if (cudaContext != null) {
+            try {
+                cuCtxDestroy(cudaContext);
+            } catch (Exception e) {
+                log.error("销毁CUDA上下文失败", e);
+            }
+            cudaContext = null;
+        }
+        if (tempPtxFile != null && tempPtxFile.exists()) {
+            try {
+                Files.delete(tempPtxFile.toPath());
+            } catch (Exception e) {
+                log.error("删除PTX临时文件失败", e);
+            }
+            tempPtxFile = null;
+        }
+        kernelFunction = null;
+    }
 
 
     /**
@@ -725,45 +781,35 @@ public class MiningServiceImpl {
         this.gpuMiningPerformance = performance;
     }
 
-    // 程序退出时调用（如通过@PreDestroy）
+    /**
+     * 程序退出时释放所有静态资源
+     */
     @PreDestroy
     public void destroyCuda() {
-        // 第一步：停止挖矿并等待线程终止
+        // 停止挖矿
         if (isMining) {
             try {
-                stopMining(); // 调用停止挖矿方法，设置isMining为false
-                // 等待挖矿线程退出（假设挖矿线程是在startMining()中启动的单个线程，可通过线程对象等待）
-                // 注意：需要在startMining()中保存线程引用，这里才能等待
+                stopMining();
             } catch (Exception e) {
                 log.error("停止挖矿失败", e);
             }
         }
 
-        // 第二步：关闭线程池并等待任务完成
+        // 关闭线程池
         if (executor != null) {
-            executor.shutdownNow(); // 强制关闭线程池
+            executor.shutdownNow();
             try {
-                // 等待线程池终止，最多等待5秒
                 if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
-                    log.warn("线程池未能及时终止，可能仍有残留任务");
+                    log.warn("线程池未能及时终止");
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                log.error("等待线程池终止时被中断", e);
             }
             executor = null;
         }
 
-        // 第三步：最后销毁CUDA上下文
-        if (cudaContext != null) {
-            try {
-                cuCtxDestroy(cudaContext);
-                log.info("CUDA上下文已释放");
-            } catch (CudaException e) {
-                // 忽略已销毁的异常（可能上下文已被自动释放）
-                log.debug("销毁CUDA上下文时发生异常（可能已释放）", e);
-            }
-            cudaContext = null;
-        }
+        // 释放CUDA静态资源
+        cleanCudaResources();
+        log.info("CUDA静态资源已全部释放");
     }
 }
