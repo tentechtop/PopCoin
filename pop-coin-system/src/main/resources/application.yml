@@ -34,3 +34,9 @@ kademlia:
   node:
     tcpPort: 8333
     udpPort: 8334
+  bootstrap:
+    - ip: 192.168.1.1
+      tcp-port: 8333
+      udp-port: 8334
+      node-id: 0
+
