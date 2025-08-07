@@ -156,11 +156,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
         // 启动线程池监控（每30秒输出状态）
         scheduler.scheduleAtFixedRate(this::logThreadPoolStatus, 0, 30, TimeUnit.SECONDS);
 
-
-        // 启动线程池动态调整（每60秒检查一次）
-        scheduler.scheduleAtFixedRate(this::adjustThreadPools, 60, 60, TimeUnit.SECONDS);
-
-
         // 启动快速同步任务
         scheduler.scheduleAtFixedRate(
                 this::detectAndSync, 0, fastSyncInterval, TimeUnit.SECONDS);
@@ -183,55 +178,10 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
         int size = queue.size();
         int capacity = queue.remainingCapacity() + size;
         double usage = (double) size / capacity;
-
         if (usage >= threshold) {
-            log.warn("{}队列使用率过高: {}/{} ({:.0f}%)，可能导致阻塞",
+            log.warn("{}队列使用率过高: {}/{} ({}%)，可能导致阻塞",
                     name, size, capacity, usage * 100);
         }
-    }
-
-    // 动态调整线程池参数
-    private void adjustThreadPools() {
-        try {
-            double cpuUsage = getSystemCpuUsage(); // 获取系统CPU使用率
-            // 根据CPU使用率调整下载线程池
-            adjustThreadPool("下载线程池", downloadExecutor, cpuUsage, 0.5, 0.2);
-            // 根据CPU使用率调整处理线程池
-            adjustThreadPool("处理线程池", processExecutor, cpuUsage,0.4, 0.2);
-            // 合并线程池对CPU敏感，调整更保守
-            adjustThreadPool("合并线程池", mergeExecutor, cpuUsage, 0.6, 0.3);
-        } catch (Exception e) {
-            log.error("动态调整线程池失败", e);
-        }
-    }
-
-
-    // 调整单个线程池（带自定义阈值）
-    private void adjustThreadPool(String name, ThreadPoolExecutor executor, double cpuUsage,
-                                  double highThreshold, double lowThreshold) {
-        int currentCore = executor.getCorePoolSize();
-        int max = executor.getMaximumPoolSize();
-        int minCore = Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
-
-        if (cpuUsage < lowThreshold && currentCore < max) {
-            // CPU使用率低，增加核心线程数
-            int newCore = Math.min(currentCore + 1, max);
-            executor.setCorePoolSize(newCore);
-            log.info("{}核心线程数从{}调整为{} (CPU使用率: {}%)",
-                    name, currentCore, newCore, cpuUsage * 100);
-        } else if (cpuUsage > highThreshold && currentCore > minCore) {
-            // CPU使用率高，减少核心线程数
-            int newCore = Math.max(currentCore - 1, minCore);
-            executor.setCorePoolSize(newCore);
-            log.info("{}核心线程数从{}调整为{} (CPU使用率: {}%)",
-                    name, currentCore, newCore, cpuUsage * 100);
-        }
-    }
-
-    // 获取系统CPU使用率（可使用OSHI等库）
-    private double getSystemCpuUsage() {
-        // 可以使用更准确的方法
-        return ManagementFactory.getOperatingSystemMXBean().getSystemLoadAverage();
     }
 
     //线程池状态监控日志
@@ -260,14 +210,19 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
     // 初始化线程池并优化配置
     private void initThreadPool() {
         int cpuCount = Runtime.getRuntime().availableProcessors();
-        // 下载线程池（处理区块头/RPC下载，IO密集） 下载后按高度排序再提交给处理线程池
+        // 虚拟线程工厂（为虚拟线程设置名称，便于日志追踪）
+        ThreadFactory virtualThreadFactory = Thread.ofVirtual()
+                .name("block-downloader-", 0) // 线程名称前缀+自增编号
+                .factory();
+
+        // 初始化下载线程池（使用虚拟线程）
         downloadExecutor = new ThreadPoolExecutor(
-                Math.max(4, cpuCount * 2),  // 核心线程数（CPU*2，至少4个）
-                Math.max(8, cpuCount * 4),  // 最大线程数（CPU*4，至少8个）
+                0, // 核心线程数为0（虚拟线程无需常驻核心线程）
+                Integer.MAX_VALUE, // 最大线程数（虚拟线程数量几乎无上限）
                 60L, TimeUnit.SECONDS,
-                new LinkedBlockingQueue<>(500),  // 有界队列，避免OOM
-                r -> new Thread(r, "block-downloader"),
-                new ThreadPoolExecutor.DiscardOldestPolicy()  // 下载任务优先处理最新的
+                new LinkedBlockingQueue<>(2048), // 有界队列，避免任务无限制堆积导致OOM
+                virtualThreadFactory, // 使用虚拟线程工厂
+                new ThreadPoolExecutor.DiscardOldestPolicy() // 队列满时丢弃最旧任务，优先处理新任务
         );
 
         // 处理线程池（验证+存储区块头，IO密集） 单线程 + FIFO 队列，严格按高度顺序处理

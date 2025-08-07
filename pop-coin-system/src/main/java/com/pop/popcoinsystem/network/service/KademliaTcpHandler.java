@@ -20,22 +20,6 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
     private final KademliaNodeServer nodeServer;
 
     // 定义业务线程池（CPU密集型：核心数=CPU核心数；IO密集型：核心数=CPU核心数*2）
-    private static final ExecutorService BUSINESS_POOL = new ThreadPoolExecutor(
-            Runtime.getRuntime().availableProcessors() * 2,
-            200,
-            60L, TimeUnit.SECONDS,
-            new SynchronousQueue<>(),
-            new ThreadFactory() {
-                private final AtomicInteger counter = new AtomicInteger();
-                @Override
-                public Thread newThread(Runnable r) {
-                    Thread t = new Thread(r, "business-pool-" + counter.incrementAndGet());
-                    t.setDaemon(true);
-                    return t;
-                }
-            },
-            new ThreadPoolExecutor.CallerRunsPolicy() // 任务满时让调用者处理，避免任务丢失
-    );
 
 
 
@@ -49,7 +33,7 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, KademliaMessage message) throws Exception {
-        BUSINESS_POOL.submit(() -> {
+        Thread.startVirtualThread(() -> {
             long messageId = message.getMessageId();
             // 检查：若消息已存在（未过期），则跳过广播
             if (nodeServer.getBroadcastMessages().getIfPresent(messageId) != null) {

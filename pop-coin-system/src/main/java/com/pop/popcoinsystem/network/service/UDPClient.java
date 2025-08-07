@@ -30,24 +30,18 @@ public class UDPClient {
     private static final AttributeKey<BigInteger> NODE_ID_KEY = AttributeKey.valueOf("NODE_ID");
     private static final int DEFAULT_OPERATION_TIMEOUT = 5000; // 默认操作超时（毫秒）
 
-
+    ThreadFactory virtualThreadFactory = Thread.ofVirtual()
+            .name("udp-send-", 0) // 线程名称前缀+自增编号
+            .factory();
 
     public UDPClient() {
         // 线程池复用，控制并发量
-        this.executorService = new ThreadPoolExecutor(
-                Runtime.getRuntime().availableProcessors() * 2,
-                200,
+        executorService = new ThreadPoolExecutor(
+                0, // 核心线程数为0（虚拟线程无需常驻核心线程）
+                Integer.MAX_VALUE, // 最大线程数（虚拟线程数量几乎无上限）
                 60L, TimeUnit.SECONDS,
-                new LinkedBlockingQueue<>(1024),
-                new ThreadFactory() {
-                    private final AtomicInteger counter = new AtomicInteger();
-                    @Override
-                    public Thread newThread(Runnable r) {
-                        Thread t = new Thread(r, "business-pool-" + counter.incrementAndGet());
-                        t.setDaemon(true);
-                        return t;
-                    }
-                },
+                new LinkedBlockingQueue<>(2048), // 有界队列，避免任务无限制堆积导致OOM
+                virtualThreadFactory, // 使用虚拟线程工厂
                 new ThreadPoolExecutor.CallerRunsPolicy() // 任务满时让调用者处理，避免任务丢失
         );
         // 全局复用EventLoopGroup（重量级资源，避免频繁创建）
