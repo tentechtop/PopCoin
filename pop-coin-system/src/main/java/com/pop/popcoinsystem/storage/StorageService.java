@@ -96,7 +96,11 @@ public class StorageService {
     //获取主链最新的区块Hash
     public byte[] getMainLatestBlockHash() {
         try {
-            return db.get(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_MAIN_LATEST_BLOCK_HASH);
+            byte[] bytes = db.get(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_MAIN_LATEST_BLOCK_HASH);
+            if (bytes == null){
+                return null;
+            }
+            return bytes;
         } catch (RocksDBException e) {
             log.error("获取主链当前区块hash失败", e);
             throw new RuntimeException("获取主链当前区块hash失败", e);

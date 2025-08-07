@@ -306,17 +306,31 @@ public class KademliaNodeServer {
                 log.info("收到引导节点{}的Pong消息", bootstrapNodeInfo);
                 //向引导节点发送握手请求 收到握手回复后检查 自己的区块链信息
                 BlockChainServiceImpl blockChainService = this.getBlockChainService();
-                Block mainLatestBlock = blockChainService.getMainLatestBlock();
-                Handshake handshake = new Handshake();
-                handshake.setExternalNodeInfo(this.getExternalNodeInfo());//携带我的节点信息
-                handshake.setGenesisBlockHash(blockChainService.GENESIS_BLOCK_HASH());
-                handshake.setLatestBlockHash(mainLatestBlock.getHash());
-                handshake.setLatestBlockHeight(mainLatestBlock.getHeight());
-                handshake.setChainWork(mainLatestBlock.getChainWork());
-                HandshakeRequestMessage handshakeRequestMessage = new HandshakeRequestMessage(handshake);
-                handshakeRequestMessage.setSender(this.nodeInfo);//本节点信息
-                handshakeRequestMessage.setReceiver(bootstrapNodeInfo);
-                this.getTcpClient().sendMessage(handshakeRequestMessage);
+                byte[] bytes = blockChainService.GENESIS_BLOCK_HASH();
+                if (bytes == null){
+                    Handshake handshake = new Handshake();
+                    handshake.setExternalNodeInfo(this.getExternalNodeInfo());//携带我的节点信息
+                    handshake.setGenesisBlockHash(blockChainService.GENESIS_BLOCK_HASH());
+                    handshake.setLatestBlockHash(null);
+                    handshake.setLatestBlockHeight(-1);
+                    handshake.setChainWork(new byte[0]);
+                    HandshakeRequestMessage handshakeRequestMessage = new HandshakeRequestMessage(handshake);
+                    handshakeRequestMessage.setSender(this.nodeInfo);//本节点信息
+                    handshakeRequestMessage.setReceiver(bootstrapNodeInfo);
+                    this.getTcpClient().sendMessage(handshakeRequestMessage);
+                }else {
+                    Block mainLatestBlock =blockChainService.getMainLatestBlock();
+                    Handshake handshake = new Handshake();
+                    handshake.setExternalNodeInfo(this.getExternalNodeInfo());//携带我的节点信息
+                    handshake.setGenesisBlockHash(blockChainService.GENESIS_BLOCK_HASH());
+                    handshake.setLatestBlockHash(mainLatestBlock.getHash());
+                    handshake.setLatestBlockHeight(mainLatestBlock.getHeight());
+                    handshake.setChainWork(mainLatestBlock.getChainWork());
+                    HandshakeRequestMessage handshakeRequestMessage = new HandshakeRequestMessage(handshake);
+                    handshakeRequestMessage.setSender(this.nodeInfo);//本节点信息
+                    handshakeRequestMessage.setReceiver(bootstrapNodeInfo);
+                    this.getTcpClient().sendMessage(handshakeRequestMessage);
+                }
             }
         }
         // 明确捕获"连接被拒绝"异常
