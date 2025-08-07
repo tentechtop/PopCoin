@@ -163,9 +163,7 @@ public class MiningServiceImpl {
                 BlockHeader blockHeader = newBlock.extractHeader();
                 MiningResult result = null;
                 if (isGPUMining){
-                    long start = System.currentTimeMillis();
                     result =  gpuMineBlock(blockHeader);
-                    controlGpuPerformance(System.currentTimeMillis() -start);
                 }else {
                     result = cpuMineBlock(blockHeader);
                 }
@@ -325,42 +323,7 @@ public class MiningServiceImpl {
     }
 
 
-    /**
-     * GPU性能控制：根据性能参数控制休眠时间，限制挖矿频率
-     */
-    private void controlGpuPerformance(long actualComputeTime) {
-        if (gpuMiningPerformance >= 100) {
-            return; // 100%性能：不休眠
-        }
-        if (gpuMiningPerformance <= 0) {
-            try {
-                Thread.sleep(1000); // 0%性能：强制休眠1秒
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            return;
-        }
 
-        // 目标：工作时间占总周期（工作+休眠）的比例 = 性能百分比
-        // 公式：总周期 = 工作时间 / (性能百分比/100)
-        // 休眠时间 = 总周期 - 工作时间
-        double targetRatio = gpuMiningPerformance / 100.0;
-        long totalCycleTime = (long) (actualComputeTime / targetRatio);
-        long sleepTime = totalCycleTime - actualComputeTime;
-
-        // 限制最小/最大休眠时间（避免极端值）
-        sleepTime = Math.max(50, sleepTime); // 至少休眠50ms，避免频繁启动
-        sleepTime = Math.min(2000, sleepTime); // 最多休眠2秒，避免响应过慢
-
-        try {
-            if (!isMining) return;
-            Thread.sleep(sleepTime);
-            log.debug("GPU性能控制：计算耗时{}ms，休眠{}ms（目标占比{}%）",
-                    actualComputeTime, sleepTime, gpuMiningPerformance);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-    }
 
     /**
      * 添加交易到交易池 该交易已经验证
