@@ -52,10 +52,10 @@ public class TCPClient {
 
     public TCPClient() {
         executorService = new ThreadPoolExecutor(
-                0, // 核心线程数为0（虚拟线程无需常驻核心线程）
-                Integer.MAX_VALUE, // 最大线程数（虚拟线程数量几乎无上限）
+                Runtime.getRuntime().availableProcessors() * 2,
+                200,
                 60L, TimeUnit.SECONDS,
-                new LinkedBlockingQueue<>(2048), // 有界队列，避免任务无限制堆积导致OOM
+                new LinkedBlockingQueue<>(1024),
                 virtualThreadFactory, // 使用虚拟线程工厂
                 new ThreadPoolExecutor.CallerRunsPolicy() // 任务满时让调用者处理，避免任务丢失
         );

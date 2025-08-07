@@ -284,6 +284,9 @@ public class DifficultyUtils {
         String hex = "0000ffffffff0000000000000000000000000000000000000000000000000000";
         //转字节类型的难度目标 未压缩
 
+        String testHashHex = "000001633f07d16f51467564887642f8bc91297560099c2db2944b846d9a2b35";
+        boolean valid = isValidHash(CryptoUtil.hexToBytes(testHashHex), hexToBytes(hex));
+        log.info("{}", valid);
 
 
         long l = targetToDifficulty(hex);

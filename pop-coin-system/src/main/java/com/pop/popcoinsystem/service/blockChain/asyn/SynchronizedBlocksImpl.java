@@ -76,11 +76,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
     private int rpcTimeoutMs; // 远程调用超时时间
 
 
-
-
-    // 新增：高度到节点ID的映射（记录每个高度由哪个节点同步）
-    // 键：区块高度，值：负责该高度的节点ID
-
     // 节点评分管理器：维护节点可信度评分（1-100，默认60）
     private final ConcurrentMap<BigInteger, Integer> nodeScores = new ConcurrentHashMap<>();
     private static final int DEFAULT_NODE_SCORE = 60;
@@ -89,25 +84,20 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
 
     // 基础批次大小（可动态调整）
     private static final int BASE_BATCH_SIZE = 500;
-
     // 最小批次大小（内存紧张时）
     private static final int MIN_BATCH_SIZE = 10;
-
     // 最大并发同步任务数（避免资源耗尽）
     private static final int MAX_CONCURRENT_TASKS = 6;
     // 并发任务计数器
     private final AtomicInteger activeTaskCount = new AtomicInteger(0);
     // 最大重试次数
     public static final int MAX_RETRY = 3;
-
     // 最大连续错误区块头数量
     private static final int MAX_CONTINUOUS_INVALID_HEADER = 10;
     // 错误区块头占比阈值（超过此比例则判定为大量错误）
     private static final double INVALID_HEADER_RATE_THRESHOLD = 0.3;
-
     private final Map<String, SyncTaskRecord> activeTasks = new ConcurrentHashMap<>();
     Map<String, CompletableFuture<SyncTaskRecord>> taskFutureMap = new ConcurrentHashMap<>();
-
 
     // 1. 下载线程池（处理区块头/RPC下载，IO密集）
     private  ThreadPoolExecutor downloadExecutor;
@@ -127,7 +117,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
     // 同步中标记（避免并发冲突）
     private volatile boolean isSyncing = false;
 
-
     @Override
     public void run(ApplicationArguments args) throws Exception {
         // 从存储恢复未完成的同步任务 正在进行 或者 暂停的任务
@@ -138,52 +127,21 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 log.info("恢复未完成任务(运行中或者暂停的任务): {}", task.getTaskId());
             }
         }
-
         //TODO
         // 加载节点评分（默认初始化）
         List<ExternalNodeInfo> nodes = kademliaNodeServer.getRoutingTable().getAllNodes();
         nodes.forEach(node -> nodeScores.putIfAbsent(node.getId(), DEFAULT_NODE_SCORE));
-
         initThreadPool();
-
         scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread thread = new Thread(r, "block-sync-scheduler");
             thread.setDaemon(true); // 守护线程，随应用退出
             return thread;
         });
-
-
         // 启动线程池监控（每30秒输出状态）
         scheduler.scheduleAtFixedRate(this::logThreadPoolStatus, 0, 30, TimeUnit.SECONDS);
-
         // 启动快速同步任务
-        scheduler.scheduleAtFixedRate(
-                this::detectAndSync, 0, fastSyncInterval, TimeUnit.SECONDS);
-
-        // 添加任务队列监控，当队列积压过多时发出警告
-        scheduler.scheduleAtFixedRate(this::monitorTaskQueues, 10, 10, TimeUnit.SECONDS);
+        scheduler.scheduleAtFixedRate(this::detectAndSync, 0, fastSyncInterval, TimeUnit.SECONDS);
     }
-
-    // 监控任务队列，当队列积压过多时发出警告
-    private void monitorTaskQueues() {
-        checkQueueThreshold("下载线程池", downloadExecutor, 0.8);
-        checkQueueThreshold("处理线程池", processExecutor, 0.8);
-        checkQueueThreshold("合并线程池", mergeExecutor, 0.7);
-        checkQueueThreshold("探测线程池", detectExecutor, 0.8);
-    }
-
-    // 检查队列是否达到阈值
-    private void checkQueueThreshold(String name, ThreadPoolExecutor executor, double threshold) {
-        BlockingQueue<?> queue = executor.getQueue();
-        int size = queue.size();
-        int capacity = queue.remainingCapacity() + size;
-        double usage = (double) size / capacity;
-        if (usage >= threshold) {
-            log.warn("{}队列使用率过高: {}/{} ({}%)，可能导致阻塞",
-                    name, size, capacity, usage * 100);
-        }
-    }
-
     //线程池状态监控日志
     private void logThreadPoolStatus() {
         log.info("=== 线程池状态 ===");
@@ -192,7 +150,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
         logThreadPoolInfo("合并线程池", mergeExecutor);
         logThreadPoolInfo("探测线程池", detectExecutor);
     }
-
     // 打印单个线程池信息
     private void logThreadPoolInfo(String name, ThreadPoolExecutor executor) {
         log.info("{}: 活跃={}, 核心={}, 最大={}, 队列={}/{}, 完成={}, 拒绝={}",
@@ -205,8 +162,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 executor.getCompletedTaskCount(),
                 executor.getRejectedExecutionHandler());
     }
-
-
     // 初始化线程池并优化配置
     private void initThreadPool() {
         int cpuCount = Runtime.getRuntime().availableProcessors();
@@ -214,7 +169,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
         ThreadFactory virtualThreadFactory = Thread.ofVirtual()
                 .name("block-downloader-", 0) // 线程名称前缀+自增编号
                 .factory();
-
         // 初始化下载线程池（使用虚拟线程）
         downloadExecutor = new ThreadPoolExecutor(
                 0, // 核心线程数为0（虚拟线程无需常驻核心线程）
@@ -224,7 +178,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 virtualThreadFactory, // 使用虚拟线程工厂
                 new ThreadPoolExecutor.DiscardOldestPolicy() // 队列满时丢弃最旧任务，优先处理新任务
         );
-
         // 处理线程池（验证+存储区块头，IO密集） 单线程 + FIFO 队列，严格按高度顺序处理
         processExecutor = new ThreadPoolExecutor(
                 1,  // 核心线程数=1（保证顺序）
@@ -234,7 +187,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 r -> new Thread(r, "block-processor"),
                 new ThreadPoolExecutor.CallerRunsPolicy()  // 队列满时阻塞提交者，避免乱序
         );
-
         // 合并线程池（合并区块到主链，混合密集） 单线程 + FIFO 队列，按高度升序合并
         mergeExecutor = new ThreadPoolExecutor(
                 1,  // 单线程
@@ -244,7 +196,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 r -> new Thread(r, "block-merger"),
                 new ThreadPoolExecutor.AbortPolicy()  // 队列满时拒绝，避免溢出
         );
-
         // 探测线程池（节点健康检测，轻量IO密集）
         detectExecutor = new ThreadPoolExecutor(
                 detectConcurrency,
@@ -254,28 +205,22 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 r -> new Thread(r, "node-detector"),
                 new ThreadPoolExecutor.CallerRunsPolicy()
         );
-
         // 设置线程池饱和时的钩子函数，用于告警
         ((ThreadPoolExecutor) downloadExecutor).setRejectedExecutionHandler((r, executor) -> {
             log.warn("下载线程池饱和，已拒绝任务，当前队列大小: {}", executor.getQueue().size());
             new ThreadPoolExecutor.DiscardOldestPolicy().rejectedExecution(r, executor);
         });
-
     }
-
     public void compareAndSync(NodeInfo remoteNode,
                                 long localHeight, byte[] localHash, byte[] localTotalWork,
                                 long remoteHeight, byte[] remoteHash, byte[] remoteTotalWork)
             throws ConnectException {
         // 情况0：节点正在同步中，拒绝新请求
         if (isSyncing) {
-            List<SyncTaskRecord> runningTasks = activeTasks.values().stream()
-                    .filter(task -> task.getStatus() == SyncStatus.RUNNING)
-                    .toList();
+            printRunningSyncTasks();
             log.info("节点正在同步中，不处理新请求");
             return;
         }
-
         // 情况1：本地节点未初始化（无区块数据）仅仅一个创世区块
         if (localHeight == 0) {
             log.info("本地节点未初始化（高度: {}），请求远程完整链（远程最新高度: {}，远程总工作量: {}）",
@@ -362,21 +307,13 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 localHeight, CryptoUtil.bytesToHex(localHash), localTotalWork);
     }
 
-
-
-    /**
-     * 进一步优化：批量查询哈希（适用于支持批量接口的场景）
-     * 减少网络交互次数，尤其在跨节点通信时提升性能
-     */
     private long findForkHeightWithBatchQuery(NodeInfo remoteNode, long maxCommonHeight) {
         RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
         BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
         log.info("开始批量查询哈希，远程节点:{}，最大共同高度:{}", remoteNode, maxCommonHeight);
-
         if (maxCommonHeight < 0) {
             return -1;
         }
-
         long low = 0;
         long high = maxCommonHeight;
         long forkHeight = -1;
@@ -417,12 +354,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
         return forkHeight == -1 && maxCommonHeight >= 0 ? 0 : forkHeight;
     }
 
-
-    /**
-     * 从远程节点同步区块（核心同步入口）
-     * @param remoteNode 远程节点信息
-     * @param startHeight 同步起始高度（分叉点或本地当前高度）
-     */
     private void startSyncFromRemote(NodeInfo remoteNode, long startHeight) {
         if (remoteNode == null) {
             log.error("远程节点信息为空，无法启动同步");
@@ -443,7 +374,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 // 1. 验证远程节点有效性（评分、在线状态）
                 BigInteger nodeId = remoteNode.getId();
 
-
                 // 2. 获取远程节点最新高度（确定同步目标）
                 proxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
                 proxyFactory.setTimeout(rpcTimeoutMs);
@@ -457,7 +387,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                     log.info("无需同步：起始高度[{}] >= 远程最新高度[{}]", startHeight, remoteLatestHeight);
                     return;
                 }
-
                 // 4. 提交同步任务（自动处理任务重叠、分片及并发控制）
                 CompletableFuture<SyncTaskRecord> syncFuture = SubmitSyncTask(startHeight, remoteLatestHeight);
                 syncFuture.whenComplete((task, ex) -> {
@@ -483,24 +412,19 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                     finishSync(); // 同步结束（包括异常终止），恢复挖矿
                 }
                 log.info("从远程节点[{}]的同步流程结束", remoteNode.getId().toString().substring(0, 8));
+                //删除同步任务
+                // 自动删除内存中的任务记录
             }
         }, detectExecutor);
     }
 
 
-
     /**
      * 提交差异
-     * 节点握手确定差异
-     * 定期检查差异并同步
-     *    同步时合并差异
-     *    根据合并后的差异建立同步任务  并行执行
-     *    将下载的区块暂存到 下载数据库
-     *    检查全部下载完就开始从开始位置慢慢补充到主链
-     *    要检查开始高度 和开始高度hash
-     *    如果不重叠且间隙 hash一致 也就是 [100 hasha1 - 200 hash2] [101hash3-200hash4]
-     *    hash3的父hash是hash2 就允许创建一个新的任务  也就是两个任务 必须高度连续 区块连续
-     *    如果一个任务A是[100 hasha1 - 200 hash2] 任务B是[301 hash3 - 400 hash4] 此时如果A正在同步 则要拒绝B任务 因为不连续 无法合到主链
+     *   1、检查开始高度 和结束高度hash  要保证高度连续 hash连续
+     *   2、情况一: 如果不重叠且间隙 hash一致 也就是 [100 hasha1 - 200 hash2] [101hash3-200hash4] ,hash3的父hash是hash2 就允许创建一个新的任务  也就是两个任务 必须高度连续 区块连续
+     *   3、情况二: 如果一个任务A是[100 hasha1 - 200 hash2] 任务B是[301 hash3 - 400 hash4] 此时如果A正在同步 则要拒绝B任务 因为不连续 无法合到主链
+     *   4、情况三：如果一个任务A是[100 hasha1 - 200 hash2] 任务B是[150 hash3 - 400 hash4] 则修剪任务B 让任务B 从 201到400 且201的父hash要和 任务一一致
      */
     public CompletableFuture<SyncTaskRecord> SubmitSyncTask(long startHeight, long endHeight) {
         List<ExternalNodeInfo> candidateNodes = kademliaNodeServer.getRoutingTable().findClosest();
@@ -561,8 +485,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
         activeTaskCount.incrementAndGet();
         return taskFuture;
     }
-
-
     /**
      * 查找与指定范围重叠的所有活跃任务
      */
@@ -645,15 +567,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
         }
     }
 
-
-
-
-
-
-
-
-
-
     /**
      * 打印所有正在同步的任务（状态为RUNNING的任务）
      */
@@ -663,18 +576,15 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 .filter(task -> task.getStatus() == SyncStatus.RUNNING)
                 .toList();
         //如果任务进度是100%
-
-
         if (runningTasks.isEmpty()) {
             log.info("当前没有正在同步的任务");
+            finishSync();
             return;
         }
-
         log.info("===== 正在同步的任务列表（共{}个） =====", runningTasks.size());
         for (SyncTaskRecord task : runningTasks) {
             // 计算任务整体进度（基于所有分片的完成情况）
             double totalProgress = calculateTaskTotalProgress(task);
-
             // 打印任务基本信息
             log.info("任务ID: {}", task.getTaskId());
             log.info("  同步范围: 从高度{}到{}", task.getStartHeight(), task.getTargetHeight());
@@ -696,22 +606,9 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
     }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
     /**
      * 执行完整同步任务（包含所有分片）
      */
-// 修改executeSyncTask方法中的任务提交逻辑
     private CompletableFuture<SyncTaskRecord> executeSyncTask(SyncTaskRecord task) {
         task.setStatus(SyncStatus.RUNNING);
         task.setUpdateTime(LocalDateTime.now());
@@ -759,23 +656,20 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 });
     }
 
-    // 批量获取区块头并建立高度映射（核心修改）
+    // 批量获取区块头并建立高度映射
     private Map<Long, BlockHeader> fetchBlockHeadersWithHeightMap(BigInteger nodeId, long startHeight, int count) {
         NodeInfo remoteNode = kademliaNodeServer.getNodeInfo(nodeId);
         if (remoteNode == null) {
             throw new RuntimeException("节点不可用: " + nodeId);
         }
-
         RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
         proxyFactory.setTimeout(rpcTimeoutMs);
         BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
-
         // 假设远程返回的区块头按高度升序排列（从startHeight开始）
         List<BlockHeader> headers = remoteService.getBlockHeaders(startHeight, count);
         if (headers == null || headers.size() != count) {
             throw new RuntimeException("区块头数量不匹配: 请求" + count + "个，实际" + (headers == null ? 0 : headers.size()));
         }
-
         // 建立高度→区块头的映射（关键：通过请求参数推算高度）
         Map<Long, BlockHeader> heightToHeaderMap = new TreeMap<>(); // TreeMap保证按高度升序
         for (int i = 0; i < headers.size(); i++) {
@@ -784,8 +678,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
         }
         return heightToHeaderMap;
     }
-
-
 
     private CompletableFuture<SyncProgress> executeShardTaskBatch(SyncProgress progress, SyncTaskRecord mainTask) {
         return CompletableFuture.supplyAsync(() -> {
@@ -900,8 +792,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
         }, downloadExecutor);
     }
 
-
-
     // 处理批量区块头（依赖高度映射）
     private boolean processBlockHeaderBatch(SyncProgress progress, Map<Long, BlockHeader> heightToHeaderMap) {
         // TreeMap已按高度升序排序，直接遍历即可保证顺序
@@ -935,8 +825,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
         }
         return true;
     }
-
-
 
     private CompletableFuture<SyncProgress> executeShardTaskBatchNew(SyncProgress progress, SyncTaskRecord mainTask) {
         return CompletableFuture.supplyAsync(() -> {
@@ -991,8 +879,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
             }
         }, downloadExecutor);
     }
-
-
 
     private void mergeDownloadedBlocksBatchNew(long startHeight, long targetHeight) {
         mergeExecutor.submit(() -> { // 单线程合并，保证顺序
@@ -1050,8 +936,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
             return null;
         }
     }
-
-
 
 
     /**
@@ -1194,41 +1078,15 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
             return finalScore;
         });
     }
+
+
+
     private double calculateProgress(SyncProgress progress) {
         long total = progress.getTargetHeight() - progress.getStartHeight() + 1;
         long completed = progress.getCurrentHeight() - progress.getStartHeight() + 1;
         return total == 0 ? 0 : (double) completed / total * 100;
     }
 
-    /**
-     * 终止同步任务
-     */
-    public void stopTask(String taskId) {
-        SyncTaskRecord task = activeTasks.get(taskId);
-        if (task == null) {
-            log.warn("任务[{}]不存在", taskId);
-            return;
-        }
-
-        // 更新任务状态
-        task.setStatus(SyncStatus.CANCELLED);
-        task.setUpdateTime(LocalDateTime.now());
-        task.setErrorMsg("任务被手动终止");
-        activeTasks.put(taskId, task);
-        popStorage.saveSyncTaskRecord(task);
-
-        // 取消Future
-        CompletableFuture<SyncTaskRecord> future = taskFutureMap.get(taskId);
-        if (future != null && !future.isDone()) {
-            future.cancel(true);
-            log.info("任务[{}]已取消", taskId);
-        } else {
-            log.info("任务[{}]已完成或不存在，无需取消", taskId);
-        }
-
-        // 手动终止后自动删除任务
-        removeTask(taskId);
-    }
 
 
     /**
@@ -1502,51 +1360,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
         return task;
     }
 
-
-
-    /**
-     * 将下载的区块合并到主链
-     * TODO 批量下载
-     */
-    private void mergeDownloadedBlocks(long startHeight, long targetHeight) {
-        log.info("开始合并区块: {} - {}", startHeight, targetHeight);
-        try {
-            for (long height = startHeight; height <= targetHeight; height++) {
-                BlockHeader header = popStorage.getDownloadedHeader(height);
-                if (header == null) {
-                    log.warn("区块[{}]暂存记录不存在，跳过合并", height);
-                    continue;
-                }
-                // 再次验证后 下载完整区块 合并到主链
-                if (validateBlockHeaderPoW(header)) {
-                    byte[] hash = header.computeHash();
-                    //RPC下载完整区块
-                    RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer);
-                    BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
-                    Block blockByHash = remoteService.getBlockByHash(hash);
-                    localBlockChainService.verifyBlock(blockByHash,false);
-                    //localBlockChainService.addBlockHeader(header,height);
-                    popStorage.deleteDownloadedHeader(height); // 合并后删除暂存
-                    log.info("区块[{}]已合并到主链", height);
-                    //休眠
-                    try {
-                        Thread.sleep(100);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                } else {
-                    log.error("区块[{}]验证失败，拒绝合并", height);
-                }
-            }
-            log.info("区块合并完成: {} - {}", startHeight, targetHeight);
-        } catch (Exception e) {
-            log.error("区块合并失败", e);
-            throw new RuntimeException("区块合并异常", e);
-        }
-    }
-
-
-
     /**
      * 批量下载并合并区块到主链（优化版）
      * 1. 批量读取暂存的区块头
@@ -1645,13 +1458,13 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 List<Block> downloadedBlocks = blockFutures.stream()
                         .map(CompletableFuture::join)
                         .filter(Objects::nonNull)
-                        .collect(Collectors.toList());
+                        .toList();
                 log.info("第{}批成功下载完整区块: {}个（请求{}个）", batchNum + 1, downloadedBlocks.size(), validHeaders.size());
 
                 // 6. 按高度升序排序下载的区块（关键：确保处理顺序）
                 List<Block> sortedBlocks = downloadedBlocks.stream()
                         .sorted(Comparator.comparingLong(Block::getHeight))
-                        .collect(Collectors.toList());
+                        .toList();
 
                 // 7. 严格按顺序验证并合并完整区块到主链
                 List<Long> successHeights = new ArrayList<>();
@@ -1744,68 +1557,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
         detectExecutor.shutdown();
     }
 
-
-    /**
-     * 高效查找本地链与远程链的分叉点高度
-     * 采用二分查找法，时间复杂度优化为O(log n)
-     * @param remoteNode 远程节点信息
-     * @param maxCommonHeight 理论上的最大共同高度（取本地和远程高度的最小值）
-     * @return 分叉点高度（-1表示无共同历史）
-     */
-    private long findForkHeight(NodeInfo remoteNode, long maxCommonHeight) {
-        RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
-        BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
-        // 边界校验：若最大共同高度为负数，直接返回无共同历史
-        if (maxCommonHeight < 0) {
-            return -1;
-        }
-
-        long low = 0;
-        long high = maxCommonHeight;
-        long forkHeight = -1;  // 初始化分叉点为无共同历史
-
-        // 缓存已查询的哈希，避免重复网络请求或本地查询
-        Map<Long, byte[]> localHashCache = new HashMap<>();
-        Map<Long, byte[]> remoteHashCache = new HashMap<>();
-
-        try {
-            // 二分查找主逻辑
-            while (low <= high) {
-                // 计算中间高度（避免溢出）
-                long mid = low + (high - low) / 2;
-
-                // 获取本地区块哈希（优先从缓存获取）
-                byte[] localHash = localHashCache.get(mid);
-                if (localHash == null) {
-                    localHash = localBlockChainService.getBlockHash(mid);
-                    localHashCache.put(mid, localHash);
-                }
-
-                // 获取远程区块哈希（优先从缓存获取）
-                byte[] remoteHash = remoteHashCache.get(mid);
-                if (remoteHash == null) {
-                    remoteHash = remoteService.getBlockHash(mid);
-                    remoteHashCache.put(mid, remoteHash);
-                }
-
-                // 哈希相同：说明此高度及以下可能存在共同历史，尝试查找更高的共同高度
-                if (Arrays.equals(localHash, remoteHash)) {
-                    forkHeight = mid;  // 临时记录当前共同高度
-                    low = mid + 1;    // 向更高高度查找
-                } else {
-                    // 哈希不同：分叉点在更低高度，缩小上边界
-                    high = mid - 1;
-                }
-            }
-        } catch (Exception e) {
-            log.error("分叉点检测失败，最大共同高度:{}", maxCommonHeight, e);
-            // 异常情况下尝试返回已找到的临时分叉点（可能不准确，但避免完全失败）
-            return forkHeight != -1 ? forkHeight : -1;
-        }
-        return forkHeight;
-    }
-
-
     // 同步服务中开始同步的方法
     public void startSync() {
         if (!isSyncing) {
@@ -1820,6 +1571,37 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
         isSyncing = false;
         // 同步完成后，若同步前在挖矿，则恢复挖矿
         miningService.resumeMiningAfterSync();
+    }
+
+
+    /**
+     * 终止同步任务
+     */
+    public void stopTask(String taskId) {
+        SyncTaskRecord task = activeTasks.get(taskId);
+        if (task == null) {
+            log.warn("任务[{}]不存在", taskId);
+            return;
+        }
+
+        // 更新任务状态
+        task.setStatus(SyncStatus.CANCELLED);
+        task.setUpdateTime(LocalDateTime.now());
+        task.setErrorMsg("任务被手动终止");
+        activeTasks.put(taskId, task);
+        popStorage.saveSyncTaskRecord(task);
+
+        // 取消Future
+        CompletableFuture<SyncTaskRecord> future = taskFutureMap.get(taskId);
+        if (future != null && !future.isDone()) {
+            future.cancel(true);
+            log.info("任务[{}]已取消", taskId);
+        } else {
+            log.info("任务[{}]已完成或不存在，无需取消", taskId);
+        }
+        // 手动终止后自动删除任务
+        removeTask(taskId);
+        finishSync();
     }
 
 }

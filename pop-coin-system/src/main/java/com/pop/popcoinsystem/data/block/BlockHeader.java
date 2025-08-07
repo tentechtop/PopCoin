@@ -58,12 +58,12 @@ public class BlockHeader {
 
     public BlockHeader clone() {
         BlockHeader blockHeaderCopy = new BlockHeader();
-        blockHeaderCopy.setTime(this.getTime() );
+        blockHeaderCopy.setVersion(this.getVersion());
         blockHeaderCopy.setPreviousHash(this.getPreviousHash());
         blockHeaderCopy.setMerkleRoot(this.getMerkleRoot());
-        blockHeaderCopy.setNonce(this.getNonce());
+        blockHeaderCopy.setTime(this.getTime() );
         blockHeaderCopy.setDifficultyTarget(this.getDifficultyTarget());
-        blockHeaderCopy.setVersion(this.getVersion());
+        blockHeaderCopy.setNonce(this.getNonce());
         return blockHeaderCopy;
     }
 
