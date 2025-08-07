@@ -17,6 +17,7 @@ import jcuda.Sizeof;
 import jcuda.driver.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
@@ -45,6 +46,10 @@ public class MiningServiceImpl {
     @Lazy
     @Autowired
     private BlockChainServiceImpl blockChainService;
+
+    @Value("${system.mining-type:1}")
+    private int miningType;
+
 
     // CPU挖矿性能控制（0-100，默认85%）
     private volatile int miningPerformance = 15;
@@ -99,8 +104,9 @@ public class MiningServiceImpl {
         log.info("最新区块难度目标: {}", CryptoUtil.bytesToHex(block.getDifficultyTarget()));
         log.info("最新区块难度: {}", currentDifficulty);
         initExecutor();
-        initCuda();
-
+        if (miningType == 2){
+            initCuda();
+        }
         //获取矿工信息
         miner = storageService.getMiner();
         log.info("本节点矿工信息: {}", miner);
@@ -162,7 +168,7 @@ public class MiningServiceImpl {
                         " (难度: " + newBlock.getDifficulty() + ", 交易数: " + transactions.size() + ", 手续费: "+ totalFee+  ")");
                 BlockHeader blockHeader = newBlock.extractHeader();
                 MiningResult result = null;
-                if (isGPUMining){
+                if (miningType == 2){
                     result =  gpuMineBlock(blockHeader);
                 }else {
                     result = cpuMineBlock(blockHeader);
@@ -312,13 +318,10 @@ public class MiningServiceImpl {
                 throw new RuntimeException("获取CUDA函数失败，错误码: " + getFuncResult);
             }
             log.info("PTX模块和函数静态加载成功");
-
-            isGPUMining = true;
         } catch (Exception e) {
             log.error("CUDA初始化失败（可能无GPU或驱动问题）", e);
             log.warn("将自动降级为CPU挖矿");
             cleanCudaResources();
-            isGPUMining = false;
         }
     }
 
