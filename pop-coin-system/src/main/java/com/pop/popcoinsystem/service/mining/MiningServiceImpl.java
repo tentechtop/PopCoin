@@ -51,6 +51,9 @@ public class MiningServiceImpl {
     // GPU挖矿性能控制（0-100，默认100%）
     private volatile int gpuMiningPerformance = 80;
 
+    //GPU挖矿还是CPU挖矿
+    private volatile boolean isGPUMining = true;
+
     //矿工信息
     volatile public Miner miner;
     // 当前难度目标（前导零的数量）
@@ -158,7 +161,12 @@ public class MiningServiceImpl {
                 log.info("\n开始挖矿新区块 #" + newBlock.getHeight() +
                         " (难度: " + newBlock.getDifficulty() + ", 交易数: " + transactions.size() + ", 手续费: "+ totalFee+  ")");
                 BlockHeader blockHeader = newBlock.extractHeader();
-                MiningResult result = gpuMineBlock(blockHeader);
+                MiningResult result = null;
+                if (isGPUMining){
+                    result =  gpuMineBlock(blockHeader);
+                }else {
+                    result = cpuMineBlock(blockHeader);
+                }
                 if (result != null && result.found) {
                     newBlock.setNonce(result.nonce);
                     newBlock.setHash(result.hash);
@@ -304,10 +312,13 @@ public class MiningServiceImpl {
                 throw new RuntimeException("获取CUDA函数失败，错误码: " + getFuncResult);
             }
             log.info("PTX模块和函数静态加载成功");
+
+            isGPUMining = true;
         } catch (Exception e) {
             log.error("CUDA初始化失败（可能无GPU或驱动问题）", e);
             log.warn("将自动降级为CPU挖矿");
             cleanCudaResources();
+            isGPUMining = false;
         }
     }
 
