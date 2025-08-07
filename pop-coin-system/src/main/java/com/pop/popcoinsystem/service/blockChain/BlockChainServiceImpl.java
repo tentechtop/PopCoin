@@ -237,10 +237,10 @@ public class BlockChainServiceImpl implements BlockChainService {
             return true;
         }
         //验证中位置时间
-/*        if (!validateMedianTime(block)){
+        if (!validateMedianTime(block)){
             log.warn("中位置时间验证失败，中位置时间：{}", block.getMedianTime());
             return false;
-        }*/
+        }
         // 防止未来时间（允许超前最多2小时）
         // 注意：block.getTime() 是秒级时间戳，需转换为毫秒后再比较
         long maxAllowedTime = (System.currentTimeMillis()/1000) + (2 * 60 * 60);
@@ -846,6 +846,8 @@ public class BlockChainServiceImpl implements BlockChainService {
                 log.info("移除交易池中的交易: {}", transaction.getTxId());
             }
         }
+        //将正在挖矿的区块 取消掉 TODO
+
         // 检查是否出现分叉（父区块是否为主链最新区块）
         boolean isFork = !Arrays.equals(block.getPreviousHash(), currentMainHash);
         // 1. 处理主链延伸（非分叉情况）

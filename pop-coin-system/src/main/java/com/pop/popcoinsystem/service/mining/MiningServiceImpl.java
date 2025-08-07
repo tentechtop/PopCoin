@@ -54,7 +54,7 @@ public class MiningServiceImpl {
     // CPU挖矿性能控制（0-100，默认85%）
     private volatile int miningPerformance = 15;
     // GPU挖矿性能控制（0-100，默认100%）
-    private volatile int gpuMiningPerformance = 50;
+    private volatile int gpuMiningPerformance = 90;
 
     //GPU挖矿还是CPU挖矿
     private volatile boolean isGPUMining = true;
