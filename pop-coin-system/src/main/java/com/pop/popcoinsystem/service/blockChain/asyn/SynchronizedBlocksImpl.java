@@ -592,6 +592,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
             log.info("  开始时间: {}", task.getCreateTime());
             log.info("  最后更新时间: {}", task.getUpdateTime());
 
+
             // 打印各分片进度详情
             log.info("  分片任务详情:");
             for (SyncProgress shard : task.getSyncProgressList()) {
