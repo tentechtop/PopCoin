@@ -30,9 +30,6 @@ public class UDPClient {
     private static final AttributeKey<BigInteger> NODE_ID_KEY = AttributeKey.valueOf("NODE_ID");
     private static final int DEFAULT_OPERATION_TIMEOUT = 5000; // 默认操作超时（毫秒）
 
-    ThreadFactory virtualThreadFactory = Thread.ofVirtual()
-            .name("udp-send-", 0) // 线程名称前缀+自增编号
-            .factory();
 
     public UDPClient() {
         // 线程池复用，控制并发量

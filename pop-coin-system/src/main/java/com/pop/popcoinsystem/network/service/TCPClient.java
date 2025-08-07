@@ -46,9 +46,7 @@ public class TCPClient {
     public static final int DEFAULT_CONNECT_TIMEOUT = 30000; // 30秒
     private static final int MAX_RETRY_COUNT = 2; // 减少重试次数，避免恶性循环
     private static final long RETRY_DELAY_BASE = 200; // 延长基础延迟，避免网络拥堵
-    ThreadFactory virtualThreadFactory = Thread.ofVirtual()
-            .name("tcp-send-", 0) // 线程名称前缀+自增编号
-            .factory();
+
 
     public TCPClient() {
         executorService = Executors.newVirtualThreadPerTaskExecutor();
@@ -56,7 +54,6 @@ public class TCPClient {
         bootstrap = new Bootstrap();
         bootstrap.group(eventLoopGroup)
                 .channel(NioSocketChannel.class)
-
                 // 3. TCP参数优化
                 .option(ChannelOption.SO_REUSEADDR, true) // 允许端口复用
                 .option(ChannelOption.SO_RCVBUF, 10* 1024 * 1024) // 接收缓冲区1MB

@@ -165,9 +165,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
     private void initThreadPool() {
         int cpuCount = Runtime.getRuntime().availableProcessors();
         // 虚拟线程工厂（为虚拟线程设置名称，便于日志追踪）
-        ThreadFactory virtualThreadFactory = Thread.ofVirtual()
-                .name("block-downloader-", 0) // 线程名称前缀+自增编号
-                .factory();
         // 初始化下载线程池（使用虚拟线程）
         downloadExecutor = Executors.newVirtualThreadPerTaskExecutor();
         // 处理线程池（验证+存储区块头，IO密集） 单线程 + FIFO 队列，严格按高度顺序处理
@@ -1425,7 +1422,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                             byte[] blockHash = header.computeHash();
                             return CompletableFuture.supplyAsync(() -> {
                                 try {
-                                    log.debug("下载完整的区块[{}]开始下载", height);
+                                    log.info("下载完整的区块[{}]开始下载", height);
                                     // 从提供区块头的节点下载完整区块
                                     RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer);
                                     proxyFactory.setTimeout(rpcTimeoutMs);
