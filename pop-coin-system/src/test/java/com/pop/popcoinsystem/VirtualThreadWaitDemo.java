@@ -25,6 +25,10 @@ public class VirtualThreadWaitDemo {
         // 方式2：与CompletableFuture结合（使用虚拟线程池）
         System.out.println("=== 方式2：与CompletableFuture结合 ===");
         // 创建虚拟线程池
+
+        ExecutorService virtualExecutor1 = Executors.newVirtualThreadPerTaskExecutor();
+
+
         try (ExecutorService virtualExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
             // 提交任务到虚拟线程池，返回CompletableFuture
             CompletableFuture<String> future = CompletableFuture.supplyAsync(() -> {

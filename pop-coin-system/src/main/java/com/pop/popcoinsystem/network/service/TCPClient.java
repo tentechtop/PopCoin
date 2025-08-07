@@ -51,14 +51,7 @@ public class TCPClient {
             .factory();
 
     public TCPClient() {
-        executorService = new ThreadPoolExecutor(
-                Runtime.getRuntime().availableProcessors() * 2,
-                200,
-                60L, TimeUnit.SECONDS,
-                new LinkedBlockingQueue<>(1024),
-                virtualThreadFactory, // 使用虚拟线程工厂
-                new ThreadPoolExecutor.CallerRunsPolicy() // 任务满时让调用者处理，避免任务丢失
-        );
+        executorService = Executors.newVirtualThreadPerTaskExecutor();
         eventLoopGroup = new NioEventLoopGroup();
         bootstrap = new Bootstrap();
         bootstrap.group(eventLoopGroup)

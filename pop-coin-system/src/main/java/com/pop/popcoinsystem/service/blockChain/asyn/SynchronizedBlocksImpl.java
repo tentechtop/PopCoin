@@ -100,7 +100,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
     Map<String, CompletableFuture<SyncTaskRecord>> taskFutureMap = new ConcurrentHashMap<>();
 
     // 1. 下载线程池（处理区块头/RPC下载，IO密集）
-    private  ThreadPoolExecutor downloadExecutor;
+    private  ExecutorService downloadExecutor;
 
     // 2. 处理线程池（验证+存储区块头，IO密集）
     private  ThreadPoolExecutor processExecutor;
@@ -145,7 +145,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
     //线程池状态监控日志
     private void logThreadPoolStatus() {
         log.info("=== 线程池状态 ===");
-        logThreadPoolInfo("下载线程池", downloadExecutor);
         logThreadPoolInfo("处理线程池", processExecutor);
         logThreadPoolInfo("合并线程池", mergeExecutor);
         logThreadPoolInfo("探测线程池", detectExecutor);
@@ -170,14 +169,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 .name("block-downloader-", 0) // 线程名称前缀+自增编号
                 .factory();
         // 初始化下载线程池（使用虚拟线程）
-        downloadExecutor = new ThreadPoolExecutor(
-                0, // 核心线程数为0（虚拟线程无需常驻核心线程）
-                Integer.MAX_VALUE, // 最大线程数（虚拟线程数量几乎无上限）
-                60L, TimeUnit.SECONDS,
-                new LinkedBlockingQueue<>(2048), // 有界队列，避免任务无限制堆积导致OOM
-                virtualThreadFactory, // 使用虚拟线程工厂
-                new ThreadPoolExecutor.DiscardOldestPolicy() // 队列满时丢弃最旧任务，优先处理新任务
-        );
+        downloadExecutor = Executors.newVirtualThreadPerTaskExecutor();
         // 处理线程池（验证+存储区块头，IO密集） 单线程 + FIFO 队列，严格按高度顺序处理
         processExecutor = new ThreadPoolExecutor(
                 1,  // 核心线程数=1（保证顺序）
@@ -205,11 +197,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 r -> new Thread(r, "node-detector"),
                 new ThreadPoolExecutor.CallerRunsPolicy()
         );
-        // 设置线程池饱和时的钩子函数，用于告警
-        ((ThreadPoolExecutor) downloadExecutor).setRejectedExecutionHandler((r, executor) -> {
-            log.warn("下载线程池饱和，已拒绝任务，当前队列大小: {}", executor.getQueue().size());
-            new ThreadPoolExecutor.DiscardOldestPolicy().rejectedExecution(r, executor);
-        });
     }
     public void compareAndSync(NodeInfo remoteNode,
                                 long localHeight, byte[] localHash, byte[] localTotalWork,
@@ -1428,6 +1415,8 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                     continue; // 无有效区块头，跳过后续处理
                 }
 
+                //TODO 重大问题
+
                 // 5. 并发批量下载完整区块（通过哈希）
                 List<CompletableFuture<Block>> blockFutures = validHeaders.entrySet().stream()
                         .map(entry -> {
@@ -1436,6 +1425,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                             byte[] blockHash = header.computeHash();
                             return CompletableFuture.supplyAsync(() -> {
                                 try {
+                                    log.debug("下载完整的区块[{}]开始下载", height);
                                     // 从提供区块头的节点下载完整区块
                                     RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer);
                                     proxyFactory.setTimeout(rpcTimeoutMs);
