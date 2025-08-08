@@ -62,6 +62,27 @@ public class TCPClient {
                     @Override
                     protected void initChannel(NioSocketChannel ch) throws Exception {
                         ChannelPipeline pipeline = ch.pipeline();
+                        // 1. 添加异常处理器（放在编解码器之前，优先捕获异常）
+                        pipeline.addLast(new ChannelDuplexHandler() {
+                            @Override
+                            public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+                                // 捕获 Connection reset 异常
+                                if (cause instanceof SocketException && "Connection reset".equals(cause.getMessage())) {
+                                    BigInteger nodeId = ctx.channel().attr(NODE_ID_KEY).get();
+                                    log.warn("节点 {} 发生连接重置（Connection reset），关闭通道", nodeId, cause);
+                                    // 关闭通道并从映射中移除
+                                    ctx.channel().close();
+                                    if (nodeId != null) {
+                                        nodeTCPChannel.remove(nodeId);
+                                        // 记录失败（若已实现失败记录机制）
+                                        //TODO 马上移除节点
+                                    }
+                                } else {
+                                    // 其他异常交给后续处理器
+                                    super.exceptionCaught(ctx, cause);
+                                }
+                            }
+                        });
                         // 独立编解码器，解除耦合
                         pipeline.addLast(new KademliaNodeServer.TCPKademliaMessageDecoder());
                         pipeline.addLast(new KademliaNodeServer.TCPKademliaMessageEncoder());
@@ -112,7 +133,22 @@ public class TCPClient {
             channel.eventLoop().execute(() ->
                     channel.writeAndFlush(message).addListener((ChannelFutureListener) future -> {
                         if (!future.isSuccess()) {
-                            log.error("Failed to send message to node {}: {}", nodeId, future.cause().getMessage());
+                            Throwable cause = future.cause();
+                            log.error("Failed to send message to node {}: {}", nodeId, cause.getMessage());
+
+                            // 处理 Connection reset 异常
+                            if (cause instanceof SocketException && "Connection reset".equals(cause.getMessage())) {
+                                log.warn("节点 {} 发送消息时连接重置，清理通道", nodeId);
+                                // 关闭通道并移除映射
+                                channel.close();
+                                nodeTCPChannel.remove(nodeId);
+                                // 记录失败（触发冷却机制）
+                                //TODO 马上移除路由表
+
+                            } else {
+                                // 其他失败走原有逻辑
+                                handleSendFailure(nodeId, message, cause);
+                            }
                         }
                     })
             );
@@ -120,11 +156,6 @@ public class TCPClient {
             throw new ConnectException("No active channel available for node: " + nodeId);
         }
     }
-
-
-
-
-
 
     public void sendAsyncMessage(KademliaMessage message) {
         executorService.submit(() -> {
@@ -241,6 +272,10 @@ public class TCPClient {
      */
     private boolean isRetryableException(Throwable ex) {
         Throwable cause = ex instanceof CompletionException ? ex.getCause() : ex;
+        // 处理 Connection reset 异常
+        if (cause instanceof SocketException && "Connection reset".equals(cause.getMessage())) {
+            return false; // 仅允许最多2次重试
+        }
         return cause instanceof SocketException
                 || cause instanceof ConnectException
                 || cause instanceof ChannelInvalidException
