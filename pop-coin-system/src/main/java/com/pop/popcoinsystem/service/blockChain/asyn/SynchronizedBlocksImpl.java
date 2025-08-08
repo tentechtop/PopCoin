@@ -478,10 +478,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                             CryptoUtil.bytesToHex(expectedHash));
                     return false;
                 }
-
-
                 boolean verifyBlock = localBlockChainService.verifyBlock(block, false);
-                log.info("区块[{}] integrity verification: {} ,{}", blockHeight, verifyBlock,block);
                 // 5.3 验证区块完整性（交易合法性、签名等）
                 if (!verifyBlock) {
                     log.error("区块[{}]完整性验证失败", blockHeight);
