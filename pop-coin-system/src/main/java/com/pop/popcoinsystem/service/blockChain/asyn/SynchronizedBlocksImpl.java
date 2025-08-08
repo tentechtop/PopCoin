@@ -246,13 +246,12 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
         //开始同步 异步单线程每次500个区块头 验证完就下载50个区块体 并合并到主链
 
         processExecutor.submit(() -> {
-            RpcProxyFactory proxyFactory = null;
-            BlockChainService remoteService = null;
             try {
                 // 1. 初始化远程服务代理
-                proxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
-                proxyFactory.setTimeout(5000);
-                remoteService = proxyFactory.createProxy(BlockChainService.class);
+                RpcProxyFactory rpcProxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
+                rpcProxyFactory.setTimeout(5000);
+                BlockChainService remoteService = rpcProxyFactory.createProxy(BlockChainService.class);
+
 
                 // 2. 获取远程最新高度，确定同步终点
                 long remoteLatestHeight = remoteService.getMainLatestHeight();
@@ -271,14 +270,14 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                     log.info("处理批次：[{} - {}]", currentHeight, batchEnd);
 
                     // 4. 拉取并验证区块头（带重试）
-                    Map<Long, BlockHeader> validHeaders = fetchAndValidateHeaders(remoteService,remoteNode, currentHeight, batchEnd);
+                    Map<Long, BlockHeader> validHeaders = fetchAndValidateHeaders(remoteNode, currentHeight, batchEnd);
                     if (validHeaders == null || validHeaders.isEmpty()) {
                         log.error("批次[{} - {}]区块头验证失败，换节点重试", currentHeight, batchEnd);
                         break; // 换节点逻辑由外层调用处理
                     }
 
                     // 5. 拉取并验证区块体（按小批次处理，避免内存占用过大）
-                    boolean batchSuccess = syncBlockBodies(remoteService, validHeaders, currentHeight, batchEnd);
+                    boolean batchSuccess = syncBlockBodies(remoteNode,validHeaders, currentHeight, batchEnd);
                     if (!batchSuccess) {
                         log.error("批次[{} - {}]区块体同步失败，终止同步", currentHeight, batchEnd);
                         return;
@@ -311,14 +310,12 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
      */
     /**
      * 拉取并验证区块头，返回高度→区块头的映射（已验证通过）
-     * @param remoteService 远程节点服务代理
      * @param remoteNode 远程节点信息
      * @param start 起始高度
      * @param end 结束高度
      * @return 验证通过的高度→区块头映射（null表示验证失败）
      */
-    private Map<Long, BlockHeader> fetchAndValidateHeaders(BlockChainService remoteService,
-                                                           NodeInfo remoteNode,
+    private Map<Long, BlockHeader> fetchAndValidateHeaders(NodeInfo remoteNode,
                                                            long start,
                                                            long end) {
         int totalBlocks = (int) (end - start + 1); // 本批次总区块数
@@ -356,9 +353,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                         log.error("高度[{}]的区块头PoW验证失败", height);
                         throw new IllegalArgumentException("PoW验证失败");
                     }
-
-
-
                     // 3.2 验证prevHash连续性（与前序区块关联）
                     // 修改原prevHeader == null的判断逻辑
                     if (prevHeader == null) {
@@ -418,16 +412,18 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
 
     /**
      * 基于高度→区块头映射同步区块体，验证通过后合并到主链
-     * @param remoteService 远程节点服务代理
      * @param validHeaders 已验证的高度→区块头映射
      * @param currentHeight 本批次起始高度
      * @param batchEnd 本批次结束高度
      * @return 同步成功返回true，否则返回false
      */
-    private boolean syncBlockBodies(BlockChainService remoteService,
-                                    Map<Long, BlockHeader> validHeaders,
+    private boolean syncBlockBodies(NodeInfo remoteNode,Map<Long, BlockHeader> validHeaders,
                                     long currentHeight,
                                     long batchEnd) {
+        RpcProxyFactory rpcProxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
+        rpcProxyFactory.setTimeout(5000);
+        BlockChainService remoteService = rpcProxyFactory.createProxy(BlockChainService.class);
+
         // 1. 提取有序高度列表（确保按高度升序处理）
         List<Long> sortedHeights = new ArrayList<>(validHeaders.keySet());
         sortedHeights.sort(Long::compare);
@@ -447,7 +443,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
             // 3. 从远程节点拉取当前子批次的区块体
             List<Block> blocks;
             try {
-                blocks = remoteService.getBlocksByHeights(batchHeights); // 假设远程支持按高度列表拉取区块体
+                blocks = remoteService.getBlocksByHeights(batchHeights);
             } catch (Exception e) {
                 log.error("拉取区块体子批次[{} - {}]失败", subStart, subEnd, e);
                 return false;
