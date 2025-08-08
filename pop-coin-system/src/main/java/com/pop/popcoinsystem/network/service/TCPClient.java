@@ -4,6 +4,7 @@ import com.pop.popcoinsystem.exception.ChannelInvalidException;
 import com.pop.popcoinsystem.exception.ResponseTimeoutException;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
+import com.pop.popcoinsystem.network.protocol.message.RpcRequestMessage;
 import com.pop.popcoinsystem.network.rpc.RequestResponseManager;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
@@ -184,8 +185,17 @@ public class TCPClient {
         BigInteger nodeId = message.getReceiver().getId();
         message.setResponse(false); // 标记为请求消息
 
-        // 封装重试逻辑（使用Supplier实现可重试的异步操作）
-        Supplier<CompletableFuture<KademliaMessage>> sendTask = () -> executeSendWithResponse(message, timeout, unit);
+        // 初始化首次发送的消息（确保有请求ID）
+        if (message.getRequestId() <= 0) {
+            message.setReqResId(); // 确保首次发送有ID
+        }
+
+        // 关键修改：每次执行任务时使用新请求ID的消息副本
+        Supplier<CompletableFuture<KademliaMessage>> sendTask = () -> {
+            // 复制消息并生成新请求ID（首次执行也会用新ID，避免原消息ID冲突）
+            KademliaMessage messageWithNewId = copyMessageWithNewRequestId(message);
+            return executeSendWithResponse(messageWithNewId, timeout, unit);
+        };
 
         // 执行带重试的任务
         return retryTask(sendTask, retryCount, nodeId);
@@ -248,6 +258,7 @@ public class TCPClient {
         CompletableFuture<KademliaMessage> resultFuture = new CompletableFuture<>();
         BigInteger nodeId = message.getReceiver().getId();
         long requestId = message.getRequestId();
+        log.info("发送请求到节点: {}，请求ID: {}", nodeId, requestId);
 
         try {
             // 1. 获取通道（同步操作，已优化为非阻塞获取）
@@ -501,6 +512,24 @@ public class TCPClient {
                         message.contains("reset by peer") ||
                         message.contains("no route to host")
         );
+    }
+
+
+    /**
+     * 复制消息并生成新的唯一请求ID
+     */
+    private KademliaMessage copyMessageWithNewRequestId(KademliaMessage original) {
+        // 假设KademliaMessage有全参构造器或 Builder 模式，此处根据实际实现调整
+        KademliaMessage newMessage = new RpcRequestMessage();
+        // 复制原始消息的核心属性
+        newMessage.setReceiver(original.getReceiver());
+        newMessage.setSender(original.getSender());
+        newMessage.setData(original.getData());
+        newMessage.setType(original.getType());
+        newMessage.setResponse(false); // 保持为请求消息
+        // 生成新的唯一请求ID（使用UUID或自增ID，此处示例用UUID）
+        newMessage.setReqResId();
+        return newMessage;
     }
 
 

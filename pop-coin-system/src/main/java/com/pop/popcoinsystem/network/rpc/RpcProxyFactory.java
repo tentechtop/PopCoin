@@ -9,6 +9,7 @@ import com.pop.popcoinsystem.network.protocol.message.RpcRequestMessage;
 import com.pop.popcoinsystem.network.protocol.messageData.RpcRequestData;
 import com.pop.popcoinsystem.network.protocol.messageData.RpcResponseData;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 
@@ -18,7 +19,7 @@ import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-
+@Slf4j
 public class RpcProxyFactory {
 
     private  KademliaNodeServer kademliaNodeServer;
@@ -91,6 +92,9 @@ public class RpcProxyFactory {
             requestMessage.setData(requestData);
             requestMessage.setSender(kademliaNodeServer.getNodeInfo());
             requestMessage.setReqResId();
+            long requestId = requestMessage.getRequestId();
+
+            log.info("发送RPC请求: {}", requestId);
             requestMessage.setResponse(false);
             requestMessage.setReceiver(targetNode);
 
