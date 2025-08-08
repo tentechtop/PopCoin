@@ -12,7 +12,6 @@ import com.pop.popcoinsystem.network.rpc.RpcProxyFactory;
 import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.service.blockChain.BlockChainService;
 import com.pop.popcoinsystem.service.mining.MiningServiceImpl;
-import com.pop.popcoinsystem.storage.StorageService;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.DifficultyUtils;
@@ -20,7 +19,6 @@ import jakarta.annotation.PreDestroy;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Lazy;
@@ -32,6 +30,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
+import static com.pop.popcoinsystem.constant.BlockChainConstants.GENESIS_PREV_BLOCK_HASH;
 import static com.pop.popcoinsystem.constant.BlockChainConstants.RPC_TIMEOUT;
 
 
@@ -73,7 +72,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
             t.setDaemon(true);
             return t;
         });
-        scheduler.scheduleAtFixedRate(this::detectAndSync, 0, 60, TimeUnit.SECONDS);
+        scheduler.scheduleAtFixedRate(this::detectAndSync, 0, 15, TimeUnit.SECONDS);
     }
 
     public void compareAndSync(NodeInfo remoteNode,
@@ -358,20 +357,38 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                         throw new IllegalArgumentException("PoW验证失败");
                     }
 
+
+
                     // 3.2 验证prevHash连续性（与前序区块关联）
+                    // 修改原prevHeader == null的判断逻辑
                     if (prevHeader == null) {
-                        // 首个区块：prevHash必须匹配本地链中"start-1"高度的区块哈希
-                        byte[] localPrevHash = localBlockChainService.getBlockHash(start - 1);
-                        if (!Arrays.equals(currentHeader.getPreviousHash(), localPrevHash)) {
-                            log.error("高度[{}]的prevHash与本地链前序区块不匹配", height);
-                            throw new IllegalArgumentException("初始区块prevHash不匹配");
-                        }
-                    } else {
-                        // 非首个区块：prevHash必须匹配上一个区块头的哈希
-                        byte[] prevHeaderHash = prevHeader.computeHash();
-                        if (!Arrays.equals(currentHeader.getPreviousHash(), prevHeaderHash)) {
-                            log.error("高度[{}]的prevHash与上一区块不连续", height);
-                            throw new IllegalArgumentException("区块链断裂");
+                        // 首个区块：区分起始高度为0（创世区块）和起始高度>0（普通区块）的情况
+                        if (start == 0) {
+                            // 情况1：从0开始同步（创世区块），验证prevHash是否符合创世区块预期（通常为全0）
+                            log.info("验证创世区块（高度[{}]）的prevHash", height);
+                            if (!Arrays.equals(currentHeader.getPreviousHash(), GENESIS_PREV_BLOCK_HASH)) {
+                                log.error("创世区块（高度[{}]）的prevHash不符合预期，预期:{}，实际:{}",
+                                        height,
+                                        CryptoUtil.bytesToHex(GENESIS_PREV_BLOCK_HASH),
+                                        CryptoUtil.bytesToHex(currentHeader.getPreviousHash()));
+                                throw new IllegalArgumentException("创世区块prevHash验证失败");
+                            }
+                        } else {
+                            // 情况2：从非0高度开始同步，验证前序区块哈希
+                            byte[] localPrevHash = localBlockChainService.getBlockHash(start - 1);
+                            if (localPrevHash == null) {
+                                log.error("本地链中不存在高度[{}]的区块，无法验证前序哈希", start - 1);
+                                throw new IllegalArgumentException("本地前序区块不存在");
+                            }
+                            log.info("验证起始区块前序哈希（本地高度:{}，哈希:{}）",
+                                    start - 1, CryptoUtil.bytesToHex(localPrevHash));
+                            if (!Arrays.equals(currentHeader.getPreviousHash(), localPrevHash)) {
+                                log.error("高度[{}]的prevHash与本地链前序区块不匹配，预期:{}，实际:{}",
+                                        height,
+                                        CryptoUtil.bytesToHex(localPrevHash),
+                                        CryptoUtil.bytesToHex(currentHeader.getPreviousHash()));
+                                throw new IllegalArgumentException("初始区块prevHash不匹配");
+                            }
                         }
                     }
 
@@ -547,7 +564,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
     private void detectAndSync() {
         getNetworkMaxHeight();
     }
-    private long getNetworkMaxHeight() {
+    private void getNetworkMaxHeight() {
         try {
             NodeInfo local = kademliaNodeServer.getNodeInfo();
             // 默认使用本地高度作为基准
@@ -596,10 +613,9 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                     log.warn("获取节点{}的高度失败: {}", node.getId(), e.getMessage());
                 }
             }
-            return maxHeight;
         } catch (Exception e) {
             log.error("获取网络最高高度失败", e);
-            return localBlockChainService.getMainLatestHeight();
+            localBlockChainService.getMainLatestHeight();
         }
     }
 }
