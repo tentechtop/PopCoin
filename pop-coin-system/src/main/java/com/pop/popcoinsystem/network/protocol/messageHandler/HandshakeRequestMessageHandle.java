@@ -32,6 +32,7 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
 
     protected HandshakeResponseMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull HandshakeRequestMessage message) throws InterruptedException, ConnectException, FullBucketException, UnsupportedChainException {
         log.info("收到握手请求");
+
         //将该节点添加到路由表中  一定是活跃节点记录下
         NodeInfo sender = message.getSender();
         ExternalNodeInfo senderNodeInfo = BeanCopyUtils.copyObject(sender, ExternalNodeInfo.class);
@@ -45,12 +46,7 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
 
         byte[] genesisBlockHash = handshake.getGenesisBlockHash();
         byte[] genesisHsh = kademliaNodeServer.getBlockChainService().GENESIS_BLOCK_HASH();
-        if (!Arrays.equals(genesisHsh, genesisBlockHash)){
-            log.error("链信息不一致");
-            //删除节点
-            kademliaNodeServer.getRoutingTable().delete(senderNodeInfo);
-            throw new UnsupportedChainException("链信息不一致");
-        }
+
 
         byte[] remoteLatestHash  = handshake.getLatestBlockHash();
         long remoteLatestHeight  = handshake.getLatestBlockHeight();

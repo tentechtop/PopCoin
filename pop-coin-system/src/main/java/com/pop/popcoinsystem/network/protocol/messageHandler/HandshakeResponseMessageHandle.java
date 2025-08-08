@@ -44,7 +44,6 @@ public class HandshakeResponseMessageHandle implements MessageHandler{
         BlockChainServiceImpl blockChainService = kademliaNodeServer.getBlockChainService();
         Block block = blockChainService.getMainLatestBlock();
 
-
         byte[] remoteLatestHash  = handshake.getLatestBlockHash();
         long remoteLatestHeight  = handshake.getLatestBlockHeight();
         byte[] remoteChainWork = handshake.getChainWork();//工作总量
