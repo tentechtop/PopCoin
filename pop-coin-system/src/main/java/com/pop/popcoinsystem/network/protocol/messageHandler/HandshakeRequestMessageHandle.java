@@ -76,7 +76,6 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
                 remoteLatestHeight,
                 remoteLatestHash,
                 remoteChainWork
-
         );
 
         //返回握手响应 携带自己的节点信息 和区块链信息 用于对方是否需要同步
