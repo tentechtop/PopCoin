@@ -444,9 +444,6 @@ public class BlockChainServiceImpl implements BlockChainService {
         return true;
     }
 
-
-
-
     /**
      * 验证区块的中位时间是否符合协议要求
      */
@@ -501,166 +498,6 @@ public class BlockChainServiceImpl implements BlockChainService {
 
         return false;
     }
-
-    /**
-     * 触发父区块同步，当父区块同步成功后自动处理其对应的孤儿区块
-     */
-    private void triggerParentBlockSync(byte[] parentHash) {
-        // 避免重复同步：如果父区块已存在，直接处理孤儿区块
-        if (getBlockByHash(parentHash) != null) {
-            log.info("父区块已存在，直接处理对应的孤儿区块，哈希：{}", CryptoUtil.bytesToHex(parentHash));
-            processOrphanBlocksForParent(parentHash);
-            return;
-        }
-
-        // 使用同步线程池提交父区块同步任务
-        CompletableFuture.runAsync(() -> {
-                    log.info("开始同步父区块，哈希：{}", CryptoUtil.bytesToHex(parentHash));
-                    Block parentBlock = syncSingleBlock(parentHash); // 调用已有的单区块同步方法
-
-                    if (parentBlock != null) {
-                        log.info("父区块同步成功，哈希：{}，高度：{}",
-                                CryptoUtil.bytesToHex(parentHash),
-                                parentBlock.getHeight());
-                        // 父区块同步后，立即处理其对应的孤儿区块
-                        processOrphanBlocksForParent(parentHash);
-                    } else {
-                        log.warn("父区块同步失败，哈希：{}，将在后续区块同步中重试", CryptoUtil.bytesToHex(parentHash));
-                    }
-                }, blockSynchronizer.getDetectExecutor()) // 使用已有的同步线程池，避免创建新线程
-                .exceptionally(e -> {
-                    log.error("父区块同步任务异常，哈希：{}", CryptoUtil.bytesToHex(parentHash), e);
-                    return null;
-                });
-    }
-
-    /**
-     * 处理指定父区块对应的所有孤儿区块（父区块已同步时调用）
-     */
-    private void processOrphanBlocksForParent(byte[] parentHash) {
-        // 1. 从缓存中获取该父区块对应的孤儿区块集合
-        ConcurrentHashMap<byte[], Block> orphanMap = orphanBlocks.getIfPresent(parentHash);
-        if (orphanMap == null || orphanMap.isEmpty()) {
-            log.info("父区块哈希：{} 无对应的孤儿区块，无需处理", CryptoUtil.bytesToHex(parentHash));
-            return;
-        }
-
-        // 2. 验证父区块是否存在（双重检查，避免并发问题）
-        Block parentBlock = getBlockByHash(parentHash);
-        if (parentBlock == null) {
-            log.error("父区块不存在，无法处理孤儿区块，哈希：{}", CryptoUtil.bytesToHex(parentHash));
-            return;
-        }
-
-        log.info("开始处理父区块哈希：{} 对应的 {} 个孤儿区块",
-                CryptoUtil.bytesToHex(parentHash),
-                orphanMap.size());
-
-        // 3. 遍历孤儿区块，逐个验证并加入主链
-        List<byte[]> processedHashes = new ArrayList<>();
-        for (Map.Entry<byte[], Block> entry : orphanMap.entrySet()) {
-            byte[] orphanHash = entry.getKey();
-            Block orphanBlock = entry.getValue();
-
-            // 验证孤儿区块的父哈希是否匹配当前父区块（避免缓存混乱）
-            if (!Arrays.equals(orphanBlock.getPreviousHash(), parentHash)) {
-                log.warn("孤儿区块父哈希不匹配，跳过处理，区块哈希：{}", CryptoUtil.bytesToHex(orphanHash));
-                continue;
-            }
-            // 验证并添加区块到主链（此时父区块已存在，应能通过验证）
-            try {
-                log.info("尝试处理孤儿区块：{}，高度：{}",
-                        CryptoUtil.bytesToHex(orphanHash),
-                        orphanBlock.getHeight());
-                if (verifyBlock(orphanBlock, true)) { // 验证并广播
-                    processedHashes.add(orphanHash);
-                    log.info("孤儿区块处理成功，已加入主链：{}", CryptoUtil.bytesToHex(orphanHash));
-                } else {
-                    log.warn("孤儿区块验证失败，哈希：{}", CryptoUtil.bytesToHex(orphanHash));
-                }
-            } catch (Exception e) {
-                log.error("处理孤儿区块时发生异常，哈希：{}", CryptoUtil.bytesToHex(orphanHash), e);
-            }
-        }
-        // 4. 清理已处理的孤儿区块
-        for (byte[] hash : processedHashes) {
-            orphanMap.remove(hash);
-        }
-
-        // 5. 若集合已空，从缓存中移除父哈希条目（释放内存）
-        if (orphanMap.isEmpty()) {
-            orphanBlocks.invalidate(parentHash);
-            log.info("父区块哈希：{} 对应的孤儿区块已全部处理，移除缓存条目", CryptoUtil.bytesToHex(parentHash));
-        } else {
-            log.info("父区块哈希：{} 仍有 {} 个孤儿区块未处理（验证失败或重复）",
-                    CryptoUtil.bytesToHex(parentHash),
-                    orphanMap.size());
-        }
-    }
-
-
-    /**
-     * 同步单个区块（提取为独立方法，便于复用和控制）
-     */
-    private Block syncSingleBlock(byte[] blockHash) {
-        try {
-            NodeInfo nodeInfo = kademliaNodeServer.getNodeInfo();
-            BigInteger me = nodeInfo.getId();
-            // 1. 查找候选节点
-            List<ExternalNodeInfo> closestNodes = kademliaNodeServer.getRoutingTable().findClosest(me);//查询离我最近的节点
-            //去除自己
-            closestNodes.removeIf(node -> node.getId().equals(me));
-            //还要去除和自己IP端口一致的节点
-            closestNodes.removeIf(node -> ( node.getIpv4().equals(nodeInfo.getIpv4()) && node.getTcpPort() == nodeInfo.getTcpPort() )   );
-
-            if (closestNodes.isEmpty()) {
-                log.error("无候选节点提供区块：{}", CryptoUtil.bytesToHex(blockHash));
-                return null;
-            }
-            List<NodeInfo> candidateNodes = BeanCopyUtils.copyList(closestNodes, NodeInfo.class);
-            // 2. 向节点请求区块
-            CompletableFuture<Block> blockFuture = new CompletableFuture<>();
-            for (NodeInfo node : candidateNodes) {
-                try {
-                    blockSynchronizer.getDownloadExecutor().submit(() -> {
-                        try {
-                            RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, node);
-                            proxyFactory.setTimeout(RPC_TIMEOUT);
-                            BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
-                            Block result = remoteService.getBlockByHash(blockHash);
-                            if (result != null) {
-                                blockFuture.complete(result);
-                            }
-                        } catch (Exception e) {
-                            log.debug("从节点{}获取区块失败，继续尝试", node, e);
-                        }
-                    });
-
-                    // 等待结果（超时后尝试下一个节点）
-                    Block block = blockFuture.get(PARENT_BLOCK_SYNC_TIMEOUT / candidateNodes.size(), TimeUnit.MILLISECONDS);
-                    if (block != null && Arrays.equals(block.getHash(), blockHash)) {
-                        // 验证并添加区块到本地
-                        addBlockToMainChain(block);
-                        return block;
-                    }
-                } catch (TimeoutException | InterruptedException e) {
-                    log.debug("从节点{}获取区块超时，继续尝试", node, e);
-                    Thread.currentThread().interrupt();
-                } catch (Exception e) {
-                    log.debug("从节点{}获取区块异常，继续尝试", node, e);
-                }
-            }
-            return null; // 所有节点均失败
-        } catch (Exception e) {
-            log.error("同步单个区块异常：{}", CryptoUtil.bytesToHex(blockHash), e);
-            return null;
-        }
-    }
-
-
-
-
-
 
     private boolean utxoIsMature(UTXO utxo) {
         byte[] txId = utxo.getTxId();
@@ -1785,6 +1622,11 @@ public class BlockChainServiceImpl implements BlockChainService {
     @Override
     public List<Block> getBlocksByHashes(List<byte[]> batchHashes) {
         return popStorage.getBlocksByHashes(batchHashes);
+    }
+
+    @Override
+    public List<Block> getBlocksByHeights(List<Long> batchHeights) {
+        return popStorage.getBlocksByHeights(batchHeights);
     }
 
     private void handleHeaderChainExtension(BlockHeader header, BlockHeader parentHeader ,long height, byte[] hash) {

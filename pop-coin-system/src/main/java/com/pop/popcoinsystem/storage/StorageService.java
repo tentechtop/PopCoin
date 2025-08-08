@@ -13,9 +13,6 @@ import com.pop.popcoinsystem.data.vo.result.TPageResult;
 import com.pop.popcoinsystem.data.vo.result.ListPageResult;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeSettings;
-import com.pop.popcoinsystem.service.blockChain.asyn.SyncProgress;
-import com.pop.popcoinsystem.service.blockChain.asyn.SyncTaskRecord;
-import com.pop.popcoinsystem.service.blockChain.asyn.SyncStatus;
 import com.pop.popcoinsystem.util.ByteUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.SerializeUtils;
@@ -488,7 +485,6 @@ public class StorageService {
         return medianTime;
     }
 
-
     public BlockHeader getBlockHeaderByHeight(long height) {
         // 1. 校验高度合法性（高度不能为负数）
         if (height < 0) {
@@ -504,6 +500,62 @@ public class StorageService {
         // 3. 通过哈希获取区块头（复用已实现的哈希查询方法）
         return getBlockHeaderByHash(blockHash);
     }
+    /**
+     * 批量根据高度列表获取主链区块（保持输入顺序）
+     * @param batchHeights 高度列表（不可为null，可包含重复或无效高度）
+     * @return 与输入高度列表顺序一致的区块列表，不存在的区块对应位置为null
+     * @throws IllegalArgumentException 若输入列表为null
+     */
+    public List<Block> getBlocksByHeights(List<Long> batchHeights) {
+        // 1. 输入参数校验
+        if (batchHeights == null) {
+            throw new IllegalArgumentException("高度列表不能为null");
+        }
+        if (batchHeights.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // 2. 加读锁保证数据一致性（避免读取过程中区块被删除或修改）
+        rwLock.readLock().lock();
+        try {
+            List<Block> blocks = new ArrayList<>(batchHeights.size());
+            log.debug("开始批量获取区块，高度数量: {}", batchHeights.size());
+
+            for (Long height : batchHeights) {
+                Block block = null;
+                try {
+                    // 3. 跳过无效高度（负数高度）
+                    if (height == null || height < 0) {
+                        log.warn("跳过无效高度: {}", height);
+                        blocks.add(null);
+                        continue;
+                    }
+
+                    // 4. 分步获取：高度→哈希→区块
+                    byte[] blockHash = getMainBlockHashByHeight(height);
+                    if (blockHash != null) {
+                        block = getBlockByHash(blockHash);
+                    } else {
+                        log.debug("主链中不存在高度为{}的区块", height);
+                    }
+
+                    blocks.add(block);
+                } catch (Exception e) {
+                    // 单个高度处理失败不影响整体，记录日志后继续
+                    log.error("获取高度为{}的区块失败", height, e);
+                    blocks.add(null);
+                }
+            }
+
+            log.debug("批量获取区块完成，有效区块数量: {}",
+                    blocks.stream().filter(Objects::nonNull).count());
+            return blocks;
+        } finally {
+            // 确保锁释放
+            rwLock.readLock().unlock();
+        }
+    }
+
     //批量获取
     /**
      * 批量获取主链区块头（基于现有结构，无需额外索引）
@@ -1471,212 +1523,6 @@ public class StorageService {
 
 
     //同步........................................................................................................
-    public void saveSyncTaskRecord(SyncTaskRecord syncTaskRecord){
-        try {
-            byte[] valueBytes = SerializeUtils.serialize(syncTaskRecord);
-            db.put(ColumnFamily.SYNC_TASK.getHandle(), syncTaskRecord.getTaskId().getBytes(), valueBytes);
-        } catch (RocksDBException e) {
-            log.error("保存同步任务失败: key={}", syncTaskRecord.getTaskId(), e);
-            throw new RuntimeException("保存同步任务失败", e);
-        }
-    }
-    //删除任务
-    public void deleteSyncTaskRecord(String taskId){
-        try {
-            db.delete(ColumnFamily.SYNC_TASK.getHandle(), taskId.getBytes());
-        } catch (RocksDBException e) {
-            log.error("删除同步任务失败: key={}", taskId, e);
-            throw new RuntimeException("删除同步任务失败", e);
-        }
-    }
-
-
-
-    /**
-     * 根据任务ID获取同步任务记录
-     * @param taskId 同步任务ID
-     * @return 对应的同步任务记录，若不存在则返回null
-     */
-    public SyncTaskRecord getSyncTaskRecord(String taskId) {
-        // 参数校验
-        if (taskId == null || taskId.isEmpty()) {
-            log.warn("获取同步任务记录失败：任务ID为空");
-            return null;
-        }
-        try {
-            // 将任务ID转换为字节数组作为查询键
-            byte[] keyBytes = taskId.getBytes();
-            // 从SYNC_TASK列族查询对应记录
-            byte[] valueBytes = db.get(ColumnFamily.SYNC_TASK.getHandle(), keyBytes);
-            if (valueBytes == null) {
-                log.debug("未找到同步任务记录：taskId={}", taskId);
-                return null;
-            }
-            // 反序列化任务记录并返回
-            return (SyncTaskRecord) SerializeUtils.deSerialize(valueBytes);
-        } catch (RocksDBException e) {
-            log.error("获取同步任务记录失败：taskId={}", taskId, e);
-            throw new RuntimeException("获取同步任务记录失败", e);
-        }
-    }
-
-
-    // 恢复运行中的任务
-    /**
-     * 获取所有处于运行状态的同步任务记录
-     * @return 运行中的同步任务列表（无运行中任务时返回空列表）
-     */
-    public List<SyncTaskRecord> getRunningSyncTasks() {
-        rwLock.readLock().lock();
-        RocksIterator iterator = null;
-        try {
-            // 获取同步任务列族的迭代器
-            iterator = db.newIterator(ColumnFamily.SYNC_TASK.getHandle());
-            List<SyncTaskRecord> runningTasks = new ArrayList<>();
-
-            // 遍历所有同步任务记录
-            iterator.seekToFirst();
-            while (iterator.isValid()) {
-                byte[] valueBytes = iterator.value();
-                if (valueBytes != null) {
-                    // 反序列化任务记录
-                    SyncTaskRecord task = (SyncTaskRecord) SerializeUtils.deSerialize(valueBytes);
-                    // 判断任务是否处于运行中状态（假设SyncTaskRecord有isRunning()方法判断状态）
-                    if (task != null && (task.getStatus().equals(SyncStatus.RUNNING)|| task.getStatus().equals(SyncStatus.PAUSED))) {
-                        runningTasks.add(task);
-                    }
-                }
-                iterator.next();
-            }
-            return runningTasks;
-        } catch (Exception e) {
-            log.error("获取运行中的同步任务失败", e);
-            throw new RuntimeException("获取运行中的同步任务失败", e);
-        } finally {
-            // 释放迭代器资源
-            if (iterator != null) {
-                iterator.close();
-            }
-            rwLock.readLock().unlock();
-        }
-    }
-
-
-    /**
-     * 保存下载的区块头 列族 DOWN_LOAD_BLOCK_HEADER
-     * @param header
-     */
-    public void saveDownloadedHeader(BlockHeader header,long  height) {
-        try {
-            byte[] valueBytes = SerializeUtils.serialize(header);
-            db.put(ColumnFamily.DOWN_LOAD_BLOCK_HEADER.getHandle(), ByteUtils.toBytes(height), valueBytes);
-        } catch (RocksDBException e) {
-            log.error("保存下载的区块头失败: key={}", height, e);
-            throw new RuntimeException("保存下载的区块头失败", e);
-        }
-    }
-
-
-    public BlockHeader getDownloadedHeader(long height) {
-        try {
-            byte[] valueBytes = db.get(ColumnFamily.DOWN_LOAD_BLOCK_HEADER.getHandle(), ByteUtils.toBytes(height));
-            if (valueBytes == null) {
-                log.debug("未找到下载的区块头：height={}", height);
-                return null;
-            }
-            return (BlockHeader) SerializeUtils.deSerialize(valueBytes);
-        } catch (RocksDBException e) {
-            log.error("获取下载的区块头失败：height={}", height, e);
-            throw new RuntimeException("获取下载的区块头失败", e);
-        }
-    }
-
-    public void deleteDownloadedHeader(long height) {
-        try {
-            db.delete(ColumnFamily.DOWN_LOAD_BLOCK_HEADER.getHandle(), ByteUtils.toBytes(height));
-        } catch (RocksDBException e) {
-            log.error("删除下载的区块头失败：height={}", height, e);
-            throw new RuntimeException("删除下载的区块头失败", e);
-        }
-    }
-    //批量读取暂存的区块头（按高度范围）
-    /**
-     * 批量读取暂存的区块头（按高度范围）
-     * @param batchStart 起始高度（包含）
-     * @param batchEnd 结束高度（包含）
-     * @return 高度到区块头的映射（键：高度，值：对应的区块头），若范围内无数据则返回空Map
-     * @throws IllegalArgumentException 若起始高度大于结束高度或高度为负数
-     */
-    public Map<Long, BlockHeader> getDownloadedHeadersInBatch(long batchStart, long batchEnd) {
-        // 参数校验
-        if (batchStart < 0 || batchEnd < 0) {
-            throw new IllegalArgumentException("区块高度不能为负数: start=" + batchStart + ", end=" + batchEnd);
-        }
-        if (batchStart > batchEnd) {
-            throw new IllegalArgumentException("起始高度不能大于结束高度: start=" + batchStart + ", end=" + batchEnd);
-        }
-
-        rwLock.readLock().lock();
-        RocksIterator iterator = null;
-        ReadOptions readOptions = null;
-        try {
-            // 初始化结果映射
-            Map<Long, BlockHeader> headerMap = new TreeMap<>(); // 按高度升序排列
-
-            // 配置迭代器，优化范围查询
-            readOptions = new ReadOptions().setPrefixSameAsStart(true);
-            iterator = db.newIterator(ColumnFamily.DOWN_LOAD_BLOCK_HEADER.getHandle(), readOptions);
-
-            // 定位到起始高度
-            byte[] startKey = ByteUtils.toBytes(batchStart);
-            iterator.seek(startKey);
-
-            // 遍历范围内的区块头
-            while (iterator.isValid()) {
-                byte[] keyBytes = iterator.key();
-                long currentHeight = ByteUtils.bytesToLong(keyBytes);
-
-                // 超出结束高度则停止遍历
-                if (currentHeight > batchEnd) {
-                    break;
-                }
-
-                // 反序列化区块头并加入映射
-                byte[] valueBytes = iterator.value();
-                if (valueBytes != null && valueBytes.length > 0) {
-                    BlockHeader header = (BlockHeader) SerializeUtils.deSerialize(valueBytes);
-                    headerMap.put(currentHeight, header);
-                    log.trace("已读取暂存区块头，高度: {}", currentHeight);
-                } else {
-                    log.warn("暂存区块头数据为空，高度: {}", currentHeight);
-                }
-
-                iterator.next();
-            }
-
-            log.debug("批量读取暂存区块头完成，范围: [{} - {}]，实际获取: {}个",
-                    batchStart, batchEnd, headerMap.size());
-            return headerMap;
-
-        } catch (Exception e) {
-            log.error("批量读取暂存区块头失败，范围: [{} - {}]", batchStart, batchEnd, e);
-            throw new RuntimeException("批量读取暂存区块头失败", e);
-        } finally {
-            // 释放资源
-            if (iterator != null) {
-                iterator.close();
-            }
-            if (readOptions != null) {
-                readOptions.close();
-            }
-            rwLock.readLock().unlock();
-        }
-    }
-
-    public void deleteDownloadedHeadersInBatch(List<Long> successHeights) {
-    }
-
-    //.................................................................................................................
     //以标准配置（160 位 ID + K=20）为例：
     //最大节点信息数量 = 20 × 160 = 3200 个。
     //新增路由表节点

@@ -11,14 +11,6 @@ logging:
     root: INFO
 
 system:
-  blockchain:
-    sync:
-      healthy-node-score-threshold: 60
-      max-blocks-per-round: 100
-      fast-interval-seconds: 30
-      steady-interval-seconds: 60
-      detect-concurrency: 5
-      rpc-timeout-ms: 3000
   #存储路径 全路径
   storagePath: /ec/storage
   #挖矿方式
