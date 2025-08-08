@@ -441,7 +441,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 rpcProxyFactory.setTimeout(5000);
                 BlockChainService remoteService = rpcProxyFactory.createProxy(BlockChainService.class);
                 for (long height : batchHeights){
-                    log.debug("获取区块[{}]", height);
+                    log.info("获取区块[{}]", height);
                 }
                 blocks = remoteService.getBlocksByHeights(batchHeights);
             } catch (Exception e) {

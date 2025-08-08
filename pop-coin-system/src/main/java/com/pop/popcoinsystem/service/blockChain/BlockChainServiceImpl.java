@@ -1625,7 +1625,14 @@ public class BlockChainServiceImpl implements BlockChainService {
 
     @Override
     public List<Block> getBlocksByHeights(List<Long> batchHeights) {
-        return popStorage.getBlocksByHeights(batchHeights);
+        ArrayList<Block> blocks = new ArrayList<>();
+        for (Long batchHeight : batchHeights) {
+            Block block = popStorage.getMainBlockByHeight(batchHeight);
+            if (block != null) {
+                blocks.add(block);
+            }
+        }
+        return blocks;
     }
 
     private void handleHeaderChainExtension(BlockHeader header, BlockHeader parentHeader ,long height, byte[] hash) {
