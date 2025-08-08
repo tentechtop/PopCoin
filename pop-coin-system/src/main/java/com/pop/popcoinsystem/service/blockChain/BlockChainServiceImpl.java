@@ -207,8 +207,10 @@ public class BlockChainServiceImpl implements BlockChainService {
             return false;
         }
         Block parentBlock = getBlockByHash(block.getPreviousHash());
-        if (parentBlock == null) {
-            return false;
+        if (block.getHeight() != 0){
+            if (parentBlock == null) {
+                return false;
+            }
         }
         if (parentBlock.getHeight() + 1 != block.getHeight()) {
             log.warn("区块高度不连续，父区块高度：{}，当前区块高度：{}", parentBlock.getHeight(), block.getHeight());
