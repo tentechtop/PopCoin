@@ -107,7 +107,6 @@ public class BlockChainServiceImpl implements BlockChainService {
         if (genesisBlock == null){
             popStorage.updateMainLatestHeight(-1);
             popStorage.updateMainLatestBlockHash(GENESIS_PREV_BLOCK_HASH);
-
         }
     }
 

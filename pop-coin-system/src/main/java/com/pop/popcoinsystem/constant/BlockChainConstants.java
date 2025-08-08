@@ -15,7 +15,6 @@ public class BlockChainConstants {
 
     //RPC_TIMEOUT
     public static final int RPC_TIMEOUT = 3000;
-    public static final AtomicLong messageIdGenerator = new AtomicLong(0);
     public static int NET_VERSION = 1;
     public static void setNetVersion(int netVersion) {
         NET_VERSION = netVersion;
