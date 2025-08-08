@@ -1410,7 +1410,7 @@ public class BlockChainServiceImpl implements BlockChainService {
 
     @Override
     public List<Block> getBlockListByRange(long start, long end) {
-        return popStorage.getBlockByRange(start, end);;
+        return popStorage.getBlockByRange(start, end);
     }
 
 
