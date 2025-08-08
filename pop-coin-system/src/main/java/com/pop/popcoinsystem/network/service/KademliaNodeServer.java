@@ -462,6 +462,9 @@ public class KademliaNodeServer {
             if (inactiveTime > NODE_EXPIRATION_TIME) {
                 log.info("节点 {} 已过期（{}ms未响应），直接移除", node.getId(), inactiveTime);
                 routingTable.delete(node);
+                //删除TCP中通道
+                tcpClient.removeChannel(node.getId());
+                udpClient.removeChannel(node.getId());
                 continue;
             }
             log.info("节点 {} 活跃，最后活跃时间：{}ms", node.getId(), inactiveTime);

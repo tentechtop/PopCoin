@@ -592,9 +592,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                         try {
                             KademliaMessage kademliaMessage = kademliaNodeServer.getUdpClient().sendMessageWithResponse(pingKademliaMessage);
                             if (kademliaMessage == null){
-                                log.error("未收到节点{}的Pong消息,无法同步", node);
-                            }
-                            if (kademliaMessage == null){
                                 log.error("未收到引导节点{}的Pong消息", node);
                                 return;
                             }

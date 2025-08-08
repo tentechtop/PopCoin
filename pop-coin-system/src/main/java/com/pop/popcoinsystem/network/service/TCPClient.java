@@ -567,4 +567,29 @@ public class TCPClient {
     }
 
 
+    /**
+     * 移除并关闭指定节点ID对应的通道
+     * 确保并发安全，避免重复关闭或移除无效通道
+     * @param nodeId 待移除通道的节点ID
+     */
+    public void removeChannel(BigInteger nodeId) {
+        if (nodeId == null) {
+            log.warn("尝试移除通道时节点ID为null，忽略操作");
+            return;
+        }
+        // 从映射中原子性移除通道（避免其他线程同时操作）
+        Channel channel = nodeTCPChannel.remove(nodeId);
+        if (channel != null) {
+            // 异步关闭通道，不阻塞调用线程
+            channel.close().addListener((ChannelFutureListener) future -> {
+                if (future.isSuccess()) {
+                    log.info("成功移除并关闭节点 {} 的通道", nodeId);
+                } else {
+                    log.error("移除节点 {} 的通道时关闭失败", nodeId, future.cause());
+                }
+            });
+        } else {
+            log.debug("节点 {} 不存在有效通道，无需移除", nodeId);
+        }
+    }
 }
