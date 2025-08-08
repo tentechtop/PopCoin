@@ -3,14 +3,15 @@ package com.pop.popcoinsystem.network.protocol.message;
 import com.google.common.base.Objects;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.util.SerializeUtils;
-import com.pop.popcoinsystem.util.TimeGenerator;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 
 import java.io.Serializable;
 import java.util.Random;
-import java.util.concurrent.atomic.AtomicLong;
+
+
+import static com.pop.popcoinsystem.constant.BlockChainConstants.atomicLong;
 
 
 @Getter
@@ -45,7 +46,7 @@ public abstract class KademliaMessage<D extends Serializable> {
     }
 
     public void setReqResId() {
-        this.requestId =  TimeGenerator.generateUniqueTransactionTime();
+        this.requestId =  atomicLong.incrementAndGet();
     }
 
     /**
@@ -98,9 +99,7 @@ public abstract class KademliaMessage<D extends Serializable> {
 
     // 生成唯一消息ID（可通过UUID实现）
     private long generateMessageId() {
-        // 64位随机数，十六进制表示（16个字符）
-        //return new Random().nextLong();
-        return  TimeGenerator.generateUniqueTransactionTime();
+        return  atomicLong.incrementAndGet();
     }
 
     @Override

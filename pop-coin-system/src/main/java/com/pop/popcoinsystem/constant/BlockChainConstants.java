@@ -12,6 +12,8 @@ import static com.pop.popcoinsystem.util.YamlReaderUtils.loadYaml;
 @Slf4j
 public class BlockChainConstants {
     // 改为静态变量，所有实例共享一个计数器
+    public static final AtomicLong atomicLong = new AtomicLong(0);
+
 
     //RPC_TIMEOUT
     public static final int RPC_TIMEOUT = 3000;
