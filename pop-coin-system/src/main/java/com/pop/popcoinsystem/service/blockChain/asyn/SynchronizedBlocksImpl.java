@@ -8,10 +8,12 @@ import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.HandshakeRequestMessage;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
+import com.pop.popcoinsystem.network.protocol.message.PongKademliaMessage;
 import com.pop.popcoinsystem.network.protocol.messageData.Handshake;
 import com.pop.popcoinsystem.network.rpc.RpcProxyFactory;
 import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.service.blockChain.BlockChainService;
+import com.pop.popcoinsystem.service.blockChain.BlockChainServiceImpl;
 import com.pop.popcoinsystem.service.mining.MiningServiceImpl;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
@@ -287,9 +289,14 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
 
                     // 6. 批次成功，推进当前高度
                     currentHeight = batchEnd + 1;
+                    // 计算总区块数（避免分母为0）
+                    long totalBlocks = remoteLatestHeight - startHeight + 1;
+                    double progress = totalBlocks <= 0 ? 100.0 :
+                            (double) (currentHeight - startHeight) / totalBlocks * 100;
+
                     log.info("批次[{} - {}]同步完成，累计进度：{}%",
-                            currentHeight - BLOCK_HEADER_BATCH, batchEnd,
-                            (double) (currentHeight - startHeight) / (remoteLatestHeight - startHeight) * 100);
+                            currentHeight - BLOCK_HEADER_BATCH, batchEnd, progress);
+
                 }
 
                 // 7. 同步完成，更新本地最新高度
@@ -587,20 +594,38 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                             if (kademliaMessage == null){
                                 log.error("未收到节点{}的Pong消息,无法同步", node);
                             }
-                            if (kademliaMessage != null){
-                                log.info("收到节点{}的Pong消息", node);
-                                //向节点发送握手请求 收到握手回复后检查 自己的区块链信息
-                                Block mainLatestBlock = localBlockChainService.getMainLatestBlock();
-                                Handshake handshake = new Handshake();
-                                handshake.setExternalNodeInfo(kademliaNodeServer.getExternalNodeInfo());//携带我的节点信息
-                                handshake.setGenesisBlockHash(kademliaNodeServer.getBlockChainService().GENESIS_BLOCK_HASH());
-                                handshake.setLatestBlockHash(mainLatestBlock.getHash());
-                                handshake.setLatestBlockHeight(mainLatestBlock.getHeight());
-                                handshake.setChainWork(mainLatestBlock.getChainWork());
-                                HandshakeRequestMessage handshakeRequestMessage = new HandshakeRequestMessage(handshake);
-                                handshakeRequestMessage.setSender(local);//本节点信息
-                                handshakeRequestMessage.setReceiver(node);
-                                kademliaNodeServer.getTcpClient().sendMessage(handshakeRequestMessage);
+                            if (kademliaMessage == null){
+                                log.error("未收到引导节点{}的Pong消息", node);
+                                return;
+                            }
+                            if (kademliaMessage instanceof PongKademliaMessage){
+                                log.info("收到引导节点{}的Pong消息", node);
+                                //向引导节点发送握手请求 收到握手回复后检查 自己的区块链信息
+                                byte[] bytes = localBlockChainService.GENESIS_BLOCK_HASH();
+                                if (bytes == null){
+                                    Handshake handshake = new Handshake();
+                                    handshake.setExternalNodeInfo(kademliaNodeServer.getExternalNodeInfo());//携带我的节点信息
+                                    handshake.setGenesisBlockHash(localBlockChainService.GENESIS_BLOCK_HASH());
+                                    handshake.setLatestBlockHash(null);
+                                    handshake.setLatestBlockHeight(-1);
+                                    handshake.setChainWork(new byte[0]);
+                                    HandshakeRequestMessage handshakeRequestMessage = new HandshakeRequestMessage(handshake);
+                                    handshakeRequestMessage.setSender(kademliaNodeServer.getNodeInfo());//本节点信息
+                                    handshakeRequestMessage.setReceiver(node);
+                                    kademliaNodeServer.getTcpClient().sendMessage(handshakeRequestMessage);
+                                }else {
+                                    Block mainLatestBlock =localBlockChainService.getMainLatestBlock();
+                                    Handshake handshake = new Handshake();
+                                    handshake.setExternalNodeInfo(kademliaNodeServer.getExternalNodeInfo());//携带我的节点信息
+                                    handshake.setGenesisBlockHash(localBlockChainService.GENESIS_BLOCK_HASH());
+                                    handshake.setLatestBlockHash(mainLatestBlock.getHash());
+                                    handshake.setLatestBlockHeight(mainLatestBlock.getHeight());
+                                    handshake.setChainWork(mainLatestBlock.getChainWork());
+                                    HandshakeRequestMessage handshakeRequestMessage = new HandshakeRequestMessage(handshake);
+                                    handshakeRequestMessage.setSender(kademliaNodeServer.getNodeInfo());//本节点信息
+                                    handshakeRequestMessage.setReceiver(node);
+                                    kademliaNodeServer.getTcpClient().sendMessage(handshakeRequestMessage);
+                                }
                             }
                         }catch (Exception e){
                             log.error("与节点{}通信失败: {}", node.getId(), e.getMessage());

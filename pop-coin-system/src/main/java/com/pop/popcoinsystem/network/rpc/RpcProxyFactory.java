@@ -92,12 +92,8 @@ public class RpcProxyFactory {
             requestMessage.setData(requestData);
             requestMessage.setSender(kademliaNodeServer.getNodeInfo());
             requestMessage.setReqResId();
-            long requestId = requestMessage.getRequestId();
-
-            log.info("发送RPC请求: {}", requestId);
             requestMessage.setResponse(false);
             requestMessage.setReceiver(targetNode);
-
             // 3. 发送请求并获取响应
             KademliaMessage response = kademliaNodeServer.getTcpClient()
                     .sendMessageWithResponse(requestMessage,timeoutSeconds, TimeUnit.SECONDS);

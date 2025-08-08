@@ -199,4 +199,5 @@ public interface BlockChainService {
     Result getAllUTXO();
 
 
+    byte[] GENESIS_BLOCK_HASH();
 }
