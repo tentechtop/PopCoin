@@ -60,10 +60,10 @@ import static com.pop.popcoinsystem.constant.BlockChainConstants.NET_VERSION;
 @Scope("singleton") // 显式指定单例
 public class KademliaNodeServer {
 
-    // 消息过期时间（毫秒）
+    // 消息过期时间
     public static final long MESSAGE_EXPIRATION_TIME = 30000;
-    // 节点过期时间（毫秒）
-    public static final long NODE_EXPIRATION_TIME = 60000;//5分钟心跳一次 10分钟过期
+    // 节点过期时间
+    public static final long NODE_EXPIRATION_TIME = 30000;
     //节点信息
     private NodeInfo nodeInfo;
 
@@ -184,7 +184,7 @@ public class KademliaNodeServer {
                 return thread;
             });
             //维护网络 首次执行立即开始，之后每 delay  秒执行一次 maintainNetwork 方法  单位秒
-            long delay = 30;
+            long delay = 15;
             long delay1 = 60 * 60; //
             scheduler.scheduleAtFixedRate(this::maintainNetwork, delay, delay, TimeUnit.SECONDS);
             scheduler.scheduleAtFixedRate(this::persistToStorage, delay1, delay1, TimeUnit.SECONDS);
