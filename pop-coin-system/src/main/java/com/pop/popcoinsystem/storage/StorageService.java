@@ -514,46 +514,30 @@ public class StorageService {
         if (batchHeights.isEmpty()) {
             return Collections.emptyList();
         }
+        List<Block> blocks = new ArrayList<>(batchHeights.size());
+        log.debug("开始批量获取区块，高度数量: {}", batchHeights.size());
 
-        // 2. 加读锁保证数据一致性（避免读取过程中区块被删除或修改）
-        rwLock.readLock().lock();
-        try {
-            List<Block> blocks = new ArrayList<>(batchHeights.size());
-            log.debug("开始批量获取区块，高度数量: {}", batchHeights.size());
-
-            for (Long height : batchHeights) {
-                Block block = null;
-                try {
-                    // 3. 跳过无效高度（负数高度）
-                    if (height == null || height < 0) {
-                        log.warn("跳过无效高度: {}", height);
-                        blocks.add(null);
-                        continue;
-                    }
-
-                    // 4. 分步获取：高度→哈希→区块
-                    byte[] blockHash = getMainBlockHashByHeight(height);
-                    if (blockHash != null) {
-                        block = getBlockByHash(blockHash);
-                    } else {
-                        log.debug("主链中不存在高度为{}的区块", height);
-                    }
-
-                    blocks.add(block);
-                } catch (Exception e) {
-                    // 单个高度处理失败不影响整体，记录日志后继续
-                    log.error("获取高度为{}的区块失败", height, e);
-                    blocks.add(null);
-                }
+        for (long height : batchHeights) {
+            Block block = null;
+            // 3. 跳过无效高度（负数高度）
+            if ( height < 0) {
+                log.warn("跳过无效高度: {}", height);
+                blocks.add(null);
+                continue;
+            }
+            // 4. 分步获取：高度→哈希→区块
+            byte[] blockHash = getMainBlockHashByHeight(height);
+            if (blockHash != null) {
+                block = getBlockByHash(blockHash);
+            } else {
+                log.debug("主链中不存在高度为{}的区块", height);
             }
 
-            log.debug("批量获取区块完成，有效区块数量: {}",
-                    blocks.stream().filter(Objects::nonNull).count());
-            return blocks;
-        } finally {
-            // 确保锁释放
-            rwLock.readLock().unlock();
+            blocks.add(block);
         }
+        log.debug("批量获取区块完成，有效区块数量: {}",
+                blocks.stream().filter(Objects::nonNull).count());
+        return blocks;
     }
 
     //批量获取

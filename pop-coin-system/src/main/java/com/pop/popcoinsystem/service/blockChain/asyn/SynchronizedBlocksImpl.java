@@ -440,9 +440,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 RpcProxyFactory rpcProxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
                 rpcProxyFactory.setTimeout(5000);
                 BlockChainService remoteService = rpcProxyFactory.createProxy(BlockChainService.class);
-                for (long height : batchHeights){
-                    log.info("获取区块[{}]", height);
-                }
                 blocks = remoteService.getBlocksByHeights(batchHeights);
             } catch (Exception e) {
                 log.error("拉取区块体子批次[{} - {}]失败", subStart, subEnd, e);
