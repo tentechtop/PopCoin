@@ -107,7 +107,6 @@ public class MiningStart implements ApplicationRunner {
         log.info("p2PKH Test 测试钱包地址: {}", p2PKHAddressByPK);
         log.info("p2WPKH Test 测试钱包地址: {}", p2WPKHAddressByPK);
 
-
         miningService.startMining();
     }
 

@@ -171,6 +171,13 @@ public class BlockChainServiceImpl implements BlockChainService {
      */
     @Override
     synchronized  public boolean verifyBlock(Block block, boolean broadcastMessage) {
+        byte[] hash = block.getHash();
+        BlockHeader blockHeader = block.extractHeader();
+        byte[] bytes = blockHeader.computeHash();
+        if (!Arrays.equals(bytes, hash)) {
+            log.warn("区块头哈希不匹配，计算出的哈希：{}", CryptoUtil.bytesToHex(bytes));
+            return false;
+        }
         // 验证区块合法性
         if (!validateBlock(block)) {
             log.warn("区块验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
