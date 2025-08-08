@@ -2,6 +2,7 @@ package com.pop.popcoinsystem.service.blockChain.asyn;
 
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockHeader;
+import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.HandshakeRequestMessage;
@@ -440,7 +441,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                 RpcProxyFactory rpcProxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
                 rpcProxyFactory.setTimeout(5000);
                 BlockChainService remoteService = rpcProxyFactory.createProxy(BlockChainService.class);
-                blocks = remoteService.getBlocksByHeights(batchHeights);
+                blocks =  remoteService.getBlockListByRange(subStart, subEnd);
             } catch (Exception e) {
                 log.error("拉取区块体子批次[{} - {}]失败", subStart, subEnd, e);
                 return false;

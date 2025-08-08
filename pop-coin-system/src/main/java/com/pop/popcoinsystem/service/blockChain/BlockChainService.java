@@ -152,6 +152,8 @@ public interface BlockChainService {
      */
     Result getBlockByRange(long start, long end);
 
+    List<Block> getBlockListByRange(long start, long end);
+
 
     /**
      * 将验证通过的区块添加到主链

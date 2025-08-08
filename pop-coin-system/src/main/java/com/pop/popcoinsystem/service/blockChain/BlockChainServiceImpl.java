@@ -1408,11 +1408,10 @@ public class BlockChainServiceImpl implements BlockChainService {
         return Result.OK(blockDTOS);
     }
 
-
-
-
-
-
+    @Override
+    public List<Block> getBlockListByRange(long start, long end) {
+        return popStorage.getBlockByRange(start, end);;
+    }
 
 
     public void addBlockToMainChain(Block validBlock) {

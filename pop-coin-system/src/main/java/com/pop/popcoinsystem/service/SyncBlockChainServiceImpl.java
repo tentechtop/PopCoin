@@ -53,7 +53,7 @@ public class SyncBlockChainServiceImpl {
     public Result findNode() throws Exception {
         RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer);
         BlockChainService blockChainService = proxyFactory.createProxy(BlockChainService.class);
-        Result blockByRange = blockChainService.getBlockByRange(1, 102);
+        Result blockByRange = blockChainService.getBlockByRange(0, 49);
         return blockByRange;
     }
 
