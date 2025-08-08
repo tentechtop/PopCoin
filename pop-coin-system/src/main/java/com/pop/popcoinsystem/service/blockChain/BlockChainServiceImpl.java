@@ -1617,15 +1617,7 @@ public class BlockChainServiceImpl implements BlockChainService {
         return Result.ok(popStorage.getAllUTXO());
     }
 
-    @Override
-    public List<Block> getBlocksByHashes(List<byte[]> batchHashes) {
-        return popStorage.getBlocksByHashes(batchHashes);
-    }
 
-    @Override
-    public List<Block> getBlocksByHeights(List<Long> batchHeights) {
-        return popStorage.getBlocksByHeights(batchHeights);
-    }
 
     private void handleHeaderChainExtension(BlockHeader header, BlockHeader parentHeader ,long height, byte[] hash) {
 

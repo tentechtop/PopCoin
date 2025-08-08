@@ -198,8 +198,5 @@ public interface BlockChainService {
 
     Result getAllUTXO();
 
-    List<Block> getBlocksByHashes(List<byte[]> batchHashes);
 
-
-    List<Block> getBlocksByHeights(List<Long> batchHeights);
 }

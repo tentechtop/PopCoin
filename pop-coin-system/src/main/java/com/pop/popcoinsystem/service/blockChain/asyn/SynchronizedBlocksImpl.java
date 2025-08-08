@@ -16,6 +16,7 @@ import com.pop.popcoinsystem.service.mining.MiningServiceImpl;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.DifficultyUtils;
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -52,22 +53,22 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
 
     private volatile boolean isSyncing = false;
 
-    private  ThreadPoolExecutor processExecutor;
+    private  ThreadPoolExecutor processExecutor = new ThreadPoolExecutor(
+            1,  // 核心线程数=1（保证顺序）
+            1,  // 最大线程数=1（禁止并行）
+            60L, TimeUnit.SECONDS,
+            new LinkedBlockingQueue<>(100),  // 队列缓冲待处理任务
+            r -> new Thread(r, "block-sync-single-thread"),
+            new ThreadPoolExecutor.CallerRunsPolicy()  // 队列满时阻塞提交者，避免乱序
+    );
 
     private static final int BLOCK_HEADER_BATCH = 500; // 区块头批次大小
     private static final int BLOCK_BODY_BATCH = 50;    // 区块体批次大小（避免单次请求过大）
     private static final int MAX_RETRY = 3;            // 单批次最大重试次数
 
+
     @Override
     public void run(ApplicationArguments args) throws Exception {
-        processExecutor = new ThreadPoolExecutor(
-                1,  // 核心线程数=1（保证顺序）
-                1,  // 最大线程数=1（禁止并行）
-                60L, TimeUnit.SECONDS,
-                new LinkedBlockingQueue<>(100),  // 队列缓冲待处理任务
-                r -> new Thread(r, "block-sync-single-thread"),
-                new ThreadPoolExecutor.CallerRunsPolicy()  // 队列满时阻塞提交者，避免乱序
-        );
         scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "sync-scheduler");
             t.setDaemon(true);
@@ -453,6 +454,8 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                         batchHeights.size(), blocks == null ? 0 : blocks.size());
                 return false;
             }
+            //按照高度排序
+            blocks.sort(Comparator.comparingLong(Block::getHeight));
 
             // 5. 逐个验证区块体并合并到主链
             for (Block block : blocks) {
@@ -476,8 +479,9 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                     return false;
                 }
 
+
                 // 5.3 验证区块完整性（交易合法性、签名等）
-                if (!localBlockChainService.verifyBlock(block, false)) {
+                if (localBlockChainService.verifyBlock(block, false)) {
                     log.error("区块[{}]完整性验证失败", blockHeight);
                     return false;
                 }
