@@ -211,11 +211,12 @@ public class BlockChainServiceImpl implements BlockChainService {
             if (parentBlock == null) {
                 return false;
             }
+            if (parentBlock.getHeight() + 1 != block.getHeight()) {
+                log.warn("区块高度不连续，父区块高度：{}，当前区块高度：{}", parentBlock.getHeight(), block.getHeight());
+                return false;
+            }
         }
-        if (parentBlock.getHeight() + 1 != block.getHeight()) {
-            log.warn("区块高度不连续，父区块高度：{}，当前区块高度：{}", parentBlock.getHeight(), block.getHeight());
-            return false;
-        }
+
         // 验证区块中的交易
         if (!validateTransactionsInBlock(block)) {
             log.warn("区块中的交易验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
