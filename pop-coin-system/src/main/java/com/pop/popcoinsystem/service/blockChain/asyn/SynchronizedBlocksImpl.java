@@ -417,12 +417,8 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
      * @param batchEnd 本批次结束高度
      * @return 同步成功返回true，否则返回false
      */
-    private boolean syncBlockBodies(NodeInfo remoteNode,Map<Long, BlockHeader> validHeaders,
-                                    long currentHeight,
-                                    long batchEnd) {
-        RpcProxyFactory rpcProxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
-        rpcProxyFactory.setTimeout(5000);
-        BlockChainService remoteService = rpcProxyFactory.createProxy(BlockChainService.class);
+    private boolean syncBlockBodies(NodeInfo remoteNode,Map<Long, BlockHeader> validHeaders, long currentHeight, long batchEnd) {
+
 
         // 1. 提取有序高度列表（确保按高度升序处理）
         List<Long> sortedHeights = new ArrayList<>(validHeaders.keySet());
@@ -443,6 +439,9 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
             // 3. 从远程节点拉取当前子批次的区块体
             List<Block> blocks;
             try {
+                RpcProxyFactory rpcProxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
+                rpcProxyFactory.setTimeout(5000);
+                BlockChainService remoteService = rpcProxyFactory.createProxy(BlockChainService.class);
                 blocks = remoteService.getBlocksByHeights(batchHeights);
             } catch (Exception e) {
                 log.error("拉取区块体子批次[{} - {}]失败", subStart, subEnd, e);
