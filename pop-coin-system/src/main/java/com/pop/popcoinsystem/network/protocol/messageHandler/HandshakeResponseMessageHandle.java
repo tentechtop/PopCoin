@@ -18,6 +18,8 @@ import java.io.Serializable;
 import java.net.ConnectException;
 import java.util.Arrays;
 
+import static com.pop.popcoinsystem.constant.BlockChainConstants.GENESIS_PREV_BLOCK_HASH;
+
 
 @Slf4j
 public class HandshakeResponseMessageHandle implements MessageHandler{
@@ -42,22 +44,13 @@ public class HandshakeResponseMessageHandle implements MessageHandler{
         BlockChainServiceImpl blockChainService = kademliaNodeServer.getBlockChainService();
         Block block = blockChainService.getMainLatestBlock();
 
-        byte[] genesisBlockHash = handshake.getGenesisBlockHash();
-        byte[] genesisHsh = kademliaNodeServer.getBlockChainService().GENESIS_BLOCK_HASH();
-        if (!Arrays.equals(genesisHsh, genesisBlockHash)){
-            log.error("链信息不一致");
-            //删除节点
-            kademliaNodeServer.getRoutingTable().delete(data);
-            throw new UnsupportedChainException("链信息不一致");
-        }
 
-        long localLatestHeight  = blockChainService.getMainLatestHeight();
-        byte[] localLatestHash  = block.getHash();
-        byte[] localChainWork = block.getChainWork();
-
-        long remoteLatestHeight  = handshake.getLatestBlockHeight();
         byte[] remoteLatestHash  = handshake.getLatestBlockHash();
+        long remoteLatestHeight  = handshake.getLatestBlockHeight();
         byte[] remoteChainWork = handshake.getChainWork();//工作总量
+        byte[] localLatestHash  = block==null? GENESIS_PREV_BLOCK_HASH: block.getHash();
+        long localLatestHeight  = block==null? -1L:blockChainService.getMainLatestHeight();
+        byte[] localChainWork = block==null? new byte[0]:block.getChainWork();
 
         log.info("本地高度:{}",localLatestHeight);
         log.info("远程高度:{}",remoteLatestHeight);

@@ -206,14 +206,14 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
             return;
         }
         // 情况1：本地节点未初始化（无区块数据）仅仅一个创世区块
-        if (localHeight == 0) {
+        if (localHeight == -1) {
             log.info("本地节点未初始化（高度: {}），请求远程完整链（远程最新高度: {}，远程总工作量: {}）",
                     localHeight, remoteHeight, remoteTotalWork);
             startSyncFromRemote(remoteNode, 0);  // 从初始状态同步
             return;
         }
         // 情况2：远程节点未初始化（无区块数据）
-        if (remoteHeight == 0) {
+        if (remoteHeight == -1) {
             log.info("远程节点未初始化（高度: {}），等待远程节点拉取本地链（本地高度: {}，本地总工作量: {}）",
                     remoteHeight, localHeight, localTotalWork);
             return;
@@ -746,16 +746,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                     log.info("分片[{}]完成批次: {} - {}，累计同步{}个区块，进度: {}%",
                             progress.getProgressId(), currentHeight - batchSize, batchEnd,
                             progress.getSyncedBlocks(), progress.getProgressPercent());
-
-                    //休眠
-                    try {
-                        Thread.sleep(100);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        progress.setStatus(SyncStatus.CANCELLED);
-                        progress.setErrorMsg("任务被中断");
-                        return progress;
-                    }
                 }
 
                 // 分片完成

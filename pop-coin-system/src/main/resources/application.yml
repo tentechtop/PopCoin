@@ -19,13 +19,15 @@ system:
       steady-interval-seconds: 60
       detect-concurrency: 5
       rpc-timeout-ms: 3000
-
   #存储路径 全路径
   storagePath: /ec/storage
   #挖矿方式
   mining-type: 2 # 1CPU 2GPU
   # 网络版本 决定这个服务能否参与网络共识
   netVersion: 1
+  mining:
+    miner-address: bc1qzlxafwx7ccj97pfexxtml0u8u5v4jm6d5alpgpu #未配置就会使用中本聪的地址
+
   # 公钥 持有公钥的人能够控制这个节点
   publicKey:
     - 1321313132

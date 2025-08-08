@@ -106,60 +106,9 @@ public class BlockChainServiceImpl implements BlockChainService {
         if (genesisBlock == null){
             popStorage.updateMainLatestHeight(-1);
             popStorage.updateMainLatestBlockHash(GENESIS_PREV_BLOCK_HASH);
-        }
-        initGenesisBlock();
-    }
 
-
-    public void initGenesisBlock(){
-        Block genesisBlock = getMainBlockByHeight(0);
-        if (genesisBlock == null) {
-            genesisBlock = createGenesisBlock();
-            // 寻找符合难度的nonce
-            log.info("开始挖掘创世区块（难度目标：前4字节为0）...");
-            int nonce = 0;
-            byte[] validHash = null;
-            while (true) {
-                genesisBlock.setNonce(nonce);
-                // 计算区块哈希
-                byte[] blockHash = genesisBlock.computeHash();
-                if (DifficultyUtils.isValidHash(blockHash, DifficultyUtils.difficultyToCompact(1L))) {
-                    validHash = blockHash;
-                    log.info("创世区块挖掘成功！nonce={}, 哈希={}",
-                            nonce, CryptoUtil.bytesToHex(blockHash));
-                    break;
-                }
-                // 防止无限循环（实际可根据需求调整最大尝试次数）
-                if (nonce % 100000 == 0) {
-                    log.debug("已尝试{}次，继续寻找有效nonce...", nonce);
-                }
-                nonce++;
-                // 安全限制：最多尝试1亿次（防止极端情况）
-                if (nonce >= 100_000_000_0) {
-                    throw new RuntimeException("创世区块挖矿超时，未找到有效nonce");
-                }
-            }
-            // 9. 设置计算得到的哈希和nonce
-            genesisBlock.setHash(validHash);
-            genesisBlock.setNonce(nonce);
-            //保存区块
-            popStorage.addBlock(genesisBlock);
-            //保存最新的区块hash
-            popStorage.updateMainLatestBlockHash(validHash);
-            //最新区块高度
-            popStorage.updateMainLatestHeight(genesisBlock.getHeight());
-            //保存主链中 高度高度到 hash的索引
-            popStorage.addMainHeightToBlockIndex(genesisBlock.getHeight(), validHash);
-            applyBlock(genesisBlock);
         }
     }
-
-
-
-
-
-
-
 
     public String GENESIS_BLOCK_HASH_HEX() {
         return CryptoUtil.bytesToHex(popStorage.getMainBlockHashByHeight(0));

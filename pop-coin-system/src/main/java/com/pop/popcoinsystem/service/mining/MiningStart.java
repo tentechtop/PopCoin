@@ -39,7 +39,6 @@ public class MiningStart implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) throws Exception {
         Miner miner = storageService.getMiner();
-
         WalletStorage walletStorage = WalletStorage.getInstance();
         Wallet walleta = walletStorage.getWallet("btcminer");
         if (walleta == null){
@@ -108,13 +107,7 @@ public class MiningStart implements ApplicationRunner {
         log.info("p2PKH Test 测试钱包地址: {}", p2PKHAddressByPK);
         log.info("p2WPKH Test 测试钱包地址: {}", p2WPKHAddressByPK);
 
-        miner = new Miner();
-        miner.setAddress(p2WPKHAddressMiner);
-        miner.setName("btcminer");
-        setMinerInfo(miner);
 
-        //if (miner == null) return;
-        //等 Spring 容器完全初始化后再启动挖矿
         miningService.startMining();
     }
 

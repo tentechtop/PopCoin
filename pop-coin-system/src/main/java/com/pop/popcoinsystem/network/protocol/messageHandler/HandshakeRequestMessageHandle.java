@@ -19,6 +19,7 @@ import java.io.Serializable;
 import java.net.ConnectException;
 import java.util.Arrays;
 
+import static com.pop.popcoinsystem.constant.BlockChainConstants.GENESIS_PREV_BLOCK_HASH;
 
 
 @Slf4j
@@ -54,16 +55,15 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
         byte[] remoteLatestHash  = handshake.getLatestBlockHash();
         long remoteLatestHeight  = handshake.getLatestBlockHeight();
         byte[] remoteChainWork = handshake.getChainWork();//工作总量
-        byte[] localLatestHash  = block.getHash();
-        long localLatestHeight  = blockChainService.getMainLatestHeight();
-        byte[] localChainWork = block.getChainWork();
+        byte[] localLatestHash  = block==null? GENESIS_PREV_BLOCK_HASH: block.getHash();
+        long localLatestHeight  = block==null? -1L:blockChainService.getMainLatestHeight();
+        byte[] localChainWork = block==null? new byte[0]:block.getChainWork();
 
         log.info("本地高度:{}",localLatestHash);
         log.info("远程高度:{}",remoteLatestHeight);
         log.info("本地工作总量:{}",localChainWork);
         log.info("远程工作总量:{}",remoteChainWork);
         log.info("本地和远程比较 工作量比较:{}", DifficultyUtils.compare(localChainWork,remoteChainWork));
-
 
 
         // 3. 比较差异并发起同步

@@ -55,13 +55,8 @@ public class StorageService {
 
     //区块链当前工作总量chainWork
     private static final byte[] KEY_CHAIN_WORK = "key_chain_work".getBytes();
-
     //最新区块难度值
     private static final byte[] KEY_BLOCK_DIFFICULTY = "key_block_difficulty".getBytes();
-
-
-
-
 
     /*节点相关设置*/
     private static final byte[] KEY_NODE_SETTING = "key_node_setting".getBytes();

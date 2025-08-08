@@ -50,17 +50,16 @@ public class MiningServiceImpl {
     @Value("${system.mining-type:1}")
     private int miningType;
 
+    @Value("${system.mining.miner-address:1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa}")
+    private String minerAddress;
+
 
     // CPU挖矿性能控制（0-100，默认85%）
     private volatile int miningPerformance = 15;
     // GPU挖矿性能控制（0-100，默认100%）
     private volatile int gpuMiningPerformance = 90;
 
-    //GPU挖矿还是CPU挖矿
-    private volatile boolean isGPUMining = true;
 
-    //矿工信息
-    volatile public Miner miner;
     // 当前难度目标（前导零的数量）
     private static long currentDifficulty = 1;
     //是否启动挖矿服务 用于停止挖矿的标志
@@ -89,6 +88,7 @@ public class MiningServiceImpl {
      * 启动挖矿
      */
     public Result<String> startMining() throws Exception {
+
         if (isMining) {
             return Result.error("ERROR: The node is already mining ! ");
         }
@@ -106,13 +106,6 @@ public class MiningServiceImpl {
         initExecutor();
         if (miningType == 2){
             initCuda();
-        }
-        //获取矿工信息
-        miner = storageService.getMiner();
-        log.info("本节点矿工信息: {}", miner);
-        if (miner == null) {
-            //挖矿前请设置本节点的矿工信息
-            throw new RuntimeException("请设置本节点的矿工信息");
         }
         isMining = true;
         new Thread(() -> {
@@ -146,8 +139,8 @@ public class MiningServiceImpl {
                 for (Transaction transaction : transactions) {
                     totalFee += blockChainService.getFee(transaction);
                 }
-                Transaction coinBaseTransaction = BlockChainServiceImpl.createCoinBaseTransaction(miner.getAddress(), blockHeight+1, totalFee);
-                log.info("创建CoinBase交易 矿工地址 : {}", miner.getAddress());
+                Transaction coinBaseTransaction = BlockChainServiceImpl.createCoinBaseTransaction(minerAddress, blockHeight+1, totalFee);
+                log.info("创建CoinBase交易 矿工地址 : {}", minerAddress);
                 blockTransactions.add(coinBaseTransaction);
                 blockTransactions.addAll(transactions);
                 newBlock.setTransactions(blockTransactions);
