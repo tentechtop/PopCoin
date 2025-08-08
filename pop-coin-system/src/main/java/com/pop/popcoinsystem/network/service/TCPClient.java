@@ -147,7 +147,8 @@ public class TCPClient {
 
                             } else {
                                 // 其他失败走原有逻辑
-                                handleSendFailure(nodeId, message, cause);
+                                //失败就不重试
+
                             }
                         }
                     })
@@ -244,9 +245,8 @@ public class TCPClient {
             if (ex == null) {
                 return CompletableFuture.completedFuture(response);
             }
-
             // 有异常：判断是否需要重试
-            if (remainingRetries > 0 && isRetryableException(ex)) {
+            if (false && remainingRetries > 0 && isRetryableException(ex) ) {
                 log.warn("节点 {} 发送失败，剩余重试次数: {}，原因: {}",
                         nodeId, remainingRetries, ex.getMessage());
                 // 指数退避后重试
@@ -274,7 +274,7 @@ public class TCPClient {
         Throwable cause = ex instanceof CompletionException ? ex.getCause() : ex;
         // 处理 Connection reset 异常
         if (cause instanceof SocketException && "Connection reset".equals(cause.getMessage())) {
-            return false; // 仅允许最多2次重试
+            return false;
         }
         return cause instanceof SocketException
                 || cause instanceof ConnectException
@@ -393,43 +393,6 @@ public class TCPClient {
 
 
 
-
-
-
-    /**
-     * 优化连接重试：使用Netty的EventLoop执行重试，避免占用业务线程
-     */
-    private void handleSendFailure(BigInteger nodeId, KademliaMessage message, Throwable cause) {
-        if (!(cause instanceof SocketException) && !(cause instanceof ConnectException)) {
-            log.warn("Unrecoverable error for node {}, no retry", nodeId, cause);
-            return;
-        }
-        // 提交到Netty的EventLoop执行，避免阻塞业务线程池
-        eventLoopGroup.submit(() -> {
-            try {
-                Channel oldChannel = nodeTCPChannel.get(nodeId);
-                if (oldChannel != null && !isChannelValid(oldChannel)) {
-                    nodeTCPChannel.remove(nodeId);
-                    oldChannel.close(); // 异步关闭
-                }
-                NodeInfo receiver = message.getReceiver();
-                Channel newChannel = connectWithRetry(receiver.getIpv4(), receiver.getTcpPort(), nodeId);
-                if (newChannel != null) {
-                    nodeTCPChannel.put(nodeId, newChannel);
-                    newChannel.writeAndFlush(message).addListener((ChannelFutureListener) f -> {
-                        if (f.isSuccess()) {
-                            log.info("Resent message to node {} after failure", nodeId);
-                        } else {
-                            log.error("Final retry failed for node {}", nodeId, f.cause());
-                            nodeTCPChannel.remove(nodeId);
-                        }
-                    });
-                }
-            } catch (Exception e) {
-                log.error("Failed to recover connection for node {}", nodeId, e);
-            }
-        });
-    }
 
 
 
