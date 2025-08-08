@@ -103,15 +103,18 @@ public class RpcProxyFactory {
         }
 
         private Object parseResponse(KademliaMessage response) {
+            // 处理空响应情况
+            if (response == null) {
+                throw new IllegalStateException("未收到任何响应，可能是网络超时或目标节点无响应");
+            }
             try {
                 // 1. 从响应中获取RpcResponseData
-                if (response.getData() instanceof RpcResponseData) {
-                    RpcResponseData responseData = (RpcResponseData) response.getData();
+                if (response.getData() instanceof RpcResponseData responseData) {
                     // 2. 检查是否有错误
                     if (responseData.getException() != null) {
                         throw new RuntimeException("远程调用错误: " + responseData.getException().getMessage());
                     }
-                    // 3. 获取实际返回值（假设RpcResponseData有getResult()方法）
+                    // 3. 获取实际返回值
                     return responseData.getResult();
                 } else {
                     throw new RuntimeException("无效的响应数据类型: " + response.getData().getClass().getName());

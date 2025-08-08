@@ -593,6 +593,41 @@ public class StorageService {
         }
     }
 
+    /**
+     * 批量根据区块哈希获取区块
+     * @param batchHashes 区块哈希列表（非空）
+     * @return 按输入哈希顺序排列的区块列表，哈希对应区块不存在时为null
+     * @throws IllegalArgumentException 若输入哈希列表为null
+     */
+    public List<Block> getBlocksByHashes(List<byte[]> batchHashes) {
+        // 输入校验
+        if (batchHashes == null) {
+            throw new IllegalArgumentException("区块哈希列表不能为null");
+        }
+        if (batchHashes.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        rwLock.readLock().lock();
+        try {
+            List<Block> blocks = new ArrayList<>(batchHashes.size());
+            for (byte[] hash : batchHashes) {
+                // 复用单个哈希查询方法，保持逻辑一致性
+                Block block = getBlockByHash(hash);
+                blocks.add(block);
+                log.trace("批量获取区块完成，哈希: {}", CryptoUtil.bytesToHex(hash));
+            }
+            log.debug("批量获取区块成功，总数量: {}, 有效区块数量: {}",
+                    batchHashes.size(),
+                    blocks.stream().filter(Objects::nonNull).count());
+            return blocks;
+        } catch (Exception e) {
+            log.error("批量获取区块失败，输入哈希数量: {}", batchHashes.size(), e);
+            throw new RuntimeException("批量获取区块失败", e);
+        } finally {
+            rwLock.readLock().unlock();
+        }
+    }
 
 
     private boolean isGenesisPrevHash(byte[] prevHash) {

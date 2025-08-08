@@ -2,6 +2,7 @@ package com.pop.popcoinsystem.service.blockChain;
 
 import com.pop.popcoinsystem.aop.annotation.RpcServiceAlias;
 import com.pop.popcoinsystem.data.block.Block;
+import com.pop.popcoinsystem.data.block.BlockBody;
 import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.block.BlockHeader;
 import com.pop.popcoinsystem.data.blockChain.BlockChain;
@@ -79,6 +80,11 @@ public interface BlockChainService {
      * 根据哈希获取区块
      */
     Block getBlockByHash(byte[] hash);
+
+    /**
+     * 根据哈希获取区块体
+     */
+    BlockBody getBlockByHashList(List<byte[]> hashList);
 
     /**
      * 获取区块链基本信息（高度、最新哈希等）
@@ -189,4 +195,6 @@ public interface BlockChainService {
     Result<BlockDTO> getTransactionBlock(String txId);
 
     Result getAllUTXO();
+
+    List<Block> getBlocksByHashes(List<byte[]> batchHashes);
 }

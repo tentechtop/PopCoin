@@ -745,4 +745,7 @@ public class Block implements Serializable {
     }
 
 
+    public BlockHeader getHeader() {
+        return this.extractHeader();
+    }
 }

@@ -44,7 +44,7 @@ public class VirtualThreadWaitDemo {
 
             // 等待结果（同步等待）
             String result = future.get(); // 阻塞等待完成
-            System.out.println("获取到结果：" + result);
+            System.out.println("阻塞等待完成 获取到结果：" + result);
 
             // 异步等待（非阻塞，使用回调）
             CompletableFuture<Void> asyncFuture = future.thenAcceptAsync(res -> {

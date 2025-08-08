@@ -3,6 +3,7 @@ package com.pop.popcoinsystem.service.blockChain;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.pop.popcoinsystem.data.block.Block;
+import com.pop.popcoinsystem.data.block.BlockBody;
 import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.block.BlockHeader;
 import com.pop.popcoinsystem.data.blockChain.BlockChain;
@@ -1244,6 +1245,11 @@ public class BlockChainServiceImpl implements BlockChainService {
         return popStorage.getBlockByHash(hash);
     }
 
+    @Override
+    public BlockBody getBlockByHashList(List<byte[]> hashList) {
+        return null;
+    }
+
 
     /**
      * 获取当前区块信息
@@ -1774,6 +1780,11 @@ public class BlockChainServiceImpl implements BlockChainService {
     @Override
     public Result getAllUTXO() {
         return Result.ok(popStorage.getAllUTXO());
+    }
+
+    @Override
+    public List<Block> getBlocksByHashes(List<byte[]> batchHashes) {
+        return popStorage.getBlocksByHashes(batchHashes);
     }
 
     private void handleHeaderChainExtension(BlockHeader header, BlockHeader parentHeader ,long height, byte[] hash) {

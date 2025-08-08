@@ -536,19 +536,15 @@ public class MiningServiceImpl {
             int nonce = ByteBuffer.wrap(resultBuffer, 4, 4).order(ByteOrder.LITTLE_ENDIAN).getInt();
             byte[] hash = new byte[32];
             System.arraycopy(resultBuffer, 8, hash, 0, 32);
-
             result.found = (found == 1);
             result.nonce = nonce;
             result.hash = hash;
-
             if (result.found) {
                 log.info("GPU找到有效哈希！nonce={}, hash={}", nonce, CryptoUtil.bytesToHex(hash));
             } else {
                 log.info("GPU未找到有效哈希，最后尝试nonce={}", nonce);
             }
-
             return result;
-
         } catch (Exception e) {
             log.error("GPU挖矿异常", e);
             return cpuMineBlock(blockHeader); // 异常时降级到CPU
@@ -598,8 +594,13 @@ public class MiningServiceImpl {
     private CUdeviceptr getGlobalVariable(CUmodule module, String name) {
         CUdeviceptr ptr = new CUdeviceptr();
         long[] size = new long[1];
-        cuModuleGetGlobal(ptr, size, module, name);
-        return ptr;
+        try {
+            cuModuleGetGlobal(ptr, size, module, name);
+            return ptr;
+        }catch (Exception e){
+            log.error("获取全局变量失败", e);
+        }
+        return null;
     }
 
 
