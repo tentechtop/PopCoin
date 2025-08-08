@@ -113,7 +113,6 @@ public class TCPClient {
                     channel.writeAndFlush(message).addListener((ChannelFutureListener) future -> {
                         if (!future.isSuccess()) {
                             log.error("Failed to send message to node {}: {}", nodeId, future.cause().getMessage());
-                            handleSendFailure(nodeId, message, future.cause());
                         }
                     })
             );
@@ -326,9 +325,6 @@ public class TCPClient {
 
         return resultFuture;
     }
-
-
-
 
 
 

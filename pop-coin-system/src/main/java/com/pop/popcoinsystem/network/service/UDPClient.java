@@ -78,7 +78,6 @@ public class UDPClient {
             future.addListener((ChannelFutureListener) f -> {
                 if (!f.isSuccess()) {
                     log.error("Failed to send UDP message to node {}: {}", nodeId, f.cause().getMessage());
-                    handleSendFailure(nodeId, targetAddr, message); // 处理发送失败
                 }
             });
             // 等待发送操作完成（避免异步丢失异常）

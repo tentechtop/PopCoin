@@ -282,6 +282,7 @@ public class KademliaNodeServer {
 
 
     // 连接到引导节点
+    // 建立定时任务 直到连接成功
     public void connectToBootstrapNodes(NodeInfo bootstrapNodeInfo) throws Exception {
         if (bootstrapNodeInfo == null) return;
         //向引导节点发送Ping消息 回复pong之后 将引导节点加入网络
