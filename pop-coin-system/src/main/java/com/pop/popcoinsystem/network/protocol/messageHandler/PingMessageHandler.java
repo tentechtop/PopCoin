@@ -17,7 +17,7 @@ public class PingMessageHandler implements MessageHandler {
         return doHandle(kademliaNodeServer, (PingKademliaMessage) message);
     }
     protected PongKademliaMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull PingKademliaMessage message) throws InterruptedException {
-        log.debug("收到ping");
+        log.info("收到ping");
         PongKademliaMessage pongKademliaMessage = new PongKademliaMessage();
         long requestId = message.getRequestId();//响应消息必须保持一致
         pongKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());
