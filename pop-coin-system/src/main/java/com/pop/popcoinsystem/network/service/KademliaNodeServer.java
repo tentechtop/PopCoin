@@ -427,8 +427,8 @@ public class KademliaNodeServer {
             long now = System.currentTimeMillis();
             // 检查路由表中节点的活性，移除不活跃节点
             checkNodeLiveness(now);
-            // 随机生成节点ID，执行FindNode操作刷新路由表（Kademlia协议核心）
-            refreshRoutingTable();
+
+
         } catch (Exception e) {
             log.error("网络维护任务执行失败", e);
         }
@@ -437,6 +437,8 @@ public class KademliaNodeServer {
 
     private void persistToStorage(){
         log.info("开始将路由表未过期的节点持久化到存储系统");
+        // 随机生成节点ID，执行FindNode操作刷新路由表（Kademlia协议核心）
+        refreshRoutingTable();
         routingTable.cleanExpiredNodes(NODE_EXPIRATION_TIME);
         routingTable.persistToStorage();
     }
