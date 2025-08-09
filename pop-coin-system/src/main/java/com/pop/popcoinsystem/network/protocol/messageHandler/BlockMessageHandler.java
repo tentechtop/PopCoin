@@ -45,15 +45,18 @@ public class BlockMessageHandler implements MessageHandler {
             byte[] localLatestHash = mainLatestBlock.getHash();
             byte[] localLatestChainWork = mainLatestBlock.getChainWork();
             //提交差异
-            localBlockChainService.compareAndSync(
-                    message.getSender(),
-                    localLatestHeight,
-                    localLatestHash,
-                    localLatestChainWork,
-                    remoteLatestBlockHeight,
-                    remoteLatestBlockHash,
-                    remoteLatestChainWork
-            );
+
+            if (localLatestHeight != remoteLatestBlockHeight) {
+                localBlockChainService.compareAndSync(
+                        message.getSender(),
+                        localLatestHeight,
+                        localLatestHash,
+                        localLatestChainWork,
+                        remoteLatestBlockHeight,
+                        remoteLatestBlockHash,
+                        remoteLatestChainWork
+                );
+            }
         }
         return null;
     }

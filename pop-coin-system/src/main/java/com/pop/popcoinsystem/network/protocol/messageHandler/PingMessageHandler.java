@@ -25,7 +25,7 @@ public class PingMessageHandler implements MessageHandler {
         pongKademliaMessage.setRequestId(requestId);
         pongKademliaMessage.setResponse(true);
         kademliaNodeServer.getUdpClient().sendAsyncMessage(pongKademliaMessage);
-        return pongKademliaMessage;
+        return null;
     }
 
 }

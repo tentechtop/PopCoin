@@ -294,19 +294,16 @@ public class KademliaNodeServer {
         pingKademliaMessage.setReqResId();
         pingKademliaMessage.setResponse(false);
         try {
-            KademliaMessage kademliaMessage = null;
-            try {
-                kademliaMessage =  udpClient.sendMessageWithResponse(pingKademliaMessage);
-            }catch (TimeoutException e){
-                log.error("未收到节点{}的Pong消息", bootstrapNodeInfo);
-                return;
-            }
+            CompletableFuture<KademliaMessage> kademliaMessageCompletableFuture = udpClient.sendMessageWithResponse(pingKademliaMessage);
+            KademliaMessage kademliaMessage = kademliaMessageCompletableFuture.get();
             if (kademliaMessage == null){
                 log.error("未收到引导节点{}的Pong消息", bootstrapNodeInfo);
                 return;
             }
             if (kademliaMessage instanceof PongKademliaMessage){
                 log.info("收到引导节点{}的Pong消息", bootstrapNodeInfo);
+                //更新引导节点
+                routingTable.update(bootstrapNodeInfo);
                 //向引导节点发送握手请求 收到握手回复后检查 自己的区块链信息
                 BlockChainServiceImpl blockChainService = this.getBlockChainService();
                 byte[] bytes = blockChainService.GENESIS_BLOCK_HASH();
@@ -469,7 +466,7 @@ public class KademliaNodeServer {
                 udpClient.removeChannel(node.getId());
                 continue;
             }
-            log.info("节点 {} 活跃，最后活跃时间：{}ms", node.getId(), inactiveTime);
+            log.info("节点 {} 活跃，最后活跃时间：{}前s", node.getId(), inactiveTime/1000);
 
             // 2. 节点即将过期（接近阈值阈值），发送Ping确认活性
             if (inactiveTime > NODE_EXPIRATION_TIME * 0.8) {

@@ -40,7 +40,6 @@ public class KademliaUdpHandler extends SimpleChannelInboundHandler<KademliaMess
             }
             // 记录：将消息ID存入缓存（自动过期）
             nodeServer.getBroadcastMessages().put(messageId, Boolean.TRUE);
-
             boolean single = message.isSingle();
             if (single){
                 //单播消息

@@ -61,44 +61,63 @@ public class UDPClient {
     /**
      * 同步发送UDP消息（确保线程安全和通道有效性）
      */
-    public  void sendMessage(KademliaMessage message)  {
-        try {
-            if (message == null || message.getReceiver() == null) {
-                throw new IllegalArgumentException("Message or receiver cannot be null");
-            }
-            NodeInfo receiver = message.getReceiver();
-            BigInteger nodeId = receiver.getId();
-            InetSocketAddress targetAddr = new InetSocketAddress(receiver.getIpv4(), receiver.getUdpPort());
-
-            // 获取或创建有效的UDP通道（原子操作避免竞态条件）
-            Channel channel = getOrCreateChannel(nodeId, targetAddr);
-            if (channel == null || !channel.isOpen()) { // UDP通道用isOpen()判断有效性（无连接状态）
-                throw new ConnectException("No valid UDP channel for node: " + nodeId);
-            }
-            // 发送消息并添加结果监听
-            ChannelFuture future = channel.writeAndFlush(message);
-            future.addListener((ChannelFutureListener) f -> {
-                if (!f.isSuccess()) {
-                    log.error("Failed to send UDP message to node {}: {}", nodeId, f.cause().getMessage());
+    /**
+     * 同步发送UDP消息，使用虚拟线程处理等待操作
+     */
+    public void sendMessage(KademliaMessage message) {
+        // 使用虚拟线程执行可能阻塞的操作，避免阻塞平台线程
+        executorService.submit(() -> {
+            try {
+                if (message == null || message.getReceiver() == null) {
+                    throw new IllegalArgumentException("Message or receiver cannot be null");
                 }
-            });
-            // 等待发送操作完成（避免异步丢失异常）
-            if (!future.await(DEFAULT_OPERATION_TIMEOUT, TimeUnit.MILLISECONDS)) {
-                throw new ConnectException("UDP send to node " + nodeId + " timed out");
+                NodeInfo receiver = message.getReceiver();
+                BigInteger nodeId = receiver.getId();
+                InetSocketAddress targetAddr = new InetSocketAddress(receiver.getIpv4(), receiver.getUdpPort());
+
+                // 获取或创建有效的UDP通道
+                Channel channel = getOrCreateChannel(nodeId, targetAddr);
+                if (channel == null || !channel.isOpen()) {
+                    throw new ConnectException("No valid UDP channel for node: " + nodeId);
+                }
+
+                // 发送消息并添加结果监听
+                ChannelFuture future = channel.writeAndFlush(message);
+                future.addListener((ChannelFutureListener) f -> {
+                    if (!f.isSuccess()) {
+                        log.error("Failed to send UDP message to node {}: {}", nodeId, f.cause().getMessage());
+                        // 发送失败时在虚拟线程中处理重试逻辑
+                        //下线节点
+                        kademliaNodeServer.offlineNode(nodeId);
+                    }
+                });
+
+                // 等待发送操作完成（在虚拟线程中阻塞不会消耗平台线程资源）
+                if (!future.await(DEFAULT_OPERATION_TIMEOUT, TimeUnit.MILLISECONDS)) {
+                    throw new ConnectException("UDP send to node " + nodeId + " timed out");
+                }
+                if (!future.isSuccess()) {
+                    throw new ConnectException("UDP send failed: " + future.cause().getMessage());
+                }
+            } catch (Exception e) {
+                log.error("Failed to send UDP message: {}", e.getMessage());
             }
-            if (!future.isSuccess()) {
-                throw new ConnectException("UDP send failed: " + future.cause().getMessage());
-            }
-        }catch (Exception e){
-            log.error("Failed to send UDP message: {}", e.getMessage());
-        }
+        });
     }
 
 
-    public KademliaMessage sendMessageWithResponse(KademliaMessage message)
-            throws ConnectException, TimeoutException, InterruptedException, Exception {
-        // 默认超时时间5秒，也可以提供重载方法让用户指定超时
-        return sendMessageWithResponse(message, 5, TimeUnit.SECONDS);
+    /**
+     * 发送消息并等待响应，使用虚拟线程处理阻塞等待
+     */
+    public CompletableFuture<KademliaMessage> sendMessageWithResponse(KademliaMessage message) {
+        // 返回CompletableFuture，让调用者可以灵活处理异步结果
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return sendMessageWithResponse(message, 5, TimeUnit.SECONDS);;
+            } catch (Exception e) {
+                throw new CompletionException(e);
+            }
+        }, executorService);
     }
 
 
