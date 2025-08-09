@@ -1,10 +1,13 @@
 package com.pop.popcoinsystem.service.mining;
 
+import com.pop.popcoinsystem.application.service.wallet.Wallet;
+import com.pop.popcoinsystem.application.service.wallet.WalletStorage;
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockHeader;
 import com.pop.popcoinsystem.data.miner.Miner;
 import com.pop.popcoinsystem.service.blockChain.BlockChainServiceImpl;
 import com.pop.popcoinsystem.service.blockChain.asyn.SynchronizedBlocksImpl;
+import com.pop.popcoinsystem.storage.MiningStorageService;
 import com.pop.popcoinsystem.storage.StorageService;
 import com.pop.popcoinsystem.data.transaction.Transaction;
 import com.pop.popcoinsystem.data.vo.result.Result;
@@ -43,6 +46,9 @@ public class MiningServiceImpl {
 
     @Autowired
     private StorageService storageService;
+    @Autowired
+    private MiningStorageService miningStorageService;
+
     @Lazy
     @Autowired
     private BlockChainServiceImpl blockChainService;
@@ -121,6 +127,31 @@ public class MiningServiceImpl {
         return Result.ok();
     }
 
+    /**
+     * 初始化所有静态资源（线程池、CUDA、超时调度器），仅在首次启动时执行
+     */
+    private void initAllResources() throws Exception {
+        if (isResourcesInitialized) {
+            log.debug("资源已初始化，无需重复创建");
+            return;
+        }
+        //初始化地址 用于测试
+        Miner miner = miningStorageService.getMiner();
+        minerAddress = miner.getCoinBaseAddress().getFirst();
+
+        // 初始化区块链（创世区块检查）
+        initBlockChain();
+        // 初始化线程池
+        initMiningExecutor();
+        // 初始化超时调度器
+        initTimeoutScheduler();
+        // 若为GPU挖矿，初始化CUDA资源
+        if (miningType == 2) {
+            initCuda();
+        }
+        isResourcesInitialized = true; // 标记资源已初始化
+    }
+
     private void mineOneBlock() throws Exception {
         // 1. 等待同步完成（同步时暂停挖矿）
         waitForSyncCompletion();
@@ -160,7 +191,6 @@ public class MiningServiceImpl {
         }
     }
 
-
     /**
      * 执行挖矿（复用线程池/CUDA资源）
      */
@@ -189,7 +219,6 @@ public class MiningServiceImpl {
         newBlock.setTime(System.currentTimeMillis() / 1000);
         newBlock.setDifficulty(currentDifficulty);
         newBlock.setDifficultyTarget(DifficultyUtils.difficultyToCompact(currentDifficulty));
-
 
         // 交易相关（含CoinBase）
         Transaction coinBase = BlockChainServiceImpl.createCoinBaseTransaction(minerAddress, newHeight, calculateTotalFee(selectedTxs));
@@ -250,26 +279,7 @@ public class MiningServiceImpl {
     }
 
 
-    /**
-     * 初始化所有静态资源（线程池、CUDA、超时调度器），仅在首次启动时执行
-     */
-    private void initAllResources() throws Exception {
-        if (isResourcesInitialized) {
-            log.debug("资源已初始化，无需重复创建");
-            return;
-        }
-        // 初始化区块链（创世区块检查）
-        initBlockChain();
-        // 初始化线程池
-        initMiningExecutor();
-        // 初始化超时调度器
-        initTimeoutScheduler();
-        // 若为GPU挖矿，初始化CUDA资源
-        if (miningType == 2) {
-            initCuda();
-        }
-        isResourcesInitialized = true; // 标记资源已初始化
-    }
+
     public void initBlockChain(){
         Block genesisBlock = blockChainService.getMainBlockByHeight(0);
         if (genesisBlock == null) {

@@ -181,12 +181,11 @@ public class BlockChainServiceImpl implements BlockChainService {
                 log.warn("区块高度不连续，父区块高度：{}，当前区块高度：{}", parentBlock.getHeight(), block.getHeight());
                 return false;
             }
-            if (!validateMedianTime(block)){
-                log.warn("中位置时间验证失败，中位置时间：{}", block.getMedianTime());
-                return false;
-            }
         }
-
+        if (!validateMedianTime(block)){
+            log.warn("中位置时间验证失败，中位置时间：{}", block.getMedianTime());
+            return false;
+        }
         // 验证区块中的交易
         if (!validateTransactionsInBlock(block)) {
             log.warn("区块中的交易验证失败，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
@@ -448,7 +447,7 @@ public class BlockChainServiceImpl implements BlockChainService {
             log.error("未收集到任何有效祖先时间戳，区块高度：{}", blockHeight);
             return false;
         }
-        log.info("实际收集到{}个有效祖先时间戳（目标：{}）", ancestorTimestamps.size(), actualWindowSize);
+        log.debug("实际收集到{}个有效祖先时间戳（目标：{}）", ancestorTimestamps.size(), actualWindowSize);
         // 4. 计算中位数（与calculateMedianTime逻辑一致）
         Collections.sort(ancestorTimestamps);
         long calculatedMedian = ancestorTimestamps.get(ancestorTimestamps.size() / 2);
@@ -1339,11 +1338,14 @@ public class BlockChainServiceImpl implements BlockChainService {
         TXInput input = new TXInput(zeroTxId, 0, scriptSig);
         // 创建输出，将奖励发送到指定地址
         TXOutput output = new TXOutput(calculateBlockReward(height), scriptPubKey);
-        TXOutput outputFee = new TXOutput(totalFee, scriptPubKey);
+
         coinbaseTx.setVersion(TRANSACTION_VERSION_1);
         coinbaseTx.getInputs().add(input);
         coinbaseTx.getOutputs().add(output);
-        coinbaseTx.getOutputs().add(outputFee);
+        if (totalFee > 0){
+            TXOutput outputFee = new TXOutput(totalFee, scriptPubKey);
+            coinbaseTx.getOutputs().add(outputFee);
+        }
         // 计算并设置交易ID
         coinbaseTx.setTxId(coinbaseTx.calculateTxId());
         coinbaseTx.setSize(coinbaseTx.calculateBaseSize());

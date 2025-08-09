@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.util.ArrayList;
 
 @Slf4j
 @Service
@@ -31,17 +32,6 @@ public class MiningStart implements ApplicationRunner {
     @Autowired
     private MiningStorageService storageService;
 
-    /**
-     * 设置节点矿工信息
-     */
-    public Result<String> setMinerInfo(Miner miner){
-        try {
-            storageService.addOrUpdateMiner(miner);
-            return Result.ok();
-        }catch (Exception e){
-            return Result.error(e.getMessage());
-        }
-    }
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
@@ -113,8 +103,28 @@ public class MiningStart implements ApplicationRunner {
         String p2WPKHAddressByPK = CryptoUtil.ECDSASigner.createP2WPKHAddressByPK(bytesTest);
         log.info("p2PKH Test 测试钱包地址: {}", p2PKHAddressByPK);
         log.info("p2WPKH Test 测试钱包地址: {}", p2WPKHAddressByPK);
+
+        ArrayList<String> strings = new ArrayList<>();
+        strings.add(p2PKHAddressMiner);
+        miner = new Miner();
+        miner.setCoinBaseAddress(strings);
+        miner.setName("btcminer");
+        setMinerInfo(miner);
+
         if (startMining == 1){
             miningService.startMining();
+        }
+    }
+
+    /**
+     * 设置节点矿工信息
+     */
+    public Result<String> setMinerInfo(Miner miner){
+        try {
+            storageService.addOrUpdateMiner(miner);
+            return Result.ok();
+        }catch (Exception e){
+            return Result.error(e.getMessage());
         }
     }
 
