@@ -28,6 +28,16 @@ public class NodeInfo {
     private  int tcpPort;//TCP端口 用于通信传输
 
 
+
+    public ExternalNodeInfo extractExternalNodeInfo() {
+        ExternalNodeInfo nodeInfo = new ExternalNodeInfo();
+        nodeInfo.setId(id);
+        nodeInfo.setIpv4(ipv4);
+        nodeInfo.setUdpPort(udpPort);
+        nodeInfo.setTcpPort(tcpPort);
+        return nodeInfo;
+    }
+
     public NodeInfo(BigInteger id, String ipv4, int udpPort, int tcpPort,boolean isSeedNode) {
         this.id = id;
         this.ipv4 = ipv4;

@@ -84,7 +84,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                                long remoteHeight, byte[] remoteHash, byte[] remoteTotalWork) throws ConnectException {
         // 情况0：节点正在同步中，拒绝新请求
         if (isSyncing) {
-            log.info("节点正在同步中，不处理新请求");
+            log.info("节点正在同步中...，不处理新的同步请求");
             return;
         }
         // 情况1：本地节点未初始化（无区块数据）仅仅一个创世区块

@@ -271,7 +271,7 @@ public class MiningServiceImpl {
     public void resumeMiningAfterSync() {
         if (wasMiningBeforeSync && !isMining) {
             isMining = true; // 恢复循环
-            log.info("同步完成，恢复挖矿（复用资源）");
+            log.info("同步完成，恢复挖矿");
         }
     }
 

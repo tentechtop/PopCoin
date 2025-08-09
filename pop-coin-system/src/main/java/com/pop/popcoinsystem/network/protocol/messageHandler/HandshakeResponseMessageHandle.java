@@ -9,6 +9,7 @@ import com.pop.popcoinsystem.exception.FullBucketException;
 import com.pop.popcoinsystem.network.protocol.message.*;
 import com.pop.popcoinsystem.network.protocol.messageData.Handshake;
 import com.pop.popcoinsystem.service.blockChain.BlockChainServiceImpl;
+import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.DifficultyUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +37,8 @@ public class HandshakeResponseMessageHandle implements MessageHandler{
         if (!handshakeSuccess){
             String errorMessage = handshake.getErrorMessage();
             log.error("握手失败:{}", errorMessage);
+            //删除节点
+            kademliaNodeServer.getRoutingTable().delete(sender.extractExternalNodeInfo());
             throw new UnsupportedChainException(errorMessage);
         }
         ExternalNodeInfo data = handshake.getExternalNodeInfo();

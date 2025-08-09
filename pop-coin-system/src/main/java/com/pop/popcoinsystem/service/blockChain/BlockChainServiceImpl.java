@@ -690,7 +690,7 @@ public class BlockChainServiceImpl implements BlockChainService {
         // 获取所有以当前区块为父区块的孤儿区块
         List<Block> orphanBlocks = getOrphanBlocksByParentHash(parentHash);
         if (orphanBlocks.isEmpty()) {
-            log.info("没有依赖哈希={}的孤儿区块", CryptoUtil.bytesToHex(parentHash));
+            log.debug("没有依赖哈希={}的孤儿区块", CryptoUtil.bytesToHex(parentHash));
             return;
         }
         log.info("开始处理依赖哈希={}的{}个孤儿区块",
@@ -732,7 +732,7 @@ public class BlockChainServiceImpl implements BlockChainService {
             log.error("coinBase交易不在区块中");
             return false;
         }
-        log.info("coinBase交易在区块中：{}", CryptoUtil.bytesToHex(coinbaseTx.getTxId()));
+        log.debug("coinBase交易在区块中：{}", CryptoUtil.bytesToHex(coinbaseTx.getTxId()));
         // 3按顺序验证所有交易（不包括CoinBase）
         for (int i = 1; i < transactions.size(); i++) {
             Transaction tx = block.getTransactions().get(i);
@@ -1002,7 +1002,7 @@ public class BlockChainServiceImpl implements BlockChainService {
             return getGenesisBlock();
         }
 
-        log.info("二分法找到共同祖先，高度: {}, 哈希: {}",
+        log.info("找到共同祖先，高度: {}, 哈希: {}",
                 commonHeight, CryptoUtil.bytesToHex(ancestorBlock.getHash()));
         return ancestorBlock;
     }

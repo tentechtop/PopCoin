@@ -1,5 +1,6 @@
 package com.pop.popcoinsystem.network.common;
 
+import com.pop.popcoinsystem.data.block.BlockHeader;
 import com.pop.popcoinsystem.network.enums.NodeNatType;
 import com.pop.popcoinsystem.network.enums.NodeStatus;
 import com.pop.popcoinsystem.network.enums.NodeType;
@@ -39,6 +40,17 @@ public class ExternalNodeInfo implements Comparable<Object>, Serializable {
     protected BigInteger distance;//与当前节点的距离
     //节点公钥
     private byte[] publicKey; //公钥byte[]
+
+
+    public NodeInfo extractNodeInfo() {
+        NodeInfo nodeInfo = new NodeInfo();
+        nodeInfo.setId(id);
+        nodeInfo.setIpv4(ipv4);
+        nodeInfo.setUdpPort(udpPort);
+        nodeInfo.setTcpPort(tcpPort);
+        return nodeInfo;
+    }
+
 
 
     public ExternalNodeInfo(BigInteger id, String ipv4, String ipv6, int udpPort, int tcpPort,boolean isSeedNode) {
