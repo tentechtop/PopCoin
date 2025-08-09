@@ -21,6 +21,8 @@ public class PingMessageHandler implements MessageHandler {
         log.info("收到ping");
         //更新
         kademliaNodeServer.getRoutingTable().update(message.getSender());
+
+
         PongKademliaMessage pongKademliaMessage = new PongKademliaMessage();
         long requestId = message.getRequestId();//响应消息必须保持一致
         pongKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());

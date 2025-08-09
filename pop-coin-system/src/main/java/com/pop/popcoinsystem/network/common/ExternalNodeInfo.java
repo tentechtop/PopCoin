@@ -52,7 +52,6 @@ public class ExternalNodeInfo implements Comparable<Object>, Serializable {
     }
 
 
-
     public ExternalNodeInfo(BigInteger id, String ipv4, String ipv6, int udpPort, int tcpPort,boolean isSeedNode) {
         this.id = id;
         this.ipv4 = ipv4;

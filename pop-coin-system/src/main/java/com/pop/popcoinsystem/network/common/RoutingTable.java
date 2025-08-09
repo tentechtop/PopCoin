@@ -46,53 +46,42 @@ public class RoutingTable {
     }
 
 
-
     /**
      * 更新路由表 添加或移动节点到适当的K桶
      */
     public boolean update(ExternalNodeInfo node) throws FullBucketException {
-        lock.writeLock().lock();
-        try {
-            node.setNodeStatus(NodeStatus.ACTIVE);//在线
-            node.onSuccessfulResponse(false);
-            node.setLastSeen(new Date());
-            Bucket bucket = this.findBucket(node.getId());
-            // 更新桶的访问时间
-            lastBucketAccessTime.put(bucket.getId(), System.currentTimeMillis());
-            node.setDistance(node.getId().xor(this.localNodeId));
-            if (bucket.contains(node)) {
-                bucket.pushToFront(node);
-                return false;
-            }else if (bucket.size() < this.nodeSettings.getBucketSize()) {
-                bucket.add(node);
-                return true;
-            }
-        } finally {
-            lock.writeLock().unlock();
+        node.setNodeStatus(NodeStatus.ACTIVE);//在线
+        node.onSuccessfulResponse(false);
+        node.setLastSeen(new Date());
+        Bucket bucket = this.findBucket(node.getId());
+        // 更新桶的访问时间
+        lastBucketAccessTime.put(bucket.getId(), System.currentTimeMillis());
+        node.setDistance(node.getId().xor(this.localNodeId));
+        if (bucket.contains(node)) {
+            bucket.pushToFront(node);
+            return false;
+        }else if (bucket.size() < this.nodeSettings.getBucketSize()) {
+            bucket.add(node);
+            return true;
         }
         throw new FullBucketException();
     }
 
     public boolean update(NodeInfo updateNode) throws FullBucketException {
-        lock.writeLock().lock();
-        try {
-            ExternalNodeInfo node = updateNode.extractExternalNodeInfo();
-            node.setNodeStatus(NodeStatus.ACTIVE);//在线
-            node.onSuccessfulResponse(false);
-            node.setLastSeen(new Date());
-            Bucket bucket = this.findBucket(node.getId());
-            // 更新桶的访问时间
-            lastBucketAccessTime.put(bucket.getId(), System.currentTimeMillis());
-            node.setDistance(node.getId().xor(this.localNodeId));
-            if (bucket.contains(node)) {
-                bucket.pushToFront(node);
-                return false;
-            }else if (bucket.size() < this.nodeSettings.getBucketSize()) {
-                bucket.add(node);
-                return true;
-            }
-        } finally {
-            lock.writeLock().unlock();
+        ExternalNodeInfo node = updateNode.extractExternalNodeInfo();
+        node.setNodeStatus(NodeStatus.ACTIVE);//在线
+        node.onSuccessfulResponse(false);
+        node.setLastSeen(new Date());
+        Bucket bucket = this.findBucket(node.getId());
+        // 更新桶的访问时间
+        lastBucketAccessTime.put(bucket.getId(), System.currentTimeMillis());
+        node.setDistance(node.getId().xor(this.localNodeId));
+        if (bucket.contains(node)) {
+            bucket.pushToFront(node);
+            return false;
+        }else if (bucket.size() < this.nodeSettings.getBucketSize()) {
+            bucket.add(node);
+            return true;
         }
         throw new FullBucketException();
     }
