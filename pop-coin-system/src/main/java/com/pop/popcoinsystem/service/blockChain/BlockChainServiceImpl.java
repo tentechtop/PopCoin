@@ -452,8 +452,6 @@ public class BlockChainServiceImpl implements BlockChainService {
         // 4. 计算中位数（与calculateMedianTime逻辑一致）
         Collections.sort(ancestorTimestamps);
         long calculatedMedian = ancestorTimestamps.get(ancestorTimestamps.size() / 2);
-        log.info("中位时间计算完成，参与计算的时间戳：{}，中位时间：{}", ancestorTimestamps, calculatedMedian);
-        log.info("区块中位时间:{}",block.getMedianTime());
         // 5. 验证区块记录的中位时间是否匹配
         if (block.getMedianTime() != calculatedMedian) {
             log.error("中位时间不匹配，区块记录：{}，计算结果：{}，区块哈希：{}",
