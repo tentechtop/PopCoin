@@ -221,7 +221,7 @@ public class BlockChainServiceImpl implements BlockChainService {
                 // 父区块不存在，加入孤儿区块池
                 byte[] parentHash = block.getPreviousHash();
                 addOrphanBlock(parentHash, block);
-                log.warn("父区块不存在，加入孤儿池: 区块哈希={}, 父哈希={}",
+                log.info("父区块不存在，加入孤儿池: 区块哈希={}, 父哈希={}",
                         CryptoUtil.bytesToHex(block.getHash()),
                         CryptoUtil.bytesToHex(parentHash));
                 return false;

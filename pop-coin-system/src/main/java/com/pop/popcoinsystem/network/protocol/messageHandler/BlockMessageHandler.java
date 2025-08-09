@@ -1,6 +1,7 @@
 package com.pop.popcoinsystem.network.protocol.messageHandler;
 
 import com.pop.popcoinsystem.data.block.Block;
+import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.network.protocol.message.BlockMessage;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
@@ -22,6 +23,7 @@ public class BlockMessageHandler implements MessageHandler {
     }
 
     protected BlockMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull BlockMessage message) throws InterruptedException, ConnectException {
+        NodeInfo sender = message.getSender();
         Block data = message.getData();
         byte[] bytes = data.getHash();
         long blockMessageId = ByteUtils.bytesToLong(bytes);
@@ -29,9 +31,15 @@ public class BlockMessageHandler implements MessageHandler {
             log.info("接收已处理的区块消息 {}，丢弃", blockMessageId);
         }else {
             BlockChainServiceImpl localBlockChainService = kademliaNodeServer.getBlockChainService();
+            // 记录：标记为已处理
+            kademliaNodeServer.getBroadcastMessages().put(blockMessageId, Boolean.TRUE);
+            kademliaNodeServer.getBlockChainService().verifyBlock(data,false);
+            message.setSender(kademliaNodeServer.getNodeInfo());
+            kademliaNodeServer.broadcastMessage(message,message.getSender());
+
             Thread.startVirtualThread(() -> {
-                if (!Objects.equals(message.getSender().getId(), kademliaNodeServer.getNodeInfo().getId())) {
-                    log.info("收到来自 {} 的区块消息", message.getSender().getId());
+                if (!Objects.equals(sender.getId(), kademliaNodeServer.getNodeInfo().getId())) {
+                    log.info("收到来自 {} 的区块消息", sender.getIpv4());
                     long remoteLatestBlockHeight = data.getHeight();
                     byte[] remoteLatestBlockHash = data.getHash();
                     byte[] remoteLatestChainWork = data.getChainWork();
@@ -41,10 +49,10 @@ public class BlockMessageHandler implements MessageHandler {
                     byte[] localLatestChainWork = mainLatestBlock.getChainWork();
                     //提交差异
                     if (localLatestHeight != remoteLatestBlockHeight) {
-                        log.info("广播 节点{}的区块高度不一致，提交差异", message.getSender().getId());
+                        log.info("广播 节点{}的区块高度不一致，提交差异", sender.getId());
                         try {
                             localBlockChainService.compareAndSync(
-                                    message.getSender(),
+                                    sender,
                                     localLatestHeight,
                                     localLatestHash,
                                     localLatestChainWork,
@@ -60,17 +68,6 @@ public class BlockMessageHandler implements MessageHandler {
                     }
                 }
             });
-
-
-            // 记录：标记为已处理
-            kademliaNodeServer.getBroadcastMessages().put(blockMessageId, Boolean.TRUE);
-            kademliaNodeServer.getBlockChainService().verifyBlock(data,false);
-            message.setSender(kademliaNodeServer.getNodeInfo());
-            kademliaNodeServer.broadcastMessage(message,message.getSender());
-
-            //如果这个节点不是自己
-            log.info("本节点 {}", kademliaNodeServer.getNodeInfo().getIpv4());
-            log.info("远程节点 {}", message.getSender().getIpv4());
         }
         return null;
     }
