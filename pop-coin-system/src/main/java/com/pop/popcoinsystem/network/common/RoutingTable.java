@@ -550,6 +550,37 @@ public class RoutingTable {
         return allNodes;
     }
 
+
+    public List<ExternalNodeInfo> getAllActiveNodes() {
+        // 初始化存储所有节点的列表
+        List<ExternalNodeInfo> allNodes = new ArrayList<>();
+        // 获取读锁，确保线程安全
+        lock.readLock().lock();
+        try {
+            // 遍历所有桶
+            for (Bucket bucket : buckets) {
+                // 遍历当前桶中的所有节点ID
+                for (BigInteger nodeId : bucket.getNodeIds()) {
+                    // 跳过本地节点（不返回自身节点信息）
+                    if (nodeId.equals(localNodeId)) {
+                        continue;
+                    }
+                    // 获取节点信息并添加到列表
+                    ExternalNodeInfo node = bucket.getNode(nodeId);
+                    if (node != null && node.getNodeStatus() == NodeStatus.ACTIVE) {
+                        allNodes.add(node);
+                    }
+                }
+            }
+        } finally {
+            // 确保锁被释放
+            lock.readLock().unlock();
+        }
+        return allNodes;
+    }
+
+
+
     public ExternalNodeInfo findNode (BigInteger id) {
         // 查找节点 ID 对应的桶
         Bucket bucket = findBucket(id);

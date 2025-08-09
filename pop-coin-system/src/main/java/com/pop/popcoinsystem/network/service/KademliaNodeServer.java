@@ -449,7 +449,7 @@ public class KademliaNodeServer {
      */
     private void checkNodeLiveness(long now) {
         // 获取路由表中所有节点  或者本节点最近的节点 或者用抽样检测
-        List<ExternalNodeInfo> allNodes = routingTable.getAllNodes();
+        List<ExternalNodeInfo> allNodes = routingTable.getAllActiveNodes();
         if (allNodes.isEmpty()) {
             log.info("路由表为空，无需检查节点活性");
             return;
