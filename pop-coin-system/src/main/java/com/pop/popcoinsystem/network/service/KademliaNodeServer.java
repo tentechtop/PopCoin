@@ -480,6 +480,8 @@ public class KademliaNodeServer {
             PingKademliaMessage pingMsg = new PingKademliaMessage();
             pingMsg.setSender(nodeInfo);
             pingMsg.setReceiver(BeanCopyUtils.copyObject(node, NodeInfo.class));
+            pingMsg.setReqResId();
+            pingMsg.setResponse(false);
             udpClient.sendAsyncMessage(pingMsg);
         } catch (Exception e) {
             log.error("向节点 {} 发送Ping检查失败", node.getId(), e);
