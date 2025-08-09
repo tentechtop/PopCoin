@@ -53,7 +53,11 @@ public class Bucket {
     }
 
     public ExternalNodeInfo getNode(BigInteger id) {
-        return nodeMap.get(id);
+        ExternalNodeInfo externalNodeInfo = nodeMap.get(id);
+        if (externalNodeInfo != null){
+            return externalNodeInfo;
+        }
+        return null;
     }
 
     public void remove(BigInteger nodeId){

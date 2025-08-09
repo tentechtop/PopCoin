@@ -1,5 +1,6 @@
 package com.pop.popcoinsystem.network.protocol.messageHandler;
 
+import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.exception.FullBucketException;
 import com.pop.popcoinsystem.network.common.NodeInfo;
@@ -21,9 +22,14 @@ public class PongMessageHandler implements MessageHandler{
 
     protected EmptyKademliaMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull PongKademliaMessage message) throws InterruptedException, FullBucketException, ConnectException {
         log.info("收到pong");
-        //更新节点
-        NodeInfo sender = message.getSender();
-        kademliaNodeServer.getRoutingTable().update(sender);
+        ExternalNodeInfo node = kademliaNodeServer.getRoutingTable().findNode(message.getSender().getId());
+        if (node == null){
+            NodeInfo sender = message.getSender();
+            kademliaNodeServer.getRoutingTable().update(sender);
+        }else {
+            node.updateAddInfo(message.getSender());
+            kademliaNodeServer.getRoutingTable().update(node);
+        }
         return new EmptyKademliaMessage();
     }
 

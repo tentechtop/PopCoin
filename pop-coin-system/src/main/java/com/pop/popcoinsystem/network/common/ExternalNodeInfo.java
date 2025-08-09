@@ -147,4 +147,10 @@ public class ExternalNodeInfo implements Comparable<Object>, Serializable {
     }
 
 
+    public void updateAddInfo(NodeInfo nodeInfo){
+        this.ipv4 = nodeInfo.getIpv4();
+        this.udpPort = nodeInfo.getUdpPort();
+        this.tcpPort = nodeInfo.getTcpPort();
+    }
+
 }

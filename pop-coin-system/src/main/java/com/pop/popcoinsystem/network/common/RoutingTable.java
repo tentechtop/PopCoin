@@ -571,9 +571,7 @@ public class RoutingTable {
 
 
     public ExternalNodeInfo findNode (BigInteger id) {
-        // 查找节点 ID 对应的桶
         Bucket bucket = findBucket(id);
-        // 从桶中获取节点（Bucket 需实现 getNode (BigInteger id) 方法返回对应节点）
         return bucket.getNode(id);
     }
 
