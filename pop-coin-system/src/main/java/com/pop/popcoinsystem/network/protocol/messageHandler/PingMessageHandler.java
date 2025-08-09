@@ -1,5 +1,6 @@
 package com.pop.popcoinsystem.network.protocol.messageHandler;
 
+import com.pop.popcoinsystem.exception.FullBucketException;
 import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
@@ -13,11 +14,13 @@ import java.io.Serializable;
 public class PingMessageHandler implements MessageHandler {
 
     @Override
-    public KademliaMessage<? extends Serializable> handleMesage(KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) throws InterruptedException {
+    public KademliaMessage<? extends Serializable> handleMesage(KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) throws InterruptedException, FullBucketException {
         return doHandle(kademliaNodeServer, (PingKademliaMessage) message);
     }
-    protected PongKademliaMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull PingKademliaMessage message) throws InterruptedException {
+    protected PongKademliaMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull PingKademliaMessage message) throws InterruptedException, FullBucketException {
         log.info("收到ping");
+        //更新
+        kademliaNodeServer.getRoutingTable().update(message.getSender());
         PongKademliaMessage pongKademliaMessage = new PongKademliaMessage();
         long requestId = message.getRequestId();//响应消息必须保持一致
         pongKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());
