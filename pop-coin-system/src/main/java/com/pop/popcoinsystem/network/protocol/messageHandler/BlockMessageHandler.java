@@ -11,6 +11,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.Serializable;
 import java.net.ConnectException;
+import java.util.Objects;
 
 @Slf4j
 public class BlockMessageHandler implements MessageHandler {
@@ -36,26 +37,29 @@ public class BlockMessageHandler implements MessageHandler {
             kademliaNodeServer.broadcastMessage(message);
 
             //如果本链落后就请求同步
-            long remoteLatestBlockHeight = data.getHeight();
-            byte[] remoteLatestBlockHash = data.getHash();
-            byte[] remoteLatestChainWork = data.getChainWork();
+            //如果这个节点不是自己
+            if (!Objects.equals(message.getSender().getId(), kademliaNodeServer.getNodeInfo().getId())) {
+                long remoteLatestBlockHeight = data.getHeight();
+                byte[] remoteLatestBlockHash = data.getHash();
+                byte[] remoteLatestChainWork = data.getChainWork();
 
-            Block mainLatestBlock = localBlockChainService.getMainLatestBlock();
-            long localLatestHeight = mainLatestBlock.getHeight();
-            byte[] localLatestHash = mainLatestBlock.getHash();
-            byte[] localLatestChainWork = mainLatestBlock.getChainWork();
-            //提交差异
+                Block mainLatestBlock = localBlockChainService.getMainLatestBlock();
+                long localLatestHeight = mainLatestBlock.getHeight();
+                byte[] localLatestHash = mainLatestBlock.getHash();
+                byte[] localLatestChainWork = mainLatestBlock.getChainWork();
+                //提交差异
 
-            if (localLatestHeight != remoteLatestBlockHeight) {
-                localBlockChainService.compareAndSync(
-                        message.getSender(),
-                        localLatestHeight,
-                        localLatestHash,
-                        localLatestChainWork,
-                        remoteLatestBlockHeight,
-                        remoteLatestBlockHash,
-                        remoteLatestChainWork
-                );
+                if (localLatestHeight != remoteLatestBlockHeight) {
+                    localBlockChainService.compareAndSync(
+                            message.getSender(),
+                            localLatestHeight,
+                            localLatestHash,
+                            localLatestChainWork,
+                            remoteLatestBlockHeight,
+                            remoteLatestBlockHash,
+                            remoteLatestChainWork
+                    );
+                }
             }
         }
         return null;

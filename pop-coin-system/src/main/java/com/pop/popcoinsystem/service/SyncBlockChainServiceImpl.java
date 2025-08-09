@@ -58,7 +58,7 @@ public class SyncBlockChainServiceImpl {
     }
 
     public Result getBlockByHash(String hash) throws InterruptedException, ConnectException {
-        // 1. 准备目标服务节点信息
+   /*     // 1. 准备目标服务节点信息
         NodeInfo nodeInfo = new NodeInfo();
         nodeInfo.setId(BigInteger.ONE);
         nodeInfo.setIpv4("192.168.137.102");
@@ -73,7 +73,7 @@ public class SyncBlockChainServiceImpl {
         pingKademliaMessage.setReceiver(nodeInfo);
         pingKademliaMessage.setReqResId();
         pingKademliaMessage.setResponse(false);
-        kademliaNodeServer.getTcpClient().sendMessage(pingKademliaMessage);
+        kademliaNodeServer.getTcpClient().sendMessage(pingKademliaMessage);*/
         return Result.ok();
     }
 

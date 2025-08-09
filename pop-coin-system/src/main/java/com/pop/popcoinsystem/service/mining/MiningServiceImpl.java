@@ -108,18 +108,16 @@ public class MiningServiceImpl {
         log.info("开始初始化挖矿服务...");
         isMining = true;
         miningExecutor.submit(() -> {
-            Thread.currentThread().setPriority(Thread.NORM_PRIORITY);//NORM_PRIORITY  MIN_PRIORITY
-            while (isMining) {
+            while (true){
+                if (!isMining) {
+                    Thread.sleep(1000); // 未挖矿时休眠，减少CPU占用
+                    continue;
+                }
                 try {
                     mineOneBlock();
                 } catch (Exception e) {
-                    log.error("单区块挖矿异常，将重试", e);
-                    try {
-                        Thread.sleep(1000); // 异常后短暂休眠避免CPU空转
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
+                    log.error("挖矿异常，将重试", e);
+                    Thread.sleep(1000);
                 }
             }
         });
@@ -150,6 +148,7 @@ public class MiningServiceImpl {
     }
 
     private void mineOneBlock() throws Exception {
+        log.info("开始挖矿...");
         // 1. 等待同步完成（同步时暂停挖矿）
         waitForSyncCompletion();
 
@@ -253,27 +252,29 @@ public class MiningServiceImpl {
         }
         // 同步完成后，若之前在挖矿，直接恢复（无需重新初始化资源）
         if (wasMiningBeforeSync) {
-            log.info("同步完成，恢复挖矿");
+            log.info("同步完成，恢复挖矿-waitForSyncCompletion {}",isMining);
             wasMiningBeforeSync = false;
         }
     }
 
-
-    // 重写同步暂停/恢复方法（仅操作状态，不碰资源）
     public void pauseMiningForSync() {
         if (isMining) {
             wasMiningBeforeSync = true;
             isMining = false; // 仅暂停循环，不释放资源
-            log.info("因同步暂停挖矿（资源保持）");
+            log.info("因同步暂停挖矿");
         }
     }
 
     public void resumeMiningAfterSync() {
         if (wasMiningBeforeSync && !isMining) {
             isMining = true; // 恢复循环
-            log.info("同步完成，恢复挖矿");
+            log.info("同步完成，恢复挖矿 {}",isMining);
         }
     }
+
+
+
+
 
     public void initBlockChain(){
         Block genesisBlock = blockChainService.getMainBlockByHeight(0);

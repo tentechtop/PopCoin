@@ -35,6 +35,8 @@ public class RpcProxyFactory {
         this.routingTable = server.getRoutingTable();
         this.localNodeInfo = server.getNodeInfo();
 
+        log.info("创建RPC代理，目标节点为：{}", targetNode);
+
         // 检查目标节点是否在线
         if (!routingTable.isNodeAvailable(targetNode)) {
             log.warn("指定的目标节点{}可能不可用，尝试从路由表获取可用节点", targetNode);

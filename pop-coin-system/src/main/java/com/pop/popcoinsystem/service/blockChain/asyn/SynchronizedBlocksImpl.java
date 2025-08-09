@@ -78,7 +78,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
             return t;
         });
         //延迟60秒执行 之后每30分钟执行一次
-        scheduler.scheduleAtFixedRate(this::findTheHighest, 60, 60*30, TimeUnit.SECONDS);
+        scheduler.scheduleAtFixedRate(this::findTheHighest, 15, 60*30, TimeUnit.SECONDS);
     }
 
     public void compareAndSync(NodeInfo remoteNode,
@@ -248,16 +248,13 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
         startSync();
         log.info("开始从远程节点[{}]同步区块，起始高度: {}", remoteNode.getId().toString().substring(0, 8), startHeight);
 
-
         //开始同步 异步单线程每次500个区块头 验证完就下载50个区块体 并合并到主链
-
         processExecutor.submit(() -> {
             try {
                 // 1. 初始化远程服务代理
                 RpcProxyFactory rpcProxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
                 rpcProxyFactory.setTimeout(5000);
                 BlockChainService remoteService = rpcProxyFactory.createProxy(BlockChainService.class);
-
 
                 // 2. 获取远程最新高度，确定同步终点
                 long remoteLatestHeight = remoteService.getMainLatestHeight();
@@ -514,21 +511,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
         return heightToHeaderMap;
     }
 
-    private BlockHeader fetchBlockHeaderFromNode(BigInteger nodeId, long currentHeight) {
-        NodeInfo remoteNode = kademliaNodeServer.getNodeInfo(nodeId);
-        if (remoteNode == null) {
-            throw new RuntimeException("节点不可用: " + nodeId);
-        }
-        RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, remoteNode);
-        proxyFactory.setTimeout(RPC_TIMEOUT);
-        BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
-        BlockHeader blockHeader = remoteService.getBlockHeader(currentHeight);
-        log.debug("获取区块[{}]成功", currentHeight);
-        return blockHeader;
-    }
-
-
-
     @PreDestroy
     public void destroy() {
         scheduler.shutdown();
@@ -548,6 +530,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
     public void finishSync() {
         isSyncing = false;
         // 同步完成后，若同步前在挖矿，则恢复挖矿
+        log.info("同步结束 调用 - > 恢复挖矿");
         miningService.resumeMiningAfterSync();
     }
 
@@ -572,7 +555,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
             log.info("开始获取网络最大高度{}", allNodes);
             // 遍历健康节点获取最高高度
             for (ExternalNodeInfo nodeInfo : allNodes) {
-                NodeInfo node = BeanCopyUtils.copyObject(nodeInfo, NodeInfo.class);
+                NodeInfo node = nodeInfo.extractNodeInfo();
                 try {
                     RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, node);
                     BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
