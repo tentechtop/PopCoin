@@ -31,9 +31,9 @@ public class MiningStorageService {
     /**
      * 新增或者修改本节点的矿工信息
      */
-    public void addOrUpdateMiner(Miner value) {
+    public void addOrUpdateMiner(Miner miner) {
         try {
-            byte[] valueBytes = SerializeUtils.serialize(value);
+            byte[] valueBytes = SerializeUtils.serialize(miner);
             db.put(ColumnFamily.MINER_INFO.getHandle(), KEY_MINER, valueBytes);
         } catch (RocksDBException e) {
             log.error("保存矿工信息失败: key={}", KEY_MINER, e);

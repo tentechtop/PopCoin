@@ -125,67 +125,6 @@ public class StorageService {
     }
 
 
-
-
-    //备选链操作.............................................................................................................
-    //新增备选链条 高度对应的 区块hash 备选链存储，用于处理分叉
-    public void putALTBlockHeight(long height, byte[] hash) {
-        try {
-            byte[] heightBytes = ByteUtils.toBytes(height);  //List<byte[]>
-            //先获取
-            byte[] oldHash = db.get(ColumnFamily.ALT_BLOCK_CHAIN_INDEX.getHandle(), heightBytes);
-            HashSet<byte[]> blockHash = new HashSet<>();
-            if (oldHash == null) {
-                blockHash.add(hash);
-            }else {
-                blockHash = (HashSet<byte[]>) SerializeUtils.deSerialize(oldHash);
-                blockHash.add(hash);
-            }
-            db.put(ColumnFamily.ALT_BLOCK_CHAIN_INDEX.getHandle(), heightBytes, SerializeUtils.serialize(blockHash));
-        } catch (RocksDBException e) {
-            log.error("保存备选链高度失败: height={}", height, e);
-            throw new RuntimeException("保存备选链高度失败", e);
-        }
-    }
-    //删除备选链 中的一个区块缩影
-    public void deleteALTBlockHeight(long height, byte[] hash) {
-        try {
-            byte[] heightBytes = ByteUtils.toBytes(height);
-            byte[] oldHash = db.get(ColumnFamily.ALT_BLOCK_CHAIN_INDEX.getHandle(), heightBytes);
-            HashSet<byte[]> blockHash = (HashSet<byte[]>) SerializeUtils.deSerialize(oldHash);
-            blockHash.remove(hash);
-            db.put(ColumnFamily.ALT_BLOCK_CHAIN_INDEX.getHandle(), heightBytes, SerializeUtils.serialize(blockHash));
-        } catch (RocksDBException e) {
-            log.error("删除备选链高度失败: height={}", height, e);
-            throw new RuntimeException("删除备选链高度失败", e);
-        }
-    }
-    //根据高度获取备选 该高度的所有备选
-    public Set<byte[]> getALTBlockHashByHeight(long height) {
-        try {
-            byte[] heightBytes = ByteUtils.toBytes(height);
-            byte[] blockHash = db.get(ColumnFamily.ALT_BLOCK_CHAIN_INDEX.getHandle(), heightBytes);
-            HashSet<byte[]> bytes = new HashSet<>();
-            if (blockHash == null){
-                return bytes;
-            }else {
-                bytes = (HashSet<byte[]>) SerializeUtils.deSerialize(blockHash);
-            }
-            return bytes;
-        } catch (RocksDBException e) {
-            log.error("通过高度获取区块hash失败: height={}", height, e);
-            throw new RuntimeException("通过高度获取区块hash失败", e);
-        }
-    }
-
-
-
-
-
-
-
-
-
     // ------------------------------ 数据操作 ------------------------------
     /**
      * 保存区块
@@ -1615,8 +1554,6 @@ public class StorageService {
         //交易到区块的索引 Map<String, byte[]>   一笔交易只可能存在于一个区块
         TRANSACTION_INDEX("CF_TRANSACTION_INDEX", "transactionIndex", new ColumnFamilyOptions()),
 
-        // 备选链存储，用于处理分叉 Map<Long, Set<byte[]>>  高度到 多个区块hash
-        ALT_BLOCK_CHAIN_INDEX("CF_ALT_BLOCK_CHAIN_INDEX", "altBlockChainIndex",new ColumnFamilyOptions()),
         //UTXO 基础索引
         UTXO("CF_UTXO", "utxo",new ColumnFamilyOptions()
                 .setTableFormatConfig(new BlockBasedTableConfig()

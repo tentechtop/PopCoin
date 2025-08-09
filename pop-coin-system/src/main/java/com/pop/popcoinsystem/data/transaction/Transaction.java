@@ -1096,4 +1096,19 @@ public class Transaction implements Serializable {
         return coinbaseTx;
     }
 
+    /**
+     * 判断是否为CoinBase交易（区块中第一笔交易，输入无有效UTXO）
+     */
+    public static boolean isCoinBaseTransaction(Transaction transaction) {
+        List<TXInput> inputs = transaction.getInputs();
+        if (inputs == null || inputs.size() != 1) {
+            return false;
+        }
+        TXInput input = inputs.getFirst();
+        // CoinBase交易的输入txId为全零，且vout为特殊值（如-1或0，根据协议定义）
+        return input.getTxId() != null
+                && Arrays.equals(input.getTxId(), new byte[32])  // txId为全零
+                && (input.getVout() == -1 || input.getVout() == 0);  // 匹配协议定义的特殊值
+    }
+
 }

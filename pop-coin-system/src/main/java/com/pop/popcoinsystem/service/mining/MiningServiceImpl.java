@@ -42,7 +42,6 @@ public class MiningServiceImpl {
 
     @Autowired
     private StorageService storageService;
-
     @Lazy
     @Autowired
     private BlockChainServiceImpl blockChainService;
@@ -53,17 +52,18 @@ public class MiningServiceImpl {
     @Value("${system.mining.miner-address:1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa}")
     private String minerAddress;
 
+    // 跟踪当前正在挖矿的区块
+    private volatile Block currentMiningBlock;
 
     // CPU挖矿性能控制（0-100，默认85%）
     private volatile int miningPerformance = 15;
     // GPU挖矿性能控制（0-100，默认100%）
     private volatile int gpuMiningPerformance = 90;
-
+    //是否启动挖矿服务 用于停止挖矿的标志 保证变量的可见性
+    volatile public static boolean isMining = false;
 
     // 当前难度目标（前导零的数量）
     private static long currentDifficulty = 1;
-    //是否启动挖矿服务 用于停止挖矿的标志
-    public static boolean isMining = false;
     //交易池
     private final Map<byte[], Transaction> transactions = new ConcurrentHashMap<>();
     private long currentSize = 0;
@@ -78,16 +78,18 @@ public class MiningServiceImpl {
     private CUcontext cudaContext; // 类成员变量
 
     @Autowired
-    private SynchronizedBlocksImpl syncService; // 同步服务，需自行实现
+    private SynchronizedBlocksImpl syncService; // 同步服务
     // 记录同步前的挖矿状态，用于同步完成后恢复
     private volatile boolean wasMiningBeforeSync = false;
-
+    // 挖矿超时时间（15分钟，单位：毫秒）
+    private static final long MINING_TIMEOUT_MS = 15 * 60 * 1000;
+    // 用于GPU挖矿 和 CPU挖矿 超时控制的调度器
+    private static ScheduledExecutorService timeoutScheduler;
 
     /**
      * 启动挖矿
      */
     public Result<String> startMining() throws Exception {
-
         if (isMining) {
             return Result.error("ERROR: The node is already mining ! ");
         }
@@ -103,6 +105,7 @@ public class MiningServiceImpl {
         log.info("最新区块难度目标: {}", CryptoUtil.bytesToHex(block.getDifficultyTarget()));
         log.info("最新区块难度: {}", currentDifficulty);
         initExecutor();
+        initTimeoutScheduler(); // 初始化超时调度器
         if (miningType == 2){
             initCuda();
         }
@@ -110,7 +113,7 @@ public class MiningServiceImpl {
         new Thread(() -> {
             Thread.currentThread().setPriority(Thread.NORM_PRIORITY);//NORM_PRIORITY  MIN_PRIORITY
             while (isMining) {
-                // 关键：每次循环都检查是否正在同步，若同步则等待
+                // 每次循环都检查是否正在同步，若同步则等待
                 while (syncService.isSyncing()) {
                     log.info("检测到区块链正在同步，暂停挖矿等待同步完成...");
                     try {
@@ -142,20 +145,37 @@ public class MiningServiceImpl {
                 log.info("创建CoinBase交易 矿工地址 : {}", minerAddress);
                 blockTransactions.add(coinBaseTransaction);
                 blockTransactions.addAll(transactions);
-                newBlock.setTransactions(blockTransactions);
-                newBlock.calculateAndSetMerkleRoot();
-                newBlock.setTime(System.currentTimeMillis() /1000);
-                newBlock.setDifficulty(currentDifficulty);
-                newBlock.setDifficultyTarget(DifficultyUtils.difficultyToCompact(currentDifficulty));
-                long medianTime = blockChainService.calculateMedianTime();
-                newBlock.setMedianTime(medianTime);
-                byte[] chainWork = latestBlock.getChainWork();
-                byte[] add = DifficultyUtils.add(chainWork, currentDifficulty);
-                newBlock.setChainWork(add);
-                newBlock.calculateAndSetSize();
-                newBlock.calculateAndSetWeight();
-                newBlock.setTxCount(blockTransactions.size());
-                newBlock.setWitnessSize(newBlock.calculateWitnessSize());
+
+                Set<byte[]> invalidTxIds = validateBlockTransactions(blockTransactions);
+                if (invalidTxIds.isEmpty()) {
+                    // 交易有效，完成区块初始化
+                    newBlock = new Block();
+                    newBlock.setTransactions(blockTransactions);
+                    newBlock.calculateAndSetMerkleRoot();
+                    newBlock.setTime(System.currentTimeMillis() /1000);
+                    newBlock.setDifficulty(currentDifficulty);
+                    newBlock.setDifficultyTarget(DifficultyUtils.difficultyToCompact(currentDifficulty));
+                    long medianTime = blockChainService.calculateMedianTime();
+                    newBlock.setMedianTime(medianTime);
+                    byte[] chainWork = latestBlock.getChainWork();
+                    byte[] add = DifficultyUtils.add(chainWork, currentDifficulty);
+                    newBlock.setChainWork(add);
+                    newBlock.calculateAndSetSize();
+                    newBlock.calculateAndSetWeight();
+                    newBlock.setTxCount(blockTransactions.size());
+                    newBlock.setWitnessSize(newBlock.calculateWitnessSize());
+                    currentMiningBlock = newBlock;
+                    log.info("区块 #{} 交易校验通过，准备挖矿", newBlock.getHeight());
+                }else {
+                    // 5. 存在无效交易，清理后重试
+                    log.info("区块 #{} 包含{}个无效交易，将重新打包", blockHeight + 1, invalidTxIds.size());
+                    // 从交易池移除已确认的无效交易（避免再次被选中）
+                    for (byte[] txId : invalidTxIds) {
+                        removeTransaction(txId);
+                    }
+                    //取消本次进入下一个循环
+                    continue;
+                }
                 log.info("\n开始挖矿新区块 #" + newBlock.getHeight() +
                         " (难度: " + newBlock.getDifficulty() + ", 交易数: " + transactions.size() + ", 手续费: "+ totalFee+  ")");
                 BlockHeader blockHeader = newBlock.extractHeader();
@@ -166,6 +186,7 @@ public class MiningServiceImpl {
                     result = cpuMineBlock(blockHeader);
                 }
                 if (result != null && result.found) {
+                    currentMiningBlock = null; // 重置
                     newBlock.setNonce(result.nonce);
                     newBlock.setHash(result.hash);
                     adjustDifficulty();
@@ -177,12 +198,31 @@ public class MiningServiceImpl {
                     log.info("提交区块到主链...{}", CryptoUtil.bytesToHex(newBlock.getHash()));
                     blockChainService.verifyBlock(newBlock,true);
                 } else {
-                    log.info("区块 #" + newBlock.getHeight() + " 挖矿失败，重新生成区块并打包...");
+                    currentMiningBlock = null; // 重置
+                    if (result == null) {
+                        log.info("区块 #" + newBlock.getHeight() + " 挖矿超时（{}分钟），未找到有效结果，重新生成区块并打包...",
+                                MINING_TIMEOUT_MS / 60000);
+                    } else {
+                        log.info("区块 #" + newBlock.getHeight() + " 挖矿完成，未找到有效结果，重新生成区块并打包...");
+                    }
                 }
             }
         }).start();
         return Result.ok();
     }
+    private void initTimeoutScheduler() {
+        if (timeoutScheduler == null || timeoutScheduler.isShutdown() || timeoutScheduler.isTerminated()) {
+            timeoutScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "mining-timeout-scheduler");
+                t.setDaemon(true);
+                return t;
+            });
+        }
+    }
+
+
+
+
     public void initBlockChain(){
         Block genesisBlock = blockChainService.getMainBlockByHeight(0);
         if (genesisBlock == null) {
@@ -228,17 +268,17 @@ public class MiningServiceImpl {
     private void initExecutor() {
         if (executor == null || executor.isShutdown() || executor.isTerminated()) {
             int corePoolSize = Runtime.getRuntime().availableProcessors(); // CPU核心数
-            int maximumPoolSize = corePoolSize * 1; // 固定线程数
+            int maximumPoolSize = corePoolSize * 2; // 固定线程数
             long keepAliveTime = 0L; // 核心线程不超时（因长期运行）
             TimeUnit unit = TimeUnit.MILLISECONDS;
-            BlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>(); // 无界队列，缓存待执行的挖矿任务
+            BlockingQueue<Runnable> workQueue = new LinkedBlockingQueue<>();
             ThreadFactory threadFactory = r -> {
                 Thread t = new Thread(r, "mining-thread-" + UUID.randomUUID().toString().substring(0, 8));
                 t.setPriority(Thread.NORM_PRIORITY); // 挖矿线程优先级设为正常（避免抢占系统资源）
                 t.setDaemon(false); // 非守护线程（确保挖矿可独立运行，不受主线程影响）
                 return t;
             };
-            RejectedExecutionHandler handler = new ThreadPoolExecutor.CallerRunsPolicy(); // 任务满时让提交者（主线程）执行，避免任务丢失
+            RejectedExecutionHandler handler = new ThreadPoolExecutor.CallerRunsPolicy();
             executor = new ThreadPoolExecutor(
                     corePoolSize,
                     maximumPoolSize,
@@ -250,7 +290,6 @@ public class MiningServiceImpl {
             );
         }
     }
-
     private void initCuda(){
         try {
             // 初始化CUDA驱动
@@ -316,10 +355,6 @@ public class MiningServiceImpl {
             cleanCudaResources();
         }
     }
-
-
-
-
     /**
      * 添加交易到交易池 该交易已经验证
      */
@@ -338,6 +373,11 @@ public class MiningServiceImpl {
         //空间不够直接拒绝
         if (currentSize + tx.getSize() > MAX_SIZE_BYTES) {
             log.warn("Transaction size exceeds maximum allowed size.");
+            return false;
+        }
+        //是否已经被确认
+        if (blockChainService.isTransactionConfirmed(tx.getTxId())) {
+            log.warn("Transaction has already been confirmed.");
             return false;
         }
         // 移除低优先级交易直到有足够空间 移除手续费大小比率 比这个小的
@@ -402,6 +442,40 @@ public class MiningServiceImpl {
         return selectedTxs;
     }
 
+    /**
+     * 校验区块内交易是否有效（无重复、未被确认）
+     * @param blockTransactions 区块中的交易列表（含CoinBase）
+     * @return 有效返回true；无效返回false，并收集无效交易ID
+     */
+    private Set<byte[]> validateBlockTransactions(List<Transaction> blockTransactions) {
+        Set<byte[]> invalidTxIds = new HashSet<>();
+        Set<byte[]> seenTxIds = new HashSet<>(); // 用于检测区块内重复
+
+        for (int i = 0; i < blockTransactions.size(); i++) {
+            Transaction tx = blockTransactions.get(i);
+            byte[] txId = tx.getTxId();
+
+            // 1. 跳过CoinBase交易（第一笔交易，无需校验重复或确认）
+            if (i == 0 && Transaction.isCoinBaseTransaction(tx)) {
+                continue;
+            }
+
+            // 2. 检测区块内重复交易
+            if (seenTxIds.contains(txId)) {
+                log.warn("区块内发现重复交易，txId: {}", CryptoUtil.bytesToHex(txId));
+                invalidTxIds.add(txId);
+                continue;
+            }
+            seenTxIds.add(txId);
+            // 3. 检测交易是否已被主链确认
+            if (blockChainService.isTransactionConfirmed(txId)) {
+                log.warn("交易已被主链确认，无需重复打包，txId: {}", CryptoUtil.bytesToHex(txId));
+                invalidTxIds.add(txId);
+            }
+        }
+        return invalidTxIds;
+    }
+
 
     // 获取交易池中的交易数量
     public synchronized int getTransactionCount() {
@@ -449,6 +523,9 @@ public class MiningServiceImpl {
     }
 
 
+
+
+
     //D:\SoftwareSpace\VisualStudio\Community\VC\Tools\MSVC\14.44.35207\include\yvals_core.h
 
     //C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\include\crt\host_config.h
@@ -474,9 +551,21 @@ public class MiningServiceImpl {
         MiningResult result = new MiningResult();
         CUdeviceptr dHeader = null;
         CUdeviceptr dResult = null;
+        Thread miningThread = Thread.currentThread();
+        ScheduledFuture<?> timeoutFuture = null;
         try {
             // 切换到已初始化的CUDA上下文
             cuCtxSetCurrent(cudaContext);
+
+            // 设置超时任务：15分钟后如果未完成则中断
+            timeoutFuture = timeoutScheduler.schedule(() -> {
+                if (!result.found) {
+                    log.warn("GPU挖矿超时（{}分钟），将终止当前挖矿任务", MINING_TIMEOUT_MS / 60000);
+                    result.found = false;
+                    miningThread.interrupt();
+                }
+            }, MINING_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
             // 1. 准备区块头数据（序列化并复制到GPU内存）
             byte[] headerData = Block.serializeBlockHeader(blockHeader);
             if (headerData.length != 80) {
@@ -545,6 +634,10 @@ public class MiningServiceImpl {
             log.error("GPU挖矿异常", e);
             return cpuMineBlock(blockHeader); // 异常时降级到CPU
         } finally {
+            // 取消超时任务
+            if (timeoutFuture != null) {
+                timeoutFuture.cancel(true);
+            }
             // 释放本次挖矿的临时资源（保留静态资源）
             if (dHeader != null) {
                 cuMemFree(dHeader);
@@ -605,19 +698,25 @@ public class MiningServiceImpl {
      */
     public MiningResult cpuMineBlock(BlockHeader blockHeader) {
         MiningResult result = new MiningResult();
-        Future<?>[] futures = new Future[threadCount];
-        int nonceRange = Integer.MAX_VALUE / threadCount;
-        // 重置结果状态
         result.found = false;
+        initExecutor();
+        int nonceRange = Integer.MAX_VALUE / threadCount;
+        List<Future<?>> futures = new ArrayList<>();
+        CountDownLatch latch = new CountDownLatch(threadCount);
         // 提交所有线程任务
         for (int i = 0; i < threadCount; i++) {
             BlockHeader clone = blockHeader.clone();
             final int startNonce = i * nonceRange;
             final int endNonce = (i == threadCount - 1) ? Integer.MAX_VALUE : (i + 1) * nonceRange;
-            futures[i] = executor.submit(() -> {
-                byte[] difficultyTarget = clone.getDifficultyTarget();
+            futures.add(executor.submit(() -> {
                 try {
+                    byte[] difficultyTarget = clone.getDifficultyTarget();
                     for (int nonce = startNonce; nonce < endNonce && !result.found; nonce++) {
+                        // 检查线程中断状态（用于超时控制）
+                        if (Thread.currentThread().isInterrupted()) {
+                            log.info("CPU挖矿线程被中断（可能是超时）");
+                            break;
+                        }
                         // 每5000次计算执行一次概率休眠
                         if (nonce % 1000 == 0 && miningPerformance < 100) {
                             // 性能控制：计算休眠概率（性能越低，休眠概率越高）
@@ -654,34 +753,36 @@ public class MiningServiceImpl {
                     log.error("线程 " + Thread.currentThread().getName() + " 计算哈希时异常", e);
                     Thread.currentThread().interrupt();
                 }
-            });
+            }));
         }
-
-        // 等待所有任务完成或找到结果（保持原有逻辑不变）
-        try {
-            boolean allCompleted = false;
-            while (!allCompleted && !result.found) {
-                allCompleted = true;
+        // 创建超时任务
+        ScheduledFuture<?> timeoutFuture = timeoutScheduler.schedule(() -> {
+            if (!result.found) {
+                log.warn("CPU挖矿超时（{}分钟），将终止所有挖矿线程", MINING_TIMEOUT_MS / 60000);
+                // 中断所有任务
                 for (Future<?> future : futures) {
-                    if (future != null && !future.isDone()) {
-                        allCompleted = false;
-                        sleep(100);
-                        break;
-                    }
-                }
-            }
-            for (Future<?> future : futures) {
-                if (future != null && !future.isDone()) {
                     future.cancel(true);
                 }
+            }
+        }, MINING_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        // 等待所有任务完成、找到结果或超时
+        try {
+            // 等待所有线程完成或超时
+            if (!latch.await(MINING_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                log.warn("CPU挖矿等待超时");
+                return null; // 超时返回null表示未找到
             }
         } catch (InterruptedException e) {
+            log.info("CPU挖矿被中断");
             Thread.currentThread().interrupt();
+            // 取消所有任务
             for (Future<?> future : futures) {
-                if (future != null) {
-                    future.cancel(true);
-                }
+                future.cancel(true);
             }
+            return null;
+        } finally {
+            // 取消超时任务
+            timeoutFuture.cancel(true);
         }
         return result.found ? result : null;
     }
@@ -722,6 +823,62 @@ public class MiningServiceImpl {
     public Map<byte[], Transaction> getTransactionPool() {
         return transactions;
     }
+
+    public void checkAndRestartMining(Set<byte[]> confirmedTxIds) {
+        if (confirmedTxIds.isEmpty() || !isMining) {
+            return; // 无已确认交易或未在挖矿，直接返回
+        }
+        // 检查当前正在挖矿的区块是否包含已确认交易
+        boolean containsConfirmedTx = isCurrentMiningBlockContains(confirmedTxIds);
+        if (containsConfirmedTx) {
+            log.info("当前挖矿区块包含{}个已确认交易，将取消并重启挖矿", confirmedTxIds.size());
+            // 取消当前挖矿任务
+            cancelCurrentMining();
+            // 重启挖矿（自动选择新的有效交易）
+            try {
+                startMining();
+            } catch (Exception e) {
+                log.error("重启挖矿任务失败", e);
+            }
+        }
+    }
+
+    /**
+     * 判断当前正在挖矿的区块是否包含指定交易ID
+     * @param txIds 待检查的交易ID集合
+     * @return 包含则返回true，否则返回false
+     */
+    private boolean isCurrentMiningBlockContains(Set<byte[]> txIds) {
+        if (currentMiningBlock == null) {
+            return false;
+        }
+        // 遍历当前挖矿区块中的非CoinBase交易
+        for (Transaction tx : currentMiningBlock.getTransactions()) {
+            if (!Transaction.isCoinBaseTransaction(tx) && txIds.contains(tx.getTxId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 取消当前挖矿任务
+     */
+    public void cancelCurrentMining() {
+        if (!isMining || currentMiningBlock == null) {
+            return;
+        }
+        log.info("取消当前挖矿任务（区块高度：{}）", currentMiningBlock.getHeight());
+        isMining = false; // 触发挖矿循环退出
+        currentMiningBlock = null; // 清空当前挖矿区块
+        // 中断CPU挖矿线程（若使用线程池）
+        if (executor != null) {
+            executor.shutdownNow(); // 强制中断所有挖矿线程
+        }
+    }
+
+
+
 
     // 挖矿结果类
     static class MiningResult {

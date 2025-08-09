@@ -46,6 +46,7 @@ import java.util.concurrent.*;
 
 import static com.pop.popcoinsystem.constant.BlockChainConstants.TRANSACTION_VERSION_1;
 import static com.pop.popcoinsystem.constant.BlockChainConstants.*;
+import static com.pop.popcoinsystem.data.transaction.Transaction.isCoinBaseTransaction;
 import static com.pop.popcoinsystem.storage.StorageService.getUTXOKey;
 import static com.pop.popcoinsystem.data.transaction.Transaction.calculateBlockReward;
 import static com.pop.popcoinsystem.util.CryptoUtil.ECDSASigner.getLockingScriptByAddress;
@@ -73,6 +74,12 @@ public class BlockChainServiceImpl implements BlockChainService {
         }
     }
 
+    //孤儿区块池  key是父区块hash   value是一个 hashMap
+    private final Cache<byte[], ConcurrentHashMap<byte[],Block>> orphanBlocks = CacheBuilder.newBuilder()
+            .maximumSize(1000) // 最大缓存1000个区块（防止内存溢出）
+            .expireAfterWrite(30, TimeUnit.MINUTES) // 写入后30秒自动过期（无需手动清理）
+            .concurrencyLevel(Runtime.getRuntime().availableProcessors()) // 并发级别（默认4，可设为CPU核心数）
+            .build();
 
     /**
      * 验证交易
@@ -149,10 +156,10 @@ public class BlockChainServiceImpl implements BlockChainService {
             return true;
         }
         //验证中位置时间
-/*        if (!validateMedianTime(block)){
+        if (!validateMedianTime(block)){
             log.warn("中位置时间验证失败，中位置时间：{}", block.getMedianTime());
             return false;
-        }*/
+        }
         // 防止未来时间（允许超前最多2小时）
         // 注意：block.getTime() 是秒级时间戳，需转换为毫秒后再比较
         long maxAllowedTime = (System.currentTimeMillis()/1000) + (2 * 60 * 60);
@@ -165,6 +172,12 @@ public class BlockChainServiceImpl implements BlockChainService {
         Block parentBlock = getBlockByHash(block.getPreviousHash());
         if (block.getHeight() != 0){
             if (parentBlock == null) {
+                // 父区块不存在，加入孤儿区块池
+                byte[] parentHash = block.getPreviousHash();
+                addOrphanBlock(parentHash, block);
+                log.warn("父区块不存在，加入孤儿池: 区块哈希={}, 父哈希={}",
+                        CryptoUtil.bytesToHex(block.getHash()),
+                        CryptoUtil.bytesToHex(parentHash));
                 return false;
             }
             if (parentBlock.getHeight() + 1 != block.getHeight()) {
@@ -191,6 +204,51 @@ public class BlockChainServiceImpl implements BlockChainService {
             }
         }
         return true;
+    }
+
+
+    /**
+     * 将孤儿区块添加到孤儿池
+     * @param parentHash 父区块哈希
+     * @param block 孤儿区块
+     */
+    private void addOrphanBlock(byte[] parentHash, Block block) {
+        try {
+            // 获取父哈希对应的子区块映射，不存在则创建
+            ConcurrentHashMap<byte[], Block> childBlocks = orphanBlocks.get(parentHash,
+                    ConcurrentHashMap::new);
+            // 存储区块（用自身哈希作为key）
+            childBlocks.put(block.getHash(), block);
+            log.info("添加孤儿区块: 哈希={}, 父哈希={}, 当前孤儿池大小={}",
+                    CryptoUtil.bytesToHex(block.getHash()),
+                    CryptoUtil.bytesToHex(parentHash),
+                    orphanBlocks.size());
+        } catch (ExecutionException e) {
+            log.error("添加孤儿区块失败", e);
+        }
+    }
+
+    /**
+     * 从孤儿池获取指定父哈希的所有孤儿区块
+     * @param parentHash 父区块哈希
+     * @return 孤儿区块列表（可能为空）
+     */
+    private List<Block> getOrphanBlocksByParentHash(byte[] parentHash) {
+        ConcurrentHashMap<byte[], Block> childBlocks = orphanBlocks.getIfPresent(parentHash);
+        if (childBlocks == null || childBlocks.isEmpty()) {
+            return Collections.emptyList();
+        }
+        // 返回副本以避免并发修改问题
+        return new ArrayList<>(childBlocks.values());
+    }
+
+    /**
+     * 从孤儿池移除指定父哈希的所有孤儿区块
+     * @param parentHash 父区块哈希
+     */
+    private void removeOrphanBlocksByParentHash(byte[] parentHash) {
+        orphanBlocks.invalidate(parentHash);
+        log.info("移除父哈希={}的所有孤儿区块", CryptoUtil.bytesToHex(parentHash));
     }
 
 
@@ -516,20 +574,7 @@ public class BlockChainServiceImpl implements BlockChainService {
         return Math.max(0, totalInput - totalOutput);
     }
 
-    /**
-     * 判断是否为CoinBase交易（区块中第一笔交易，输入无有效UTXO）
-     */
-    private boolean isCoinBaseTransaction(Transaction transaction) {
-        List<TXInput> inputs = transaction.getInputs();
-        if (inputs == null || inputs.size() != 1) {
-            return false;
-        }
-        TXInput input = inputs.get(0);
-        // CoinBase交易的输入txId为全零，且vout为特殊值（如-1或0，根据协议定义）
-        return input.getTxId() != null
-                && Arrays.equals(input.getTxId(), new byte[32])  // txId为全零
-                && (input.getVout() == -1 || input.getVout() == 0);  // 匹配协议定义的特殊值
-    }
+
 
     /**
      * 获取每字节手续费
@@ -547,9 +592,11 @@ public class BlockChainServiceImpl implements BlockChainService {
     private void processValidBlock(Block block) {
         // 保存区块到数据库
         popStorage.addBlock(block);
+        processDependentOrphanBlocks(block.getHash());
         // 获取主链最新信息
         long currentHeight = getMainLatestHeight();
         byte[] currentMainHash = getMainLatestBlockHash();
+        //防止算力浪费
         List<Transaction> transactions = block.getTransactions();
         for (Transaction transaction : transactions) {
             if (!isCoinBaseTransaction(transaction)){
@@ -557,7 +604,17 @@ public class BlockChainServiceImpl implements BlockChainService {
                 log.info("移除交易池中的交易: {}", transaction.getTxId());
             }
         }
-        //将正在挖矿的区块 取消掉 TODO
+        //如果正在挖矿的区块有这些交易 就要取消掉这个区块重新选择合适的交易挖矿
+        Set<byte[]> confirmedTxIds = new HashSet<>();
+        for (Transaction tx : block.getTransactions()) {
+            if (!isCoinBaseTransaction(tx)) {
+                confirmedTxIds.add(tx.getTxId());
+                mining.removeTransaction(tx.getTxId()); // 从交易池移除已确认交易
+            }
+        }
+        // 通知挖矿服务检查当前任务是否包含这些交易，必要时重启
+        mining.checkAndRestartMining(confirmedTxIds);
+
 
         // 检查是否出现分叉（父区块是否为主链最新区块）
         boolean isFork = !Arrays.equals(block.getPreviousHash(), currentMainHash);
@@ -588,19 +645,43 @@ public class BlockChainServiceImpl implements BlockChainService {
                 log.info("检测到更难的链，准备切换。新链难度: {}, 当前链难度: {}", DifficultyUtils.bytesToLong(block.getChainWork()), DifficultyUtils.bytesToLong(getMainLatestBlock().getChainWork()));
                 switchToNewChain(block);
             } else {
-                log.info("分叉链难度较小，添加到备选链，高度: {}, 哈希: {}", block.getHeight(), CryptoUtil.bytesToHex(block.getHash()));
-                addAlternativeChains(block.getHeight(), block.getHash());
+                log.info("分叉链难度较小，丢弃，高度: {}, 哈希: {}", block.getHeight(), CryptoUtil.bytesToHex(block.getHash()));
             }
         }
     }
 
-    private void addAlternativeChains(long blockHeight, byte[] blockHash) {
-        Set<byte[]> altBlockHashByHeight = popStorage.getALTBlockHashByHeight(blockHeight);
-        altBlockHashByHeight.add(blockHash);
-        log.info("已经将该区块加入到 备选链添加区块，高度: {}, 哈希: {}", blockHeight, CryptoUtil.bytesToHex(blockHash));
+    /**
+     * 处理依赖指定区块的所有孤儿区块（递归）
+     * @param parentHash 已验证区块的哈希（作为父哈希）
+     */
+    private void processDependentOrphanBlocks(byte[] parentHash) {
+        // 获取所有以当前区块为父区块的孤儿区块
+        List<Block> orphanBlocks = getOrphanBlocksByParentHash(parentHash);
+        if (orphanBlocks.isEmpty()) {
+            log.info("没有依赖哈希={}的孤儿区块", CryptoUtil.bytesToHex(parentHash));
+            return;
+        }
+        log.info("开始处理依赖哈希={}的{}个孤儿区块",
+                CryptoUtil.bytesToHex(parentHash),
+                orphanBlocks.size());
+        // 移除孤儿池中的这些区块（避免重复处理）
+        removeOrphanBlocksByParentHash(parentHash);
+        // 逐个验证并处理孤儿区块
+        for (Block orphanBlock : orphanBlocks) {
+            // 重新验证区块（此时父区块已存在）
+            boolean isVerified = verifyBlock(orphanBlock, true); // 验证成功后广播
+            if (isVerified) {
+                log.info("孤儿区块验证成功并加入主链: 哈希={}, 高度={}",
+                        CryptoUtil.bytesToHex(orphanBlock.getHash()),
+                        orphanBlock.getHeight());
+                // 递归处理该区块的子孤儿区块
+                processDependentOrphanBlocks(orphanBlock.getHash());
+            } else {
+                log.warn("孤儿区块验证失败，丢弃: 哈希={}",
+                        CryptoUtil.bytesToHex(orphanBlock.getHash()));
+            }
+        }
     }
-
-
 
     /**
      * 验证区块中的所有交易
@@ -1259,7 +1340,6 @@ public class BlockChainServiceImpl implements BlockChainService {
         // 创建输出，将奖励发送到指定地址
         TXOutput output = new TXOutput(calculateBlockReward(height), scriptPubKey);
         TXOutput outputFee = new TXOutput(totalFee, scriptPubKey);
-
         coinbaseTx.setVersion(TRANSACTION_VERSION_1);
         coinbaseTx.getInputs().add(input);
         coinbaseTx.getOutputs().add(output);
@@ -1369,19 +1449,16 @@ public class BlockChainServiceImpl implements BlockChainService {
     @Override
     public Result getBalance(String address) {
         final int PAGE_SIZE = 5000; // 分页大小，5000更符合常见分页逻辑
-        final int RETRY_COUNT = 3; // 重试次数
         ScriptPubKey lockingScriptByAddress = getLockingScriptByAddress(address);
         byte[] scriptHash = CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(lockingScriptByAddress.serialize()));
         String cursor = null;
         boolean hasMore = true;
-
         long typeBalance = 0;
         int totalFetched = 0;
         while (hasMore) {
             TPageResult<UTXOSearch> pageResult = null;
             // 带重试的分页查询
             pageResult = selectUtxoAmountsByScriptHash(scriptHash, PAGE_SIZE, cursor);
-
             if (pageResult == null) {
                 log.error("{} UTXO查询返回空结果 -> cursor: {}", address, cursor);
                 break;
@@ -1400,7 +1477,6 @@ public class BlockChainServiceImpl implements BlockChainService {
             hasMore = !pageResult.isLastPage();
             cursor = pageResult.getLastKey();
         }
-
         return Result.ok(typeBalance);
     }
 
@@ -1423,7 +1499,6 @@ public class BlockChainServiceImpl implements BlockChainService {
     public BlockHeader getBlockHeader(long height) {
         return popStorage.getBlockHeaderByHeight(height);
     }
-
 
 
     @Override
@@ -1476,4 +1551,9 @@ public class BlockChainServiceImpl implements BlockChainService {
         return popStorage.getMainBlockHashByHeight(0);
     }
 
+
+    public boolean isTransactionConfirmed(byte[] txId) {
+        Block blockByTxId = popStorage.getBlockByTxId(txId);
+        return blockByTxId != null;
+    }
 }
