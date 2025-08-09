@@ -63,7 +63,7 @@ public class KademliaNodeServer {
     // 消息过期时间
     public static final long MESSAGE_EXPIRATION_TIME = 30000;
     // 节点过期时间
-    public static final long NODE_EXPIRATION_TIME = 30000;
+    public static final long NODE_EXPIRATION_TIME = 45000;
     //节点信息
     private NodeInfo nodeInfo;
 
@@ -464,7 +464,7 @@ public class KademliaNodeServer {
             // 1. 节点已过期（超过阈值），直接移除
             if (inactiveTime > NODE_EXPIRATION_TIME) {
                 log.info("节点 {} 已过期（{}ms未响应），直接移除", node.getId(), inactiveTime);
-                routingTable.delete(node);
+                routingTable.offlineNode(node.getId());
                 //删除TCP中通道
                 tcpClient.removeChannel(node.getId());
                 udpClient.removeChannel(node.getId());

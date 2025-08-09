@@ -1434,7 +1434,7 @@ public class BlockChainServiceImpl implements BlockChainService {
     /**
      * 比较本地与远程节点的区块差异，并发起同步请求
      */
-    public void compareAndSync(KademliaNodeServer nodeServer, NodeInfo remoteNode,
+    public void compareAndSync(NodeInfo remoteNode,
                                long localHeight, byte[] localHash, byte[] localWork,
                                long remoteHeight, byte[] remoteHash, byte[] remoteWork
     ) throws ConnectException, InterruptedException {

@@ -155,13 +155,6 @@ public interface BlockChainService {
      */
     void addBlockToMainChain(Block validBlock);
 
-    /**
-     * 比较本地与远程节点的区块差异，并发起同步请求
-     */
-    void compareAndSync(KademliaNodeServer nodeServer, NodeInfo remoteNode,
-                        long localHeight, byte[] localHash, byte[] localWork,
-                        long remoteHeight, byte[] remoteHash, byte[] remoteWork)
-            throws ConnectException, InterruptedException;
 
     List<Block> getBlockByStartHashAndEndHashWithLimit(byte[] startHash, byte[] endHash, int batchSize);
 

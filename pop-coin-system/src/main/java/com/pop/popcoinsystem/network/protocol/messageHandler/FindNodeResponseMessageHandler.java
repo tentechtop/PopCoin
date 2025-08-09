@@ -67,7 +67,7 @@ public class FindNodeResponseMessageHandler implements MessageHandler{
                     return;
                 }
                 if (kademliaMessage == null){
-                    log.error("未收到节点{}的Ping消息", externalNode);
+                    log.error("未收到节点{}的pong消息", externalNode);
                     return;
                 }
                 boolean update = kademliaNodeServer.getRoutingTable().update(kademliaMessage.getSender());

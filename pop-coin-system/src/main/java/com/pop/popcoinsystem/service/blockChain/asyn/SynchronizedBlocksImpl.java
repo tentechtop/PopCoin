@@ -77,7 +77,8 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
             t.setDaemon(true);
             return t;
         });
-        scheduler.scheduleAtFixedRate(this::findTheHighest, 0, 15, TimeUnit.SECONDS);
+        //延迟60秒执行 之后每30分钟执行一次
+        scheduler.scheduleAtFixedRate(this::findTheHighest, 60, 60*30, TimeUnit.SECONDS);
     }
 
     public void compareAndSync(NodeInfo remoteNode,
@@ -568,6 +569,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
             long maxHeight = localBlockChainService.getMainLatestHeight();
             //已知在线全部全节点
             List<ExternalNodeInfo> allNodes = kademliaNodeServer.getRoutingTable().findNodesByType(NodeType.FULL);
+            log.info("开始获取网络最大高度{}", allNodes);
             // 遍历健康节点获取最高高度
             for (ExternalNodeInfo nodeInfo : allNodes) {
                 NodeInfo node = BeanCopyUtils.copyObject(nodeInfo, NodeInfo.class);
@@ -575,11 +577,11 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                     RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer, node);
                     BlockChainService remoteService = proxyFactory.createProxy(BlockChainService.class);
                     long remoteHeight = remoteService.getMainLatestHeight();
+                    log.info("获取节点{}高度{}", node.getId(), remoteHeight);
                     if (remoteHeight > maxHeight) {
                         maxHeight = remoteHeight;
                         log.info("更新网络最高高度为: {} (来自节点 {})", maxHeight, node.getId());
                         //发送最高高度广播给临近节点帮助同步 TODO
-
 
                         Block mainLatestBlock =localBlockChainService.getMainLatestBlock();
                         SyncRequest syncRequest = new SyncRequest();
