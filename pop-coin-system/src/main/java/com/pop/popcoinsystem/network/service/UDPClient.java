@@ -58,10 +58,6 @@ public class UDPClient {
         ChannelFuture bindFuture = bootstrap.bind(0);
     }
 
-
-    /**
-     * 同步发送UDP消息（确保线程安全和通道有效性）
-     */
     /**
      * 同步发送UDP消息，使用虚拟线程处理等待操作
      */
