@@ -329,38 +329,43 @@ public class MiningServiceImpl {
             return;
         }
         if (miningExecutor == null || miningExecutor.isShutdown() || miningExecutor.isTerminated()) {
-            // 1. 线程工厂：增加异常处理，明确线程属性
+            // 线程工厂：增加异常处理，明确线程属性
             ThreadFactory threadFactory = r -> {
                 Thread thread = new Thread(r, "mining-main-thread");
-                thread.setPriority(Thread.NORM_PRIORITY); // 保持与原逻辑一致的优先级
-                thread.setDaemon(false); // 非守护线程：确保JVM等待挖矿任务完成后再退出
-                // 增加未捕获异常处理器，避免线程意外终止且无日志
+                thread.setPriority(Thread.NORM_PRIORITY);
+                thread.setDaemon(false);
                 thread.setUncaughtExceptionHandler((t, e) ->
                         log.error("挖矿线程[" + t.getName() + "]发生未捕获异常", e)
                 );
                 return thread;
             };
 
-            // 2. 队列选择：使用SynchronousQueue而非LinkedBlockingQueue
-            // 原因：挖矿任务是串行执行的，不需要缓存任务（缓存会导致任务堆积）
-            BlockingQueue<Runnable> workQueue = new SynchronousQueue<>();
-
-            // 3. 拒绝策略：自定义策略，更贴合挖矿场景
-            // 当线程池忙碌时（理论上不会发生，因单线程+串行执行），直接记录警告并忽略新任务
+            // 拒绝策略：自定义策略，更贴合挖矿场景
             RejectedExecutionHandler rejectedHandler = (r, executor) -> {
-                log.warn("挖矿线程池忙碌，无法提交新任务（当前任务可能正在执行或线程池已关闭）");
+                if (!executor.isShutdown()) {
+                    try {
+                        log.warn("挖矿线程池忙碌，提交线程将直接执行任务（当前队列已满）");
+                        // 让提交任务的线程自己执行，避免任务丢失
+                        r.run();
+                    } catch (Exception e) {
+                        log.error("提交线程执行挖矿任务时发生异常", e);
+                    }
+                } else {
+                    log.warn("挖矿线程池已关闭，无法提交新任务");
+                }
             };
 
-            // 4. 线程池参数优化
+            // 线程池参数
             miningExecutor = new ThreadPoolExecutor(
                     1,       // 核心线程数=1（固定单线程）
                     1,                  // 最大线程数=1（禁止扩容，确保串行）
                     0L,                 // 空闲时间=0（核心线程永不回收）
                     TimeUnit.MILLISECONDS,
-                    workQueue,
+                    new ArrayBlockingQueue<>(5),
                     threadFactory,
                     rejectedHandler
             );
+
             // 5. 预启动核心线程：避免首次任务的启动延迟
             miningExecutor.prestartCoreThread();
         }
