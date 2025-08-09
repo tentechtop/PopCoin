@@ -387,7 +387,12 @@ public class KademliaNodeServer {
             }
     }
 
-    public void broadcastMessage(KademliaMessage kademliaMessage) {
+    /**
+     *
+     * @param kademliaMessage
+     * @param sender 原始发送者
+     */
+    public void broadcastMessage(KademliaMessage kademliaMessage,NodeInfo sender) {
         long messageId = kademliaMessage.getMessageId();
         long now = System.currentTimeMillis();
         // 检查：若消息已存在（未过期），则跳过广播
@@ -399,6 +404,9 @@ public class KademliaNodeServer {
         broadcastMessages.put(messageId, Boolean.TRUE);
         //将消息发送给已知节点
         List<ExternalNodeInfo> closest = this.getRoutingTable().findClosest(this.nodeInfo.getId());
+        //去除原作者
+        closest.removeIf(node -> node.getId().equals(sender.getId()));
+
         //去除自己
         closest.removeIf(node -> node.getId().equals(this.nodeInfo.getId()));
         log.debug("广播消息: {}",closest);

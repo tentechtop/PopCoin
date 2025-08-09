@@ -293,8 +293,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                     double progress = totalBlocks <= 0 ? 100.0 :
                             (double) (currentHeight - startHeight) / totalBlocks * 100;
 
-                    log.info("批次[{} - {}]同步完成，累计进度：{}%",
-                            currentHeight - BLOCK_HEADER_BATCH, batchEnd, progress);
+                    log.info("累计进度：{}%", progress);
 
                 }
             } catch (Exception e) {
@@ -530,7 +529,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
     public void finishSync() {
         isSyncing = false;
         // 同步完成后，若同步前在挖矿，则恢复挖矿
-        log.info("同步结束 调用 - > 恢复挖矿");
+        log.info("同步结束 恢复挖矿");
         miningService.resumeMiningAfterSync();
     }
 

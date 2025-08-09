@@ -34,7 +34,7 @@ public class BlockMessageHandler implements MessageHandler {
             kademliaNodeServer.getBroadcastMessages().put(blockMessageId, Boolean.TRUE);
             kademliaNodeServer.getBlockChainService().verifyBlock(data,false);
             message.setSender(kademliaNodeServer.getNodeInfo());
-            kademliaNodeServer.broadcastMessage(message);
+            kademliaNodeServer.broadcastMessage(message,message.getSender());
 
             //如果这个节点不是自己
             if (!Objects.equals(message.getSender().getId(), kademliaNodeServer.getNodeInfo().getId())) {

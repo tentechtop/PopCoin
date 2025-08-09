@@ -249,7 +249,7 @@ public class BlockChainServiceImpl implements BlockChainService {
                 BlockMessage blockMessage = new BlockMessage();
                 blockMessage.setSender(kademliaNodeServer.getNodeInfo());
                 blockMessage.setData(block);
-                kademliaNodeServer.broadcastMessage(blockMessage);
+                kademliaNodeServer.broadcastMessage(blockMessage,kademliaNodeServer.getNodeInfo());
             }
         }
         return true;
@@ -463,7 +463,7 @@ public class BlockChainServiceImpl implements BlockChainService {
             TransactionMessage transactionKademliaMessage = new TransactionMessage();
             transactionKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());
             transactionKademliaMessage.setData(transaction);
-            kademliaNodeServer.broadcastMessage(transactionKademliaMessage);
+            kademliaNodeServer.broadcastMessage(transactionKademliaMessage,kademliaNodeServer.getNodeInfo());
         }
         return true;
     }
