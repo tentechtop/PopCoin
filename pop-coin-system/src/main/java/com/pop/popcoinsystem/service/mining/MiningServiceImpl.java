@@ -132,10 +132,6 @@ public class MiningServiceImpl {
             log.debug("资源已初始化，无需重复创建");
             return;
         }
-        //初始化地址 用于测试
-        Miner miner = miningStorageService.getMiner();
-        minerAddress = miner.getCoinBaseAddress().getFirst();
-
         // 初始化区块链（创世区块检查）
         initBlockChain();
         // 初始化线程池
@@ -148,7 +144,6 @@ public class MiningServiceImpl {
     }
 
     private void mineOneBlock() throws Exception {
-        log.info("开始挖矿...");
         // 1. 等待同步完成（同步时暂停挖矿）
         waitForSyncCompletion();
 

@@ -36,7 +36,6 @@ public class BlockMessageHandler implements MessageHandler {
             message.setSender(kademliaNodeServer.getNodeInfo());
             kademliaNodeServer.broadcastMessage(message);
 
-            //如果本链落后就请求同步
             //如果这个节点不是自己
             if (!Objects.equals(message.getSender().getId(), kademliaNodeServer.getNodeInfo().getId())) {
                 long remoteLatestBlockHeight = data.getHeight();
@@ -48,7 +47,6 @@ public class BlockMessageHandler implements MessageHandler {
                 byte[] localLatestHash = mainLatestBlock.getHash();
                 byte[] localLatestChainWork = mainLatestBlock.getChainWork();
                 //提交差异
-
                 if (localLatestHeight != remoteLatestBlockHeight) {
                     localBlockChainService.compareAndSync(
                             message.getSender(),
