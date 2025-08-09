@@ -335,7 +335,6 @@ public class StorageService {
         return blockHashes;
     }
 
-
     /**
      * 基于区块头计算当前区块及其之前最多10个主链区块的时间戳中位数（共11个区块）
      * 若区块数量不足11个（如创世区块附近），则基于现有数据计算
@@ -349,12 +348,10 @@ public class StorageService {
         if (blockHeight == 0) {
             return currentHeader.getTime();
         }
-
         // 校验输入
         if (currentHeader == null) {
             throw new IllegalArgumentException("区块头不能为空");
         }
-
         // 1. 确定实际窗口大小：最多11个，不足则取现有全部祖先
         int actualWindowSize = (int) Math.min(TIME_WINDOW_SIZE, blockHeight);
         List<Long> timestamps = new ArrayList<>(actualWindowSize);

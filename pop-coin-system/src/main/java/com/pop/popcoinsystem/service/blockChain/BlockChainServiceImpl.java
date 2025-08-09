@@ -156,10 +156,7 @@ public class BlockChainServiceImpl implements BlockChainService {
             return true;
         }
         //验证中位置时间
-        if (!validateMedianTime(block)){
-            log.warn("中位置时间验证失败，中位置时间：{}", block.getMedianTime());
-            return false;
-        }
+
         // 防止未来时间（允许超前最多2小时）
         // 注意：block.getTime() 是秒级时间戳，需转换为毫秒后再比较
         long maxAllowedTime = (System.currentTimeMillis()/1000) + (2 * 60 * 60);
@@ -182,6 +179,10 @@ public class BlockChainServiceImpl implements BlockChainService {
             }
             if (parentBlock.getHeight() + 1 != block.getHeight()) {
                 log.warn("区块高度不连续，父区块高度：{}，当前区块高度：{}", parentBlock.getHeight(), block.getHeight());
+                return false;
+            }
+            if (!validateMedianTime(block)){
+                log.warn("中位置时间验证失败，中位置时间：{}", block.getMedianTime());
                 return false;
             }
         }
@@ -447,10 +448,12 @@ public class BlockChainServiceImpl implements BlockChainService {
             log.error("未收集到任何有效祖先时间戳，区块高度：{}", blockHeight);
             return false;
         }
-        log.debug("实际收集到{}个有效祖先时间戳（目标：{}）", ancestorTimestamps.size(), actualWindowSize);
+        log.info("实际收集到{}个有效祖先时间戳（目标：{}）", ancestorTimestamps.size(), actualWindowSize);
         // 4. 计算中位数（与calculateMedianTime逻辑一致）
         Collections.sort(ancestorTimestamps);
         long calculatedMedian = ancestorTimestamps.get(ancestorTimestamps.size() / 2);
+        log.info("中位时间计算完成，参与计算的时间戳：{}，中位时间：{}", ancestorTimestamps, calculatedMedian);
+        log.info("区块中位时间:{}",block.getMedianTime());
         // 5. 验证区块记录的中位时间是否匹配
         if (block.getMedianTime() != calculatedMedian) {
             log.error("中位时间不匹配，区块记录：{}，计算结果：{}，区块哈希：{}",
@@ -465,7 +468,6 @@ public class BlockChainServiceImpl implements BlockChainService {
         }
         return true;
     }
-
 
     @Override
     public boolean verifyBlockHeader(BlockHeader blockHeader) {
