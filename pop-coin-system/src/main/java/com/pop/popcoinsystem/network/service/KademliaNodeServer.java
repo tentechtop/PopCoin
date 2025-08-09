@@ -515,9 +515,8 @@ public class KademliaNodeServer {
     private void refreshRoutingTable() {
         log.info("刷新路由表");
         // 随机生成一个160位的节点ID（Kademlia通常使用160位ID）
-        //BigInteger randomTargetId = new BigInteger(160, new Random());
-        BigInteger randomTargetId = nodeInfo.getId();
-
+        BigInteger randomTargetId = new BigInteger(160, new Random());
+        /*BigInteger randomTargetId = nodeInfo.getId();*/
         // 查找当前路由表中离目标ID最近的节点
         List<ExternalNodeInfo> closestNodes = routingTable.findClosest(randomTargetId);
         if (closestNodes.isEmpty()) {
