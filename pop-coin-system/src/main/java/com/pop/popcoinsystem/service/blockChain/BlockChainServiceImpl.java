@@ -648,17 +648,6 @@ public class BlockChainServiceImpl implements BlockChainService {
                 log.info("移除交易池中的交易: {}", transaction.getTxId());
             }
         }
-        //如果正在挖矿的区块有这些交易 就要取消掉这个区块重新选择合适的交易挖矿
-        Set<byte[]> confirmedTxIds = new HashSet<>();
-        for (Transaction tx : block.getTransactions()) {
-            if (!isCoinBaseTransaction(tx)) {
-                confirmedTxIds.add(tx.getTxId());
-                mining.removeTransaction(tx.getTxId()); // 从交易池移除已确认交易
-            }
-        }
-        // 通知挖矿服务检查当前任务是否包含这些交易，必要时重启
-        mining.checkAndRestartMining(confirmedTxIds);
-
 
         // 检查是否出现分叉（父区块是否为主链最新区块）
         boolean isFork = !Arrays.equals(block.getPreviousHash(), currentMainHash);

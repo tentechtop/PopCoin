@@ -428,7 +428,6 @@ public class MiningServiceImpl {
                 throw new RuntimeException("PTX文件不存在: resources/cuda/miningKernel.ptx");
             }
 
-
             // 2. 复制到临时文件（整个挖矿过程中保持存在）
             tempPtxFile = File.createTempFile("miningKernel-", ".ptx");
             tempPtxFile.deleteOnExit(); // JVM退出时自动删除
@@ -549,39 +548,6 @@ public class MiningServiceImpl {
         return selectedTxs;
     }
 
-    /**
-     * 校验区块内交易是否有效（无重复、未被确认）
-     * @param blockTransactions 区块中的交易列表（含CoinBase）
-     * @return 有效返回true；无效返回false，并收集无效交易ID
-     */
-    private Set<byte[]> validateBlockTransactions(List<Transaction> blockTransactions) {
-        Set<byte[]> invalidTxIds = new HashSet<>();
-        Set<byte[]> seenTxIds = new HashSet<>(); // 用于检测区块内重复
-
-        for (int i = 0; i < blockTransactions.size(); i++) {
-            Transaction tx = blockTransactions.get(i);
-            byte[] txId = tx.getTxId();
-
-            // 1. 跳过CoinBase交易（第一笔交易，无需校验重复或确认）
-            if (i == 0 && Transaction.isCoinBaseTransaction(tx)) {
-                continue;
-            }
-
-            // 2. 检测区块内重复交易
-            if (seenTxIds.contains(txId)) {
-                log.warn("区块内发现重复交易，txId: {}", CryptoUtil.bytesToHex(txId));
-                invalidTxIds.add(txId);
-                continue;
-            }
-            seenTxIds.add(txId);
-            // 3. 检测交易是否已被主链确认
-            if (blockChainService.isTransactionConfirmed(txId)) {
-                log.warn("交易已被主链确认，无需重复打包，txId: {}", CryptoUtil.bytesToHex(txId));
-                invalidTxIds.add(txId);
-            }
-        }
-        return invalidTxIds;
-    }
 
     // 获取交易池中的交易数量
     public synchronized int getTransactionCount() {
@@ -627,7 +593,6 @@ public class MiningServiceImpl {
     public boolean isMining(){
         return isMining;
     }
-
 
 
     //D:\SoftwareSpace\VisualStudio\Community\VC\Tools\MSVC\14.44.35207\include\yvals_core.h
@@ -866,59 +831,12 @@ public class MiningServiceImpl {
         return transactions;
     }
 
-    public void checkAndRestartMining(Set<byte[]> confirmedTxIds) {
-        if (confirmedTxIds.isEmpty() || !isMining) {
-            return; // 无已确认交易或未在挖矿，直接返回
-        }
-        // 检查当前正在挖矿的区块是否包含已确认交易
-        boolean containsConfirmedTx = isCurrentMiningBlockContains(confirmedTxIds);
-        if (containsConfirmedTx) {
-            log.info("当前挖矿区块包含{}个已确认交易，将取消并重启挖矿", confirmedTxIds.size());
-            // 取消当前挖矿任务
-            try {
-                stopMining();
-            }catch (Exception e){
-                log.error("取消当前挖矿任务失败", e);
-            }
-            if (!isMining) { // 确认已停止后再重启
-                try {
-                    startMining();
-                } catch (Exception e) {
-                    log.error("重启挖矿任务失败", e);
-                }
-            }
-        }
-    }
-
-    /**
-     * 判断当前正在挖矿的区块是否包含指定交易ID
-     * @param txIds 待检查的交易ID集合
-     * @return 包含则返回true，否则返回false
-     */
-    private boolean isCurrentMiningBlockContains(Set<byte[]> txIds) {
-        if (currentMiningBlock == null) {
-            return false;
-        }
-        // 遍历当前挖矿区块中的非CoinBase交易
-        for (Transaction tx : currentMiningBlock.getTransactions()) {
-            if (!Transaction.isCoinBaseTransaction(tx) && txIds.contains(tx.getTxId())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-
     // 挖矿结果类
     static class MiningResult {
         byte[] hash;
         int nonce;
         boolean found = false;
     }
-
-
-
-
 
 
     // 提供setter方法供外部调整
@@ -928,9 +846,6 @@ public class MiningServiceImpl {
         }
         this.gpuMiningPerformance = performance;
     }
-
-
-
 
 
     /**
@@ -995,8 +910,6 @@ public class MiningServiceImpl {
         isExecutorsInitialized = false;
         log.info("线程池资源释放完成");
     }
-
-
 
     /**
      * 释放CUDA相关资源（严格按依赖顺序释放）
