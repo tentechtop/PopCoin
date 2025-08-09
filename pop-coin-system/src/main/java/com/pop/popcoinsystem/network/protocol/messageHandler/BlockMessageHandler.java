@@ -39,7 +39,6 @@ public class BlockMessageHandler implements MessageHandler {
 
             Thread.startVirtualThread(() -> {
                 if (!Objects.equals(sender.getId(), kademliaNodeServer.getNodeInfo().getId())) {
-                    log.info("收到来自 {} 的区块消息", sender.getIpv4());
                     long remoteLatestBlockHeight = data.getHeight();
                     byte[] remoteLatestBlockHash = data.getHash();
                     byte[] remoteLatestChainWork = data.getChainWork();
@@ -49,7 +48,7 @@ public class BlockMessageHandler implements MessageHandler {
                     byte[] localLatestChainWork = mainLatestBlock.getChainWork();
                     //提交差异
                     if (localLatestHeight != remoteLatestBlockHeight) {
-                        log.info("广播 节点{}的区块高度不一致，提交差异", sender.getId());
+                        log.info("与节点{}的区块高度不一致，提交差异", sender.getId());
                         try {
                             localBlockChainService.compareAndSync(
                                     sender,
