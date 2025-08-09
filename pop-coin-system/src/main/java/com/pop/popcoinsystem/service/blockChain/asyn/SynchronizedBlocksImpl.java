@@ -298,13 +298,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                             currentHeight - BLOCK_HEADER_BATCH, batchEnd, progress);
 
                 }
-
-                // 7. 同步完成，更新本地最新高度
-                if (currentHeight > remoteLatestHeight) {
-                    log.info("全量同步完成，最新高度：{}", remoteLatestHeight);
-                    localBlockChainService.refreshLatestHeight();
-                }
-
             } catch (Exception e) {
                 log.error("同步过程异常", e);
             } finally {

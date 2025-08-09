@@ -1059,4 +1059,41 @@ public class Transaction implements Serializable {
     }
 
 
+    /**
+     * 创建创世区块的CoinBase交易
+     * CoinBase交易特殊性：
+     * 1. 没有输入（或输入为特殊值）
+     * 2. 输出为初始挖矿奖励
+     */
+    public static Transaction createGenesisCoinbaseTransaction() {
+        Transaction coinbaseTx = new Transaction();
+        // 创建特殊输入（引用自身）
+        TXInput input = new TXInput();
+        input.setTxId(new byte[32]); // 全零交易ID
+        input.setVout(0); // 特殊值表示CoinBase交易
+        byte[] bytes = "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks".getBytes();
+        ScriptSig scriptSig = new ScriptSig(bytes);
+        input.setScriptSig(scriptSig);
+        List<TXInput> inputs = new ArrayList<>();
+        inputs.add(input);
+        coinbaseTx.setInputs(inputs);
+        // 创建输出（初始奖励50 BTC = 50*1e8聪）
+        TXOutput output = new TXOutput();
+        output.setValue(50L * 100000000); // 50 BTC in satoshi
+        // 创世区块奖励地址（可以替换为你的项目地址）
+        String address = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa";
+        //获取地址公钥哈希
+        byte[] addressHash = CryptoUtil.ECDSASigner.getAddressHash(address);
+        ScriptPubKey pubKey = new ScriptPubKey(addressHash);
+        output.setScriptPubKey(pubKey);
+        List<TXOutput> outputs = new ArrayList<>();
+        outputs.add(output);
+        coinbaseTx.setOutputs(outputs);
+        // 计算交易ID
+        byte[] txId = coinbaseTx.calculateTxId();
+        coinbaseTx.setTxId(txId);
+        coinbaseTx.calculateWeight();
+        return coinbaseTx;
+    }
+
 }

@@ -748,4 +748,46 @@ public class Block implements Serializable {
     public BlockHeader getHeader() {
         return this.extractHeader();
     }
+
+    /**
+     * 创建创世区块（区块链的第一个区块）
+     * 创世区块特殊性：
+     * 1. 没有前序区块（previousHash为全零）
+     * 2. 高度为0
+     * 3. 仅包含一笔CoinBase交易（挖矿奖励）
+     * 4. 时间戳通常设置为项目启动时间
+     */
+    public static Block createGenesisBlock() {
+        // 1. 初始化区块基本信息
+        Block genesisBlock = new Block();
+        genesisBlock.setHeight(0); // 创世区块高度为0
+        genesisBlock.setPreviousHash(new byte[32]); // 前序哈希为全零
+        genesisBlock.setVersion(1); // 版本号
+        // 2. 设置时间戳（使用比特币创世时间类似的格式，这里使用系统启动时间）
+        long genesisTime = 1754287472;
+        genesisBlock.setTime(genesisTime);
+        genesisBlock.setMedianTime(genesisTime);
+        // 设置难度相关参数（创世区块难度通常较低）
+        genesisBlock.setDifficulty(1);
+        // 创世区块难度目标
+        genesisBlock.setDifficultyTarget(DifficultyUtils.difficultyToCompact(1L));
+        genesisBlock.setChainWork(ByteUtils.toBytes(1L));
+        // 创建创世区块的CoinBase交易（唯一交易）
+        Transaction coinbaseTx = Transaction.createGenesisCoinbaseTransaction();
+        List<Transaction> transactions = new ArrayList<>();
+        transactions.add(coinbaseTx);
+        genesisBlock.setTransactions(transactions);
+        genesisBlock.setTxCount(1);
+        // 计算默克尔根（仅一个交易，默克尔根就是该交易的哈希）
+        byte[] merkleRoot = Block.calculateMerkleRoot(transactions);
+        genesisBlock.setMerkleRoot(merkleRoot);
+        // 创世区块的nonce是固定值，通过暴力计算得到
+        genesisBlock.setNonce(1); // 示例nonce值（类似比特币创世块）
+        genesisBlock.setHash(null);
+        genesisBlock.setWitnessSize(genesisBlock.calculateWitnessSize());
+        genesisBlock.calculateAndSetSize();
+        genesisBlock.calculateAndSetWeight();
+        return genesisBlock;
+    }
+
 }

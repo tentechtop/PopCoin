@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 public class UDPClient {
+    private final KademliaNodeServer kademliaNodeServer;
     private final ExecutorService executorService;
     private Bootstrap bootstrap;
     private NioEventLoopGroup eventLoopGroup;
@@ -31,7 +32,8 @@ public class UDPClient {
     private static final int DEFAULT_OPERATION_TIMEOUT = 5000; // 默认操作超时（毫秒）
 
 
-    public UDPClient() {
+    public UDPClient(KademliaNodeServer kademliaNodeServer) {
+        this.kademliaNodeServer = kademliaNodeServer;
         // 线程池复用，控制并发量
         executorService = Executors.newVirtualThreadPerTaskExecutor();
         // 全局复用EventLoopGroup（重量级资源，避免频繁创建）

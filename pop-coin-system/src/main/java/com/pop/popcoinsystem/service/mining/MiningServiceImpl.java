@@ -83,7 +83,6 @@ public class MiningServiceImpl {
     private volatile boolean wasMiningBeforeSync = false;
 
 
-
     /**
      * 启动挖矿
      */
@@ -187,7 +186,7 @@ public class MiningServiceImpl {
     public void initBlockChain(){
         Block genesisBlock = blockChainService.getMainBlockByHeight(0);
         if (genesisBlock == null) {
-            genesisBlock = blockChainService.createGenesisBlock();
+            genesisBlock = Block.createGenesisBlock();
             // 寻找符合难度的nonce
             log.info("开始挖掘创世区块（难度目标：前4字节为0）...");
             int nonce = 0;

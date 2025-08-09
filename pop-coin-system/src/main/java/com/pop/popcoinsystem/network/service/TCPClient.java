@@ -31,6 +31,7 @@ import java.util.function.Supplier;
 
 @Slf4j
 public class TCPClient {
+    private final KademliaNodeServer kademliaNodeServer;
     private final ExecutorService executorService;
     private Bootstrap bootstrap;
     private NioEventLoopGroup eventLoopGroup;
@@ -49,7 +50,8 @@ public class TCPClient {
     private static final long RETRY_DELAY_BASE = 200; // 延长基础延迟，避免网络拥堵
 
 
-    public TCPClient() {
+    public TCPClient(KademliaNodeServer kademliaNodeServer) {
+        this.kademliaNodeServer = kademliaNodeServer;
         executorService = Executors.newVirtualThreadPerTaskExecutor();
         eventLoopGroup = new NioEventLoopGroup();
         bootstrap = new Bootstrap();
@@ -75,7 +77,7 @@ public class TCPClient {
                                     if (nodeId != null) {
                                         nodeTCPChannel.remove(nodeId);
                                         // 记录失败（若已实现失败记录机制）
-                                        //TODO 马上移除节点
+                                        kademliaNodeServer.removeNode(nodeId);
                                     }
                                 } else {
                                     // 其他异常交给后续处理器
@@ -143,8 +145,7 @@ public class TCPClient {
                                 channel.close();
                                 nodeTCPChannel.remove(nodeId);
                                 // 记录失败（触发冷却机制）
-                                //TODO 马上移除路由表
-
+                                kademliaNodeServer.removeNode(nodeId);
                             } else {
                                 // 其他失败走原有逻辑
                                 //失败就不重试
@@ -360,44 +361,6 @@ public class TCPClient {
 
         return resultFuture;
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     /**
      * 优化通道获取：减少锁竞争，增强并发安全性

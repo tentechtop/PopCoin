@@ -162,8 +162,8 @@ public class KademliaNodeServer {
 
 
         //初始化UDP客户端
-        this.udpClient = new UDPClient();
-        this.tcpClient = new TCPClient();
+
+
     }
     public void registerMessageHandler(int type, MessageHandler messageHandler) {
         KademliaMessageHandler.put(type, messageHandler);
@@ -233,6 +233,7 @@ public class KademliaNodeServer {
 
             udpBindFuture = nodeInfo.getIpv4() != null ? udpBootstrap.bind(nodeInfo.getIpv4(), nodeInfo.getUdpPort()).sync() : udpBootstrap.bind(nodeInfo.getUdpPort()).sync();
             log.info("UDP服务已启动，地址{} 端口: {}", nodeInfo.getIpv4(),nodeInfo.getUdpPort());
+            this.udpClient = new UDPClient(KademliaNodeServer.this);
         } catch (Exception e) {
             log.error("KademliaNode startUdpServer error", e);
         }
@@ -275,6 +276,7 @@ public class KademliaNodeServer {
 
             tcpBindFuture = nodeInfo.getIpv4() != null ? tcpBootstrap.bind(nodeInfo.getIpv4(), nodeInfo.getTcpPort()).sync() : tcpBootstrap.bind(nodeInfo.getTcpPort()).sync();
             log.info("TCP服务已启动，端口: {}", nodeInfo.getTcpPort());
+            this.tcpClient = new TCPClient(KademliaNodeServer.this);
         } catch (Exception e) {
             log.error("KademliaNode startTcpServer error", e);
         }

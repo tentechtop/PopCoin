@@ -35,16 +35,9 @@ public interface BlockChainService {
     boolean verifyBlock(Block block, boolean broadcastMessage);
 
     /**
-     * 创建创世区块
-     */
-    Block createGenesisBlock();
-
-    /**
      * 验证交易并添加到交易池（验证成功后广播）
      */
     boolean verifyAndAddTradingPool(Transaction transaction,boolean broadcastMessage);
-
-
 
     /**
      * 验证区块头
@@ -184,15 +177,13 @@ public interface BlockChainService {
 
     BlockHeader getBlockHeader(long height);
 
-    void addBlockHeader(BlockHeader header,long height);
+
 
     List<BlockHeader> getBlockHeaders(long startHeight, int count);
 
     Map<Long,byte[]> getBlockHashes(List<Long> heightsToCheck);
 
     byte[] getBlockHash(long mid);
-
-    void refreshLatestHeight();
 
     Result<BlockDTO> getTransactionBlock(String txId);
 
