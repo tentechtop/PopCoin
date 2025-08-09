@@ -119,8 +119,6 @@ public class BlockChainServiceImpl implements BlockChainService {
 
 
 
-
-
     //孤儿区块池  key是父区块hash   value是一个 hashMap
     private final Cache<byte[], ConcurrentHashMap<byte[],Block>> orphanBlocks = CacheBuilder.newBuilder()
             .maximumSize(1000) // 最大缓存1000个区块（防止内存溢出）

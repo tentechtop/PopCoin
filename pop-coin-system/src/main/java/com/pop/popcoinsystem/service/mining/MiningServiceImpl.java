@@ -94,7 +94,6 @@ public class MiningServiceImpl {
     // 挖矿超时时间（15分钟，单位：毫秒）
     private static final long MINING_TIMEOUT_MS = 15 * 60 * 1000;
     // 用于GPU挖矿 和 CPU挖矿 超时控制的调度器
-    private static ScheduledExecutorService timeoutScheduler;
     private ThreadPoolExecutor miningExecutor;
 
     /**
@@ -143,8 +142,6 @@ public class MiningServiceImpl {
         initBlockChain();
         // 初始化线程池
         initMiningExecutor();
-        // 初始化超时调度器
-        initTimeoutScheduler();
         // 若为GPU挖矿，初始化CUDA资源
         if (miningType == 2) {
             initCuda();
@@ -278,8 +275,6 @@ public class MiningServiceImpl {
         }
     }
 
-
-
     public void initBlockChain(){
         Block genesisBlock = blockChainService.getMainBlockByHeight(0);
         if (genesisBlock == null) {
@@ -394,15 +389,8 @@ public class MiningServiceImpl {
         }
         isExecutorsInitialized = true; // 标记初始化完成
     }
-    private void initTimeoutScheduler() {
-        if (timeoutScheduler == null || timeoutScheduler.isShutdown() || timeoutScheduler.isTerminated()) {
-            timeoutScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-                Thread t = new Thread(r, "mining-timeout-scheduler");
-                t.setDaemon(true);
-                return t;
-            });
-        }
-    }
+
+
     private void initCuda(){
         if (isCudaInitialized) {
             log.debug("CUDA已初始化，无需重复创建");
@@ -663,21 +651,9 @@ public class MiningServiceImpl {
         MiningResult result = new MiningResult();
         CUdeviceptr dHeader = null;
         CUdeviceptr dResult = null;
-        Thread miningThread = Thread.currentThread();
-        ScheduledFuture<?> timeoutFuture = null;
         try {
             // 切换到已初始化的CUDA上下文
             cuCtxSetCurrent(cudaContext);
-
-            // 设置超时任务：15分钟后如果未完成则中断
-            timeoutFuture = timeoutScheduler.schedule(() -> {
-                if (!result.found) {
-                    log.warn("GPU挖矿超时（{}分钟），将终止当前挖矿任务", MINING_TIMEOUT_MS / 60000);
-                    result.found = false;
-                    miningThread.interrupt();
-                }
-            }, MINING_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-
             // 1. 准备区块头数据（序列化并复制到GPU内存）
             byte[] headerData = Block.serializeBlockHeader(blockHeader);
             if (headerData.length != 80) {
@@ -718,16 +694,13 @@ public class MiningServiceImpl {
                 log.error("GPU内核启动失败，错误码：" + launchResult);
                 return result;
             }
-
             // 等待内核执行完成
             cuCtxSynchronize();
             log.info("GPU内核执行完成");
-
             // 5. 读取挖矿结果
             dResult = getGlobalVariable(ptxModule, "devResult");
             byte[] resultBuffer = new byte[40]; // 结构体大小：4+4+32=40字节
             cuMemcpyDtoH(Pointer.to(resultBuffer), dResult, 40);
-
             // 解析结果
             int found = ByteBuffer.wrap(resultBuffer, 0, 4).order(ByteOrder.LITTLE_ENDIAN).getInt();
             int nonce = ByteBuffer.wrap(resultBuffer, 4, 4).order(ByteOrder.LITTLE_ENDIAN).getInt();
@@ -746,10 +719,6 @@ public class MiningServiceImpl {
             log.error("GPU挖矿异常", e);
             return cpuMineBlock(blockHeader); // 异常时降级到CPU
         } finally {
-            // 取消超时任务
-            if (timeoutFuture != null) {
-                timeoutFuture.cancel(true);
-            }
             // 释放本次挖矿的临时资源（保留静态资源）
             if (dHeader != null) {
                 cuMemFree(dHeader);
@@ -757,45 +726,24 @@ public class MiningServiceImpl {
         }
     }
 
-
-    /**
-     * 辅助方法：获取CUDA全局变量地址
-     */
-    private CUdeviceptr getGlobalVariable(CUmodule module, String name) {
-        CUdeviceptr ptr = new CUdeviceptr();
-        long[] size = new long[1];
-        try {
-            cuModuleGetGlobal(ptr, size, module, name);
-            return ptr;
-        }catch (Exception e){
-            log.error("获取全局变量失败", e);
-        }
-        return null;
-    }
-
     /**
      * 打包交易，进行挖矿
      */
     public MiningResult cpuMineBlock(BlockHeader blockHeader) {
         MiningResult result = new MiningResult();
-        result.found = false;
+        Future<?>[] futures = new Future[threadCount];
         int nonceRange = Integer.MAX_VALUE / threadCount;
-        List<Future<?>> futures = new ArrayList<>();
-        CountDownLatch latch = new CountDownLatch(threadCount);
+        // 重置结果状态
+        result.found = false;
         // 提交所有线程任务
         for (int i = 0; i < threadCount; i++) {
             BlockHeader clone = blockHeader.clone();
             final int startNonce = i * nonceRange;
             final int endNonce = (i == threadCount - 1) ? Integer.MAX_VALUE : (i + 1) * nonceRange;
-            futures.add(executor.submit(() -> {
+            futures[i] = executor.submit(() -> {
+                byte[] difficultyTarget = clone.getDifficultyTarget();
                 try {
-                    byte[] difficultyTarget = clone.getDifficultyTarget();
                     for (int nonce = startNonce; nonce < endNonce && !result.found; nonce++) {
-                        // 检查线程中断状态（用于超时控制）
-                        if (Thread.currentThread().isInterrupted()) {
-                            log.info("CPU挖矿线程被中断（可能是超时）");
-                            break;
-                        }
                         // 每5000次计算执行一次概率休眠
                         if (nonce % 1000 == 0 && miningPerformance < 100) {
                             // 性能控制：计算休眠概率（性能越低，休眠概率越高）
@@ -832,39 +780,54 @@ public class MiningServiceImpl {
                     log.error("线程 " + Thread.currentThread().getName() + " 计算哈希时异常", e);
                     Thread.currentThread().interrupt();
                 }
-            }));
+            });
         }
-        // 创建超时任务
-        ScheduledFuture<?> timeoutFuture = timeoutScheduler.schedule(() -> {
-            if (!result.found) {
-                log.warn("CPU挖矿超时（{}分钟），将终止所有挖矿线程", MINING_TIMEOUT_MS / 60000);
-                // 中断所有任务
+
+        // 等待所有任务完成或找到结果（保持原有逻辑不变）
+        try {
+            boolean allCompleted = false;
+            while (!allCompleted && !result.found) {
+                allCompleted = true;
                 for (Future<?> future : futures) {
+                    if (future != null && !future.isDone()) {
+                        allCompleted = false;
+                        sleep(100);
+                        break;
+                    }
+                }
+            }
+            for (Future<?> future : futures) {
+                if (future != null && !future.isDone()) {
                     future.cancel(true);
                 }
             }
-        }, MINING_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-        // 等待所有任务完成、找到结果或超时
-        try {
-            // 等待所有线程完成或超时
-            if (!latch.await(MINING_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
-                log.warn("CPU挖矿等待超时");
-                return null; // 超时返回null表示未找到
-            }
         } catch (InterruptedException e) {
-            log.info("CPU挖矿被中断");
             Thread.currentThread().interrupt();
-            // 取消所有任务
             for (Future<?> future : futures) {
-                future.cancel(true);
+                if (future != null) {
+                    future.cancel(true);
+                }
             }
-            return null;
-        } finally {
-            // 取消超时任务
-            timeoutFuture.cancel(true);
         }
         return result.found ? result : null;
     }
+
+
+    /**
+     * 辅助方法：获取CUDA全局变量地址
+     */
+    private CUdeviceptr getGlobalVariable(CUmodule module, String name) {
+        CUdeviceptr ptr = new CUdeviceptr();
+        long[] size = new long[1];
+        try {
+            cuModuleGetGlobal(ptr, size, module, name);
+            return ptr;
+        }catch (Exception e){
+            log.error("获取全局变量失败", e);
+        }
+        return null;
+    }
+
 
     private void adjustDifficulty() {
         long blockHeight = blockChainService.getMainLatestHeight();
@@ -997,7 +960,7 @@ public class MiningServiceImpl {
     }
 
     /**
-     * 释放线程池资源（包括executor、miningExecutor、timeoutScheduler）
+     * 释放线程池资源（包括executor、miningExecutor）
      */
     private void releaseExecutors() {
         log.info("开始释放线程池资源...");
@@ -1029,20 +992,6 @@ public class MiningServiceImpl {
             }
             miningExecutor = null;
         }
-        // 释放超时调度器
-        if (timeoutScheduler != null && !timeoutScheduler.isTerminated()) {
-            timeoutScheduler.shutdownNow();
-            try {
-                if (!timeoutScheduler.awaitTermination(5, TimeUnit.SECONDS)) {
-                    log.warn("超时调度器未能完全终止");
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                log.warn("超时调度器释放被中断");
-            }
-            timeoutScheduler = null;
-        }
-
         isExecutorsInitialized = false;
         log.info("线程池资源释放完成");
     }
