@@ -78,13 +78,13 @@ public class KademliaServiceStart {
             }
             BigInteger bigInteger = new BigInteger(1, bytes);
             nodeSetting.setId(bigInteger);
-            nodeSetting.setNodeType(nodeType);//默认是全节点
         }else {
             if (nodeSetting.getPublicKeyHex().isEmpty() || nodeSetting.getPrivateKeyHex().isEmpty()){
                 nodeSetting.setPrivateKeyHex(CryptoUtil.bytesToHex(privateKey.getEncoded()));
                 nodeSetting.setPublicKeyHex(CryptoUtil.bytesToHex(publicKey.getEncoded()));
             }
         }
+        nodeSetting.setNodeType(nodeType);//默认是全节点
         nodeSetting.setIpv4(localIp);
         nodeSetting.setTcpPort(tcpPort);
         nodeSetting.setUdpPort(udpPort);
@@ -119,7 +119,6 @@ public class KademliaServiceStart {
         externalNodeInfo.setNodeType(nodeSetting.getNodeType());
         externalNodeInfo.setPublicKey(CryptoUtil.hexToBytes(nodeSetting.getPublicKeyHex()));
         server.setExternalNodeInfo(externalNodeInfo);
-
 
 
         storageService.addOrUpdateSelfNode(externalNodeInfo);
