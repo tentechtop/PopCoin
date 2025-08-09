@@ -1,6 +1,7 @@
 package com.pop.popcoinsystem.network.enums;
 
 public enum NodeType {
+    UNKNOWN(0),
     FULL(1),      // 全节点 保存所有数据
     LIGHT(2),     // 轻节点 保存并同步区块头
     OUTBOUND(3);  // 仅出站 不保存任何数据

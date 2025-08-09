@@ -23,9 +23,8 @@ public class PongMessageHandler implements MessageHandler{
         log.info("收到pong");
         //更新节点
         NodeInfo sender = message.getSender();
-        RoutingTable routingTable = kademliaNodeServer.getRoutingTable();
-        routingTable.update(sender);
-        return null;
+        kademliaNodeServer.getRoutingTable().update(sender);
+        return new EmptyKademliaMessage();
     }
 
 }
