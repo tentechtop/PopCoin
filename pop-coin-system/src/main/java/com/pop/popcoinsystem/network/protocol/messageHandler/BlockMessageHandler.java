@@ -22,7 +22,6 @@ public class BlockMessageHandler implements MessageHandler {
 
     protected BlockMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull BlockMessage message) throws InterruptedException, ConnectException {
         Block data = message.getData();
-
         log.debug("收到区块消息{}",data);
         byte[] bytes = data.getHash();
         long blockMessageId = ByteUtils.bytesToLong(bytes);

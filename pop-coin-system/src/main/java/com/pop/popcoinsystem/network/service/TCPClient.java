@@ -70,7 +70,7 @@ public class TCPClient {
                                 // 捕获 Connection reset 异常
                                 if (cause instanceof SocketException && "Connection reset".equals(cause.getMessage())) {
                                     BigInteger nodeId = ctx.channel().attr(NODE_ID_KEY).get();
-                                    log.warn("节点 {} 发生连接重置（Connection reset），关闭通道", nodeId, cause);
+                                    log.warn("节点 {} 发生连接重置（Connection reset），下线节点 关闭通道", nodeId, cause);
                                     // 关闭通道并从映射中移除
                                     ctx.channel().close();
                                     if (nodeId != null) {

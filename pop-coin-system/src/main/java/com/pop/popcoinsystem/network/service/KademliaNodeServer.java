@@ -185,7 +185,7 @@ public class KademliaNodeServer {
             });
             //维护网络 首次执行立即开始，之后每 delay  秒执行一次 maintainNetwork 方法  单位秒
             long delay = 15;
-            long delay1 = 60 * 60; //
+            long delay1 = 60 * 30; //
             scheduler.scheduleAtFixedRate(this::maintainNetwork, delay, delay, TimeUnit.SECONDS);
             scheduler.scheduleAtFixedRate(this::persistToStorage, delay1, delay1, TimeUnit.SECONDS);
         } catch (Exception e) {
@@ -446,7 +446,6 @@ public class KademliaNodeServer {
      * 检查节点活性：对超时未响应的节点发送发送Ping，仍无响应则移除
      */
     private void checkNodeLiveness(long now) {
-        log.info("检查节点活性");
         // 获取路由表中所有节点  或者本节点最近的节点 或者用抽样检测
         List<ExternalNodeInfo> allNodes = routingTable.getAllNodes();
         if (allNodes.isEmpty()) {
@@ -457,13 +456,11 @@ public class KademliaNodeServer {
             log.info("检查节点 {} 活跃性", node.getId());
             // 跳过自身节点
             if (node.getId().equals(nodeInfo.getId())) continue;
-
             // 计算节点最后活跃时间与当前的差值
             long inactiveTime = now - node.getLastSeen().getTime();
-
             // 1. 节点已过期（超过阈值），直接移除
             if (inactiveTime > NODE_EXPIRATION_TIME) {
-                log.info("节点 {} 已过期（{}ms未响应），直接移除", node.getId(), inactiveTime);
+                log.info("节点 {} 已过期（{}s未响应），直接移除", node.getId(), inactiveTime/1000);
                 routingTable.offlineNode(node.getId());
                 //删除TCP中通道
                 tcpClient.removeChannel(node.getId());
