@@ -42,7 +42,6 @@ public class TCPClient {
     /** 定期清理无效连接的定时任务 */
     private final ScheduledExecutorService cleanerExecutor = Executors.newSingleThreadScheduledExecutor();
 
-
     // 用于在Channel中存储节点ID的属性键
     private static final AttributeKey<BigInteger> NODE_ID_KEY = AttributeKey.valueOf("NODE_ID");
     public static final int DEFAULT_CONNECT_TIMEOUT = 30000; // 30秒
@@ -77,7 +76,7 @@ public class TCPClient {
                                     if (nodeId != null) {
                                         nodeTCPChannel.remove(nodeId);
                                         // 记录失败（若已实现失败记录机制）
-                                        kademliaNodeServer.removeNode(nodeId);
+                                        kademliaNodeServer.offlineNode(nodeId);
                                     }
                                 } else {
                                     // 其他异常交给后续处理器
@@ -137,7 +136,6 @@ public class TCPClient {
                         if (!future.isSuccess()) {
                             Throwable cause = future.cause();
                             log.error("Failed to send message to node {}: {}", nodeId, cause.getMessage());
-
                             // 处理 Connection reset 异常
                             if (cause instanceof SocketException && "Connection reset".equals(cause.getMessage())) {
                                 log.warn("节点 {} 发送消息时连接重置，清理通道", nodeId);
@@ -145,10 +143,10 @@ public class TCPClient {
                                 channel.close();
                                 nodeTCPChannel.remove(nodeId);
                                 // 记录失败（触发冷却机制）
-                                kademliaNodeServer.removeNode(nodeId);
+                                kademliaNodeServer.offlineNode(nodeId);
                             } else {
-                                // 其他失败走原有逻辑
-                                //失败就不重试
+                                //其他异常
+
 
                             }
                         }

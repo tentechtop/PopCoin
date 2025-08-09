@@ -65,4 +65,23 @@ public class Bucket {
         this.remove(node.getId());
     }
 
+
+    /**
+     * 将节点添加到链表末尾（表示活跃度较低），若节点已存在则先移除再添加到末尾
+     * @param node 要操作的节点
+     */
+    public void pushToAfter(ExternalNodeInfo node) {
+        // 先移除节点（若已存在）
+        nodeIds.remove(node.getId());
+        // 将节点添加到链表末尾
+        nodeIds.add(node.getId());
+        // 更新节点的最后访问时间
+        ExternalNodeInfo existingNode = nodeMap.get(node.getId());
+        if (existingNode != null) {
+            existingNode.setLastSeen(node.getLastSeen());
+        } else {
+            // 若节点不存在于映射中，补充添加（避免数据不一致）
+            nodeMap.put(node.getId(), node);
+        }
+    }
 }

@@ -5,6 +5,7 @@ import com.pop.popcoinsystem.data.block.BlockHeader;
 import com.pop.popcoinsystem.data.vo.result.Result;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeInfo;
+import com.pop.popcoinsystem.network.enums.NodeType;
 import com.pop.popcoinsystem.network.protocol.message.HandshakeRequestMessage;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
@@ -466,7 +467,6 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                     log.error("区块[{}]不在已验证的高度列表中，丢弃", blockHeight);
                     return false;
                 }
-
                 // 5.2 验证区块体头与区块头哈希一致性
                 BlockHeader expectedHeader = validHeaders.get(blockHeight);
                 byte[] blockHeaderHash = block.getHeader().computeHash();
@@ -566,7 +566,8 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
             NodeInfo local = kademliaNodeServer.getNodeInfo();
             // 默认使用本地高度作为基准
             long maxHeight = localBlockChainService.getMainLatestHeight();
-            List<ExternalNodeInfo> allNodes = kademliaNodeServer.getRoutingTable().findClosest();
+            //已知在线全部全节点
+            List<ExternalNodeInfo> allNodes = kademliaNodeServer.getRoutingTable().findNodesByType(NodeType.FULL);
             // 遍历健康节点获取最高高度
             for (ExternalNodeInfo nodeInfo : allNodes) {
                 NodeInfo node = BeanCopyUtils.copyObject(nodeInfo, NodeInfo.class);

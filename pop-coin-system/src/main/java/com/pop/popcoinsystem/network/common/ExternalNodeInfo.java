@@ -101,4 +101,51 @@ public class ExternalNodeInfo implements Comparable<Object>, Serializable {
         return distance.compareTo(c.distance);
     }
 
+
+    //加分 最高分100
+    public void addScore(int score) {
+        this.score += score;
+        if (this.score > 100) {
+            this.score = 100;
+        }
+        if (this.score < -100) {
+            this.score = -100;
+        }
+    }
+
+    //减分 最低分-100
+    public void deductScore(int score) {
+        this.score -= score;
+        if (this.score > 100) {
+            this.score = 100;
+        }
+        if (this.score < -100) {
+            this.score = -100;
+        }
+    }
+
+
+    public void response(int score) {
+        this.score += score;
+        if (this.score > 100) {
+            this.score = 100;
+        }
+        if (this.score < -100) {
+            this.score = -100;
+        }
+    }
+
+    public void onSuccessfulResponse(boolean isComplex) {
+        this.failedConnectionAttempts = 0;
+        int addPoints = isComplex ? 3 : 1;//ping ping 1分 RPC调用3分
+        addScore(addPoints);
+    }
+
+    public void onFailureResponse(boolean isComplex) {
+        this.failedConnectionAttempts = 0;
+        int addPoints = isComplex ? 3 : 1;
+        deductScore(addPoints);
+    }
+
+
 }

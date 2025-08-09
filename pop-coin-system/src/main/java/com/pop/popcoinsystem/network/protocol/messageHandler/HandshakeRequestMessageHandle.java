@@ -32,15 +32,11 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
 
     protected HandshakeResponseMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull HandshakeRequestMessage message) throws InterruptedException, ConnectException, FullBucketException, UnsupportedChainException {
         log.info("收到握手请求");
-
         //将该节点添加到路由表中  一定是活跃节点记录下
         NodeInfo sender = message.getSender();
-        ExternalNodeInfo senderNodeInfo = BeanCopyUtils.copyObject(sender, ExternalNodeInfo.class);
         Handshake handshake = message.getData();
-        ExternalNodeInfo data = handshake.getExternalNodeInfo();//请求方节点信息
-        kademliaNodeServer.getRoutingTable().update(data);//更新对方的节点信息
+        ExternalNodeInfo senderNodeInfo = handshake.getExternalNodeInfo();//请求方节点信息
         NodeInfo me = kademliaNodeServer.getNodeInfo();
-
         BlockChainServiceImpl blockChainService = kademliaNodeServer.getBlockChainService();
         Block block = blockChainService.getMainLatestBlock();
 
@@ -59,6 +55,10 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
             kademliaNodeServer.getRoutingTable().delete(senderNodeInfo);
             return null;
         }
+        //如果对方节点信息不存在就初始化对方的分数信息
+
+        kademliaNodeServer.getRoutingTable().update(senderNodeInfo);//更新对方的节点信息
+
         byte[] remoteLatestHash  = handshake.getLatestBlockHash();
         long remoteLatestHeight  = handshake.getLatestBlockHeight();
         byte[] remoteChainWork = handshake.getChainWork();//工作总量

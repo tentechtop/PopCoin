@@ -2,6 +2,7 @@ package com.pop.popcoinsystem.network.rpc;
 
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.RoutingTable;
+import com.pop.popcoinsystem.network.enums.NodeType;
 import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
@@ -24,36 +25,46 @@ public class RpcProxyFactory {
 
     private  KademliaNodeServer kademliaNodeServer;
     private  NodeInfo targetNode; // 目标服务节点信息
-
+    private  RoutingTable routingTable;
+    private  NodeInfo localNodeInfo;
     private int timeoutSeconds = 5; // 默认超时时间5秒
 
     public RpcProxyFactory(KademliaNodeServer server, NodeInfo targetNode) {
         this.kademliaNodeServer = server;
         this.targetNode = targetNode;
+        this.routingTable = server.getRoutingTable();
+        this.localNodeInfo = server.getNodeInfo();
+
+        // 检查目标节点是否在线
+        if (!routingTable.isNodeAvailable(targetNode)) {
+            log.warn("指定的目标节点{}可能不可用，尝试从路由表获取可用节点", targetNode);
+            this.targetNode = routingTable.findAvailableNode();
+            if (this.targetNode == null) {
+                throw new RuntimeException("无任何可用节点");
+            }
+        }
     }
+    public RpcProxyFactory(KademliaNodeServer server) {
+        this.kademliaNodeServer = server;
+        NodeInfo nodeInfo = server.getNodeInfo();
+        RoutingTable routingTable = server.getRoutingTable();
+        List<ExternalNodeInfo> closest = routingTable.findNodesByType(NodeType.FULL);
+        //去除自己
+        closest.removeIf(node -> node.getId().equals(nodeInfo.getId()));
+        closest.removeIf(node -> ( node.getIpv4().equals(nodeInfo.getIpv4()) && node.getTcpPort() == nodeInfo.getTcpPort()));
+        if (closest.isEmpty()){
+            throw new RuntimeException("没有可用的节点");
+        }
+        ExternalNodeInfo externalNodeInfo = closest.getFirst();
+        this.targetNode = externalNodeInfo.extractNodeInfo();
+    }
+
     // 添加超时时间设置方法
     public void setTimeout(int timeoutSeconds) {
         if (timeoutSeconds <= 0) {
             throw new IllegalArgumentException("超时时间必须大于0");
         }
         this.timeoutSeconds = timeoutSeconds;
-    }
-
-    public RpcProxyFactory(KademliaNodeServer server) {
-        this.kademliaNodeServer = server;
-        NodeInfo nodeInfo = server.getNodeInfo();
-        RoutingTable routingTable = server.getRoutingTable();
-        //TODO 未来实现查找全节点
-        List<ExternalNodeInfo> closest = routingTable.findClosest(server.getNodeInfo().getId());
-        //去除自己
-        closest.removeIf(node -> node.getId().equals(nodeInfo.getId()));
-        closest.removeIf(node -> ( node.getIpv4().equals(nodeInfo.getIpv4()) && node.getTcpPort() == nodeInfo.getTcpPort()));
-
-        if (closest.isEmpty()){
-            throw new RuntimeException("没有可用的节点");
-        }
-        ExternalNodeInfo externalNodeInfo = closest.get(0);
-        this.targetNode = BeanCopyUtils.copyObject(externalNodeInfo, NodeInfo.class);
     }
 
     @SuppressWarnings("unchecked")
@@ -85,8 +96,6 @@ public class RpcProxyFactory {
             requestData.setMethodName(method.getName());
             requestData.setParameters(args);
             requestData.setParamTypes(method.getParameterTypes());
-
-
             // 2. 构建请求消息
             RpcRequestMessage requestMessage = new RpcRequestMessage();
             requestMessage.setData(requestData);

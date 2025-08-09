@@ -1,6 +1,8 @@
 package com.pop.popcoinsystem.network.common;
 
 import com.pop.popcoinsystem.exception.FullBucketException;
+import com.pop.popcoinsystem.network.enums.NodeStatus;
+import com.pop.popcoinsystem.network.enums.NodeType;
 import com.pop.popcoinsystem.storage.NodeInfoStorageService;
 import com.pop.popcoinsystem.storage.StorageService;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
@@ -49,15 +51,15 @@ public class RoutingTable {
      * 更新路由表 添加或移动节点到适当的K桶
      */
     public boolean update(ExternalNodeInfo node) throws FullBucketException {
-        NodeInfoStorageService instance = NodeInfoStorageService.getInstance();
         lock.writeLock().lock();
         try {
+            node.setNodeStatus(NodeStatus.ACTIVE);//在线
+            node.onSuccessfulResponse(false);
             node.setLastSeen(new Date());
             Bucket bucket = this.findBucket(node.getId());
             // 更新桶的访问时间
             lastBucketAccessTime.put(bucket.getId(), System.currentTimeMillis());
             node.setDistance(node.getId().xor(this.localNodeId));
-            instance.addOrUpdateRouteTableNode(node);
             if (bucket.contains(node)) {
                 bucket.pushToFront(node);
                 return false;
@@ -72,16 +74,16 @@ public class RoutingTable {
     }
 
     public boolean update(NodeInfo updateNode) throws FullBucketException {
-        NodeInfoStorageService instance = NodeInfoStorageService.getInstance();
         lock.writeLock().lock();
         try {
             ExternalNodeInfo node = updateNode.extractExternalNodeInfo();
+            node.setNodeStatus(NodeStatus.ACTIVE);//在线
+            node.onSuccessfulResponse(false);
             node.setLastSeen(new Date());
             Bucket bucket = this.findBucket(node.getId());
             // 更新桶的访问时间
             lastBucketAccessTime.put(bucket.getId(), System.currentTimeMillis());
             node.setDistance(node.getId().xor(this.localNodeId));
-            instance.addOrUpdateRouteTableNode(node);
             if (bucket.contains(node)) {
                 bucket.pushToFront(node);
                 return false;
@@ -101,11 +103,8 @@ public class RoutingTable {
      * 强制将节点添加到路由表中。若对应K桶已满，会移除最老的节点以腾出空间。
      */
     public synchronized void forceUpdate(ExternalNodeInfo node) {
-        NodeInfoStorageService instance = NodeInfoStorageService.getInstance();
         try {
             this.update(node);
-            //持久化
-            instance.addOrUpdateRouteTableNode(node);
         } catch (FullBucketException e) {
             Bucket bucket = this.findBucket(node.getId());
             Date date = null;
@@ -121,8 +120,6 @@ public class RoutingTable {
                 }
             }
             bucket.remove(oldestNode);
-            //删除旧节点
-            instance.deleteRouteTableNode(oldestNode);
             this.forceUpdate(node);
         }
     }
@@ -157,9 +154,6 @@ public class RoutingTable {
         }
     }
 
-
-
-
     /**
      * 功能：从路由表中查找与destinationId最接近的 K 个节点（K 通常为 20）。
      * @param destinationId 目标节点ID
@@ -176,23 +170,23 @@ public class RoutingTable {
                 nodeSettings.getBucketSize(),
                 (a, b) -> getDistance(b.getId()).compareTo(getDistance(a.getId()))
         );
-
         // 计算目标ID的前缀
         int targetPrefix = findBucket(destinationId).getId();
-
         // 首先检查目标桶
         lock.readLock().lock();
         try {
             // 处理目标桶中的所有节点
             for (BigInteger nodeId : targetBucket.getNodeIds()) {
                 ExternalNodeInfo node = targetBucket.getNode(nodeId);
+                // 只处理活跃节点
+                if (node == null || node.getNodeStatus() != NodeStatus.ACTIVE) {
+                    continue;
+                }
                 addIfCloser(node, destinationId, closestNodes);
             }
-
             // 然后扩展搜索到相邻的桶
             int left = targetPrefix - 1;
             int right = targetPrefix + 1;
-
             // 交替向两边扩展搜索
             while ((left >= 0 || right < buckets.size()) && closestNodes.size() < nodeSettings.getBucketSize()) {
                 if (left >= 0) {
@@ -203,7 +197,6 @@ public class RoutingTable {
                     }
                     left--;
                 }
-
                 if (right < buckets.size()) {
                     Bucket bucket = buckets.get(right);
                     for (BigInteger nodeId : bucket.getNodeIds()) {
@@ -213,17 +206,13 @@ public class RoutingTable {
                     right++;
                 }
             }
-
             // 将优先队列中的节点转移到结果列表中
             while (!closestNodes.isEmpty()) {
                 closestNodeList.add(closestNodes.poll());
             }
-
             // 结果需要按距离从小到大排序
             closestNodeList.sort(Comparator.comparing(node -> getDistance(node.getId())));
-
             return closestNodeList;
-
         } finally {
             lock.readLock().unlock();
         }
@@ -236,29 +225,27 @@ public class RoutingTable {
         ArrayList<ExternalNodeInfo> closestNodeList = new ArrayList<>(nodeSettings.getBucketSize());
         // 获取目标ID所在的桶
         Bucket targetBucket = this.findBucket(destinationId);
-
         // 使用优先队列（最大堆）来维护当前最近的K个节点
         PriorityQueue<ExternalNodeInfo> closestNodes = new PriorityQueue<>(
                 nodeSettings.getBucketSize(),
                 (a, b) -> getDistance(b.getId()).compareTo(getDistance(a.getId()))
         );
-
         // 计算目标ID的前缀
         int targetPrefix = findBucket(destinationId).getId();
-
         // 首先检查目标桶
         lock.readLock().lock();
         try {
             // 处理目标桶中的所有节点
             for (BigInteger nodeId : targetBucket.getNodeIds()) {
                 ExternalNodeInfo node = targetBucket.getNode(nodeId);
+                if (node == null || node.getNodeStatus() != NodeStatus.ACTIVE) {
+                    continue;
+                }
                 addIfCloser(node, destinationId, closestNodes);
             }
-
             // 然后扩展搜索到相邻的桶
             int left = targetPrefix - 1;
             int right = targetPrefix + 1;
-
             // 交替向两边扩展搜索
             while ((left >= 0 || right < buckets.size()) && closestNodes.size() < nodeSettings.getBucketSize()) {
                 if (left >= 0) {
@@ -279,27 +266,72 @@ public class RoutingTable {
                     right++;
                 }
             }
-
             // 将优先队列中的节点转移到结果列表中
             while (!closestNodes.isEmpty()) {
                 closestNodeList.add(closestNodes.poll());
             }
-
             // 结果需要按距离从小到大排序
             closestNodeList.sort(Comparator.comparing(node -> getDistance(node.getId())));
-            //去除自己
-            closestNodeList.removeIf(node -> node.getId().equals(localNodeId));
+            //去除自己 一般不存在
+            //closestNodeList.removeIf(node -> node.getId().equals(localNodeId));
             return closestNodeList;
         } finally {
             lock.readLock().unlock();
         }
     }
 
+    /**
+     * 根据节点类型查询活跃节点，并按分数降序排序
+     * @param nodeType 目标节点类型
+     * @param limit 返回节点的最大数量（null 表示返回所有符合条件的节点）
+     * @return 符合类型的活跃节点列表（按分数降序）
+     */
+    public List<ExternalNodeInfo> findNodesByType(NodeType nodeType, Integer limit) {
+        if (nodeType == null) {
+            log.warn("查询节点类型为空，返回空列表");
+            return Collections.emptyList();
+        }
+        // 存储符合条件的节点
+        List<ExternalNodeInfo> result = new ArrayList<>();
+        // 遍历所有桶
+        for (Bucket bucket : buckets) {
+            // 遍历桶中所有节点
+            for (BigInteger nodeId : bucket.getNodeIds()) {
+                ExternalNodeInfo node = bucket.getNode(nodeId);
+                if (node != null
+                        && node.getNodeStatus() == NodeStatus.ACTIVE
+                        && NodeType.valueOf(node.getNodeType()).equals(nodeType)
+                        && !Objects.equals(node.getId(), localNodeId)
+                ) {
+                    result.add(node);
+                }
+            }
+        }
+        // 按分数降序排序（分数高的节点优先）
+        result.sort((a, b) -> Integer.compare(b.getScore(), a.getScore()));
+        // 限制返回数量（如果指定了limit）
+        if (limit != null && limit > 0 && result.size() > limit) {
+            return result.subList(0, limit);
+        }
+        return result;
+    }
+
+
+    /**
+     * 重载方法：查询指定类型的所有活跃节点（不限制数量）
+     */
+    public List<ExternalNodeInfo> findNodesByType(NodeType nodeType) {
+        return findNodesByType(nodeType, null);
+    }
 
     /**
      * 辅助方法：如果节点比当前队列中的最远节点更近，则添加到队列中
      */
     private void addIfCloser(ExternalNodeInfo node, BigInteger destinationId, PriorityQueue<ExternalNodeInfo> closestNodes) {
+        // 双重校验：确保只处理活跃节点
+        if (node.getNodeStatus() != NodeStatus.ACTIVE) {
+            return;
+        }
         // 计算当前节点与目标ID的距离
         BigInteger distance = getDistance(node.getId());
         // 如果队列未满，直接添加
@@ -315,8 +347,6 @@ public class RoutingTable {
         }
     }
 
-
-
     /**
      * 获取 K桶
      */
@@ -329,10 +359,8 @@ public class RoutingTable {
      * 删除节点
      */
     public void delete(ExternalNodeInfo node) {
-        NodeInfoStorageService instance = NodeInfoStorageService.getInstance();
         Bucket bucket = this.findBucket(node.getId());
         bucket.remove(node);
-        instance.deleteRouteTableNode(node.getId());
     }
 
 
@@ -362,14 +390,10 @@ public class RoutingTable {
         return id.xor(this.localNodeId);
     }
 
-
     public boolean contains(BigInteger nodeId) {
         Bucket bucket = this.findBucket(nodeId);
         return bucket.contains(nodeId);
     }
-
-
-
 
     /**
      * 从节点列表恢复路由表
@@ -411,7 +435,6 @@ public class RoutingTable {
             log.warn("过期时间阈值无效，跳过清理");
             return;
         }
-
         NodeInfoStorageService storage = NodeInfoStorageService.getInstance();
         long now = System.currentTimeMillis();
         int deletedCount = 0;
@@ -428,12 +451,10 @@ public class RoutingTable {
                     if (nodeId.equals(localNodeId)) {
                         continue;
                     }
-
                     ExternalNodeInfo node = bucket.getNode(nodeId);
                     if (node == null) {
                         continue; // 节点已被移除，跳过
                     }
-
                     // 计算节点不活跃时间（当前时间 - 最后活跃时间）
                     long inactiveTime = now - node.getLastSeen().getTime();
                     if (inactiveTime > expirationTime) {
@@ -458,13 +479,10 @@ public class RoutingTable {
      */
     public void persistToStorage() {
         log.info("开始将路由表节点持久化到存储系统");
-
         // 获取存储实例
         NodeInfoStorageService storage = NodeInfoStorageService.getInstance();
-
         // 收集所有需要持久化的节点
         List<ExternalNodeInfo> nodesToPersist = new ArrayList<>();
-
         lock.readLock().lock();
         try {
             // 遍历所有桶
@@ -475,7 +493,6 @@ public class RoutingTable {
                     if (nodeId.equals(localNodeId)) {
                         continue;
                     }
-
                     // 获取节点信息并添加到待持久化列表
                     ExternalNodeInfo node = bucket.getNode(nodeId);
                     if (node != null) {
@@ -545,20 +562,67 @@ public class RoutingTable {
         if (node == null){
             return null;
         }
-        return BeanCopyUtils.copyObject(node, NodeInfo.class);
+        return node.extractNodeInfo();
     }
 
     public void removeNode(BigInteger id) {
         lock.writeLock().lock();
         try {
-            // 获取节点 ID 对应的桶
             Bucket bucket = findBucket(id);
-            // 从桶中删除节点（Bucket 需实现 remove (BigInteger id) 方法）
             bucket.remove(id);
-            NodeInfoStorageService.getInstance().deleteRouteTableNode(id);
         }
         finally {
             lock.writeLock().unlock();
         }
+    }
+
+    /**
+     * 处理节点下线：标记为离线状态、扣减分数、更新最后活跃时间并持久化
+     * @param id 下线节点的ID
+     */
+    public void offlineNode(BigInteger id) {
+        // 1. 校验节点ID合法性
+        if (id == null) {
+            log.warn("下线节点失败：节点ID为null");
+            return;
+        }
+        // 2. 跳过本地节点（自身不会下线）
+        if (id.equals(localNodeId)) {
+            log.debug("忽略本地节点下线操作：{}", id);
+            return;
+        }
+        // 4. 查找节点所在的桶并获取节点
+        Bucket bucket = findBucket(id);
+        ExternalNodeInfo node = bucket.getNode(id);
+        if (node == null) {
+            log.debug("节点不存在于路由表中，无需处理下线：{}", id);
+            return;
+        }
+        //标记节点为离线状态
+        node.setNodeStatus(NodeStatus.INACTIVE);
+        //扣减分数
+        node.onFailureResponse(false);
+        //放在桶子的最后面
+        bucket.pushToAfter(node);
+        log.info("节点下线扣分：{}，当前分数：{}", id, node.getScore());
+    }
+
+    /**
+     * 节点是否在线
+     * @param targetNode
+     * @return
+     */
+    public boolean isNodeAvailable(NodeInfo targetNode) {
+        ExternalNodeInfo node = findNode(targetNode.getId());
+        return node != null && node.getNodeStatus() == NodeStatus.ACTIVE;
+    }
+
+    /**
+     * 从全节点中查询
+     * @return
+     */
+    public NodeInfo findAvailableNode() {
+        List<ExternalNodeInfo> nodesByType = findNodesByType(NodeType.FULL, 1);
+        return nodesByType.isEmpty() ? null : nodesByType.getFirst().extractNodeInfo();
     }
 }

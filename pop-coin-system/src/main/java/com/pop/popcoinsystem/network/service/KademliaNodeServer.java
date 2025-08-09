@@ -550,6 +550,11 @@ public class KademliaNodeServer {
         routingTable.removeNode(id);
     }
 
+    //下线节点 并减少分数
+    public void offlineNode(BigInteger id) {
+        routingTable.offlineNode(id);
+    }
+
     public BigInteger getId() {
         return nodeInfo.getId();
     }
