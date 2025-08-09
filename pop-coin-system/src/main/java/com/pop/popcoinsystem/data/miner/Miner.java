@@ -2,22 +2,21 @@ package com.pop.popcoinsystem.data.miner;
 
 import lombok.Data;
 
+import java.util.List;
+
 /**
- * 节点挖矿信息
+ * 矿工信息
  */
 @Data
 public class Miner {
 
-    //奖励接收地址
-    private String address;
-
     //名称
     private String name;
 
-    //创建区块数量
-    private int blockCount = 0;
+    //奖励接收地址
+    private List<String> coinBaseAddress;
 
-    //线程数量
-    private int threadCount = Runtime.getRuntime().availableProcessors();;
+    //手续费接收地址
+    private List<String> feeAddress;
 
 }

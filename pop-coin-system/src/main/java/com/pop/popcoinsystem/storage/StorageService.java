@@ -39,7 +39,6 @@ public class StorageService {
     private static final byte[] KEY_MAIN_LATEST_BLOCK_HASH = "key_main_latest_block_hash".getBytes();
 
 
-
     /*更新主链当前高度*/
     public void updateMainLatestHeight(long height) {
         try {

@@ -1257,10 +1257,13 @@ public class BlockChainServiceImpl implements BlockChainService {
         ScriptSig scriptSig = new ScriptSig(extraNonce);//解锁脚本必须有随机字符 同一个矿工的coinBase会一模一样
         TXInput input = new TXInput(zeroTxId, 0, scriptSig);
         // 创建输出，将奖励发送到指定地址
-        TXOutput output = new TXOutput(calculateBlockReward(height)+totalFee, scriptPubKey);
+        TXOutput output = new TXOutput(calculateBlockReward(height), scriptPubKey);
+        TXOutput outputFee = new TXOutput(totalFee, scriptPubKey);
+
         coinbaseTx.setVersion(TRANSACTION_VERSION_1);
         coinbaseTx.getInputs().add(input);
         coinbaseTx.getOutputs().add(output);
+        coinbaseTx.getOutputs().add(outputFee);
         // 计算并设置交易ID
         coinbaseTx.setTxId(coinbaseTx.calculateTxId());
         coinbaseTx.setSize(coinbaseTx.calculateBaseSize());

@@ -30,7 +30,7 @@ kademlia:
   node:
     tcpPort: 8333
     udpPort: 8334
-  isBootstrap: 0 # 0不连接到引导节点  1连接
+  isBootstrap: 1 # 0不连接到引导节点  1连接
   bootstrap:
     - ip: 192.168.137.102
       tcp-port: 8333

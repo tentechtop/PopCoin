@@ -4,6 +4,7 @@ import com.pop.popcoinsystem.application.service.wallet.Wallet;
 import com.pop.popcoinsystem.application.service.wallet.WalletStorage;
 import com.pop.popcoinsystem.data.miner.Miner;
 import com.pop.popcoinsystem.data.vo.result.Result;
+import com.pop.popcoinsystem.storage.MiningStorageService;
 import com.pop.popcoinsystem.storage.StorageService;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -28,7 +29,7 @@ public class MiningStart implements ApplicationRunner {
     @Autowired
     private MiningServiceImpl miningService;
     @Autowired
-    private StorageService storageService;
+    private MiningStorageService storageService;
 
     /**
      * 设置节点矿工信息
