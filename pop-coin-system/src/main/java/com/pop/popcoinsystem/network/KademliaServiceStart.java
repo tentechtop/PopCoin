@@ -41,6 +41,10 @@ public class KademliaServiceStart {
     @Value("${kademlia.node.tcpPort:8333}")
     private int tcpPort;
 
+    //节点类型
+    @Value("${kademlia.node.nodeType:1}") //1全节点 #2轻节点 #仅出站
+    private int nodeType;
+
     private int isBootstrap;
 
     // 引导节点列表（从配置文件读取）
@@ -74,7 +78,7 @@ public class KademliaServiceStart {
             }
             BigInteger bigInteger = new BigInteger(1, bytes);
             nodeSetting.setId(bigInteger);
-            nodeSetting.setNodeType(NodeType.FULL.getValue());//默认是全节点
+            nodeSetting.setNodeType(nodeType);//默认是全节点
         }else {
             if (nodeSetting.getPublicKeyHex().isEmpty() || nodeSetting.getPrivateKeyHex().isEmpty()){
                 nodeSetting.setPrivateKeyHex(CryptoUtil.bytesToHex(privateKey.getEncoded()));
@@ -85,9 +89,7 @@ public class KademliaServiceStart {
         nodeSetting.setTcpPort(tcpPort);
         nodeSetting.setUdpPort(udpPort);
         if (nodeSetting.getId() == null){
-            //用 “IP + 端口” 作为物理唯一标识
-            String nodeId = localIp + ":" + tcpPort+":"+udpPort;
-            byte[] bytes = CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(nodeId.getBytes()));
+            byte[] bytes = CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(publicKey.getEncoded()));
             if (bytes.length != 20) {
                 throw new IllegalArgumentException("RIPEMD-160 输出必须是 20 字节");
             }
@@ -108,7 +110,7 @@ public class KademliaServiceStart {
         ExternalNodeInfo externalNodeInfo = storageService.getNodeSelfNode();
         if (externalNodeInfo == null){
             externalNodeInfo = new ExternalNodeInfo();
-            externalNodeInfo.setScore(60);
+            externalNodeInfo.setScore(60);//分数是由接受来定义的
         }
         externalNodeInfo.setId(nodeSetting.getId());
         externalNodeInfo.setIpv4(nodeSetting.getIpv4());
@@ -116,6 +118,9 @@ public class KademliaServiceStart {
         externalNodeInfo.setUdpPort(nodeSetting.getUdpPort());
         externalNodeInfo.setNodeType(nodeSetting.getNodeType());
         server.setExternalNodeInfo(externalNodeInfo);
+
+
+
         storageService.addOrUpdateSelfNode(externalNodeInfo);
         //自己要用单独的KEY保存不再放在路由表中
         server.setNodeSettings(NodeSettings.Default.build());

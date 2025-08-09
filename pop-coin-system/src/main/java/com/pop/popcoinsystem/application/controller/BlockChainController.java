@@ -16,9 +16,6 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.web.bind.annotation.*;
 
 
-/**
- * 为了可维护性 整个系统仅支持P2WPKH
- */
 @Slf4j
 @RestController
 @RequestMapping("/blockchain")
@@ -174,11 +171,6 @@ public class BlockChainController {
     }
 
 
-
-
-
-
-
     /**
      * 获取本节点与网络的高度差
      */
@@ -186,11 +178,6 @@ public class BlockChainController {
     public String getHeightDiff() {
         return "";
     }
-
-
-
-
-
 
 
 

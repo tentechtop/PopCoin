@@ -75,7 +75,7 @@ public class RoutingTable {
         NodeInfoStorageService instance = NodeInfoStorageService.getInstance();
         lock.writeLock().lock();
         try {
-            ExternalNodeInfo node = BeanCopyUtils.copyObject(updateNode, ExternalNodeInfo.class);
+            ExternalNodeInfo node = updateNode.extractExternalNodeInfo();
             node.setLastSeen(new Date());
             Bucket bucket = this.findBucket(node.getId());
             // 更新桶的访问时间

@@ -47,11 +47,11 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
         byte[] genesisBlockHash = handshake.getGenesisBlockHash();
         byte[] genesisHsh = kademliaNodeServer.getBlockChainService().GENESIS_BLOCK_HASH();
         if (!Arrays.equals(genesisHsh, genesisBlockHash)){
-            log.error("区块链信息不一致 对方节点未提供创世区块哈希，拒绝握手");
+            log.error("区块链信息不一致，拒绝握手");
             //回复握手失败
             Handshake handshake1 = new Handshake();
             handshake1.setHandshakeSuccess(false);
-            handshake1.setErrorMessage("区块链信息不一致，未提供创世区块哈希，拒绝握手");
+            handshake1.setErrorMessage("区块链信息不一致，拒绝握手");
             HandshakeResponseMessage handshakeResponseMessage = new HandshakeResponseMessage(handshake1);
             handshakeResponseMessage.setSender(me);
             handshakeResponseMessage.setReceiver(message.getSender());

@@ -577,7 +577,7 @@ public class MiningServiceImpl {
             log.info("交易 {} 已从交易池移除", CryptoUtil.bytesToHex(txId));
             return true;
         }
-        log.warn("交易 {} 不在交易池中，不需要移除", CryptoUtil.bytesToHex(txId));
+        log.debug("交易 {} 不在交易池中，不需要移除", CryptoUtil.bytesToHex(txId));
         return false;
     }
 

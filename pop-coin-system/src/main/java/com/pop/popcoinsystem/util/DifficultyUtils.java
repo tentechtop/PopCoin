@@ -281,6 +281,8 @@ public class DifficultyUtils {
 
     // 示例测试
     public static void main(String[] args) {
+        log.info("初始难度{}", DIFFICULTY_1_TARGET);
+
         String hex = "0000ffffffff0000000000000000000000000000000000000000000000000000";
         //转字节类型的难度目标 未压缩
 
