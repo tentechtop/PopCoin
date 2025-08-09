@@ -117,6 +117,7 @@ public class KademliaServiceStart {
         externalNodeInfo.setTcpPort(nodeSetting.getTcpPort());
         externalNodeInfo.setUdpPort(nodeSetting.getUdpPort());
         externalNodeInfo.setNodeType(nodeSetting.getNodeType());
+        externalNodeInfo.setPublicKey(CryptoUtil.hexToBytes(nodeSetting.getPublicKeyHex()));
         server.setExternalNodeInfo(externalNodeInfo);
 
 
