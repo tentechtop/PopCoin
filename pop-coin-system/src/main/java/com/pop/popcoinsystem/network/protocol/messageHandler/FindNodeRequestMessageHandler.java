@@ -39,7 +39,7 @@ public class FindNodeRequestMessageHandler implements MessageHandler{
         findNodeResponseMessage.setSender(kademliaNodeServer.getNodeInfo());
         findNodeResponseMessage.setReceiver(sender);
         findNodeResponseMessage.setData(closestResult);
-        kademliaNodeServer.getTcpClient().sendMessage(findNodeResponseMessage);
+        kademliaNodeServer.getTcpClient().sendAsyncMessage(findNodeResponseMessage);
         return null;
     }
 

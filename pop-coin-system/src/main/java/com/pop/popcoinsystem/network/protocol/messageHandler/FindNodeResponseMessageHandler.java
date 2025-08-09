@@ -30,6 +30,7 @@ public class FindNodeResponseMessageHandler implements MessageHandler{
     }
 
     protected FindNodeResponseMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull FindNodeResponseMessage message) throws InterruptedException, ConnectException, FullBucketException {
+        log.info("收到查找节点响应");
         NodeInfo nodeInfo = kademliaNodeServer.getNodeInfo();
         BigInteger id = nodeInfo.getId();
         RoutingTable routingTable = kademliaNodeServer.getRoutingTable();

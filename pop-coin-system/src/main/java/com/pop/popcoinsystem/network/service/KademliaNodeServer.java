@@ -419,13 +419,10 @@ public class KademliaNodeServer {
      */
     public void maintainNetwork() {
         log.debug("开始维护网络");
-        RoutingTable routingTable = getRoutingTable();
         try {
             long now = System.currentTimeMillis();
             // 检查路由表中节点的活性，移除不活跃节点
             checkNodeLiveness(now);
-
-
         } catch (Exception e) {
             log.error("网络维护任务执行失败", e);
         }
@@ -446,7 +443,7 @@ public class KademliaNodeServer {
      */
     private void checkNodeLiveness(long now) {
         // 获取路由表中所有节点  或者本节点最近的节点 或者用抽样检测
-        List<ExternalNodeInfo> allNodes = routingTable.getAllActiveNodes();
+        List<ExternalNodeInfo> allNodes = routingTable.getAllNodes();
         if (allNodes.isEmpty()) {
             log.info("路由表为空，无需检查节点活性");
             return;

@@ -57,7 +57,7 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
         }
         log.info("握手成功");
         //如果对方节点信息不存在就初始化对方的分数信息
-        kademliaNodeServer.getRoutingTable().update(senderNodeInfo);//更新对方的节点信息
+        kademliaNodeServer.getRoutingTable().forceUpdate(senderNodeInfo);//更新对方的节点信息
         //返回握手响应 携带自己的节点信息 和区块链信息 用于对方是否需要同步
         Handshake handshakeResponse = new Handshake();
         handshakeResponse.setExternalNodeInfo(kademliaNodeServer.getExternalNodeInfo());

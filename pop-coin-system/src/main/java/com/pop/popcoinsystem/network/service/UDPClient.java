@@ -55,6 +55,7 @@ public class UDPClient {
                         pipeline.addLast(new KademliaNodeServer.TCPKademliaMessageEncoder());
                     }
                 });
+        ChannelFuture bindFuture = bootstrap.bind(0);
     }
 
 
