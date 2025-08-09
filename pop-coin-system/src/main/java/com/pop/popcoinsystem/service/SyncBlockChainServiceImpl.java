@@ -76,4 +76,18 @@ public class SyncBlockChainServiceImpl {
         kademliaNodeServer.getTcpClient().sendMessage(pingKademliaMessage);
         return Result.ok();
     }
+
+    public Result sendPing() {
+        NodeInfo nodeInfo = new NodeInfo();
+        nodeInfo.setId(BigInteger.ONE);
+        nodeInfo.setIpv4("192.168.137.102");
+        nodeInfo.setTcpPort(8333);
+        nodeInfo.setUdpPort(8334);
+
+        PingKademliaMessage pingKademliaMessage = new PingKademliaMessage();
+        pingKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());//本节点信息
+        pingKademliaMessage.setReceiver(nodeInfo);
+        kademliaNodeServer.getUdpClient().sendAsyncMessage(pingKademliaMessage);
+        return Result.ok();
+    }
 }

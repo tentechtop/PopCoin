@@ -63,7 +63,7 @@ public class KademliaNodeServer {
     // 消息过期时间
     public static final long MESSAGE_EXPIRATION_TIME = 30000;
     // 节点过期时间
-    public static final long NODE_EXPIRATION_TIME = 45000;
+    public static final long NODE_EXPIRATION_TIME = 60000;
     //节点信息
     private NodeInfo nodeInfo;
 
@@ -186,7 +186,7 @@ public class KademliaNodeServer {
             //维护网络 首次执行立即开始，之后每 delay  秒执行一次 maintainNetwork 方法  单位秒
             long delay = 15;
             long delay1 = 60 * 30; //
-            scheduler.scheduleAtFixedRate(this::maintainNetwork, delay, delay, TimeUnit.SECONDS);
+            scheduler.scheduleAtFixedRate(this::maintainNetwork, 0, delay, TimeUnit.SECONDS);
             scheduler.scheduleAtFixedRate(this::persistToStorage, delay1, delay1, TimeUnit.SECONDS);
         } catch (Exception e) {
             log.error("KademliaNode start error", e);
@@ -302,8 +302,6 @@ public class KademliaNodeServer {
             }
             if (kademliaMessage instanceof PongKademliaMessage){
                 log.info("收到引导节点{}的Pong消息", bootstrapNodeInfo);
-                //更新引导节点
-                routingTable.update(bootstrapNodeInfo);
                 //向引导节点发送握手请求 收到握手回复后检查 自己的区块链信息
                 BlockChainServiceImpl blockChainService = this.getBlockChainService();
                 byte[] bytes = blockChainService.GENESIS_BLOCK_HASH();
@@ -443,7 +441,7 @@ public class KademliaNodeServer {
      */
     private void checkNodeLiveness(long now) {
         // 获取路由表中所有节点  或者本节点最近的节点 或者用抽样检测
-        List<ExternalNodeInfo> allNodes = routingTable.getAllNodes();
+        List<ExternalNodeInfo> allNodes = routingTable.getAllActiveNodes();
         if (allNodes.isEmpty()) {
             log.info("路由表为空，无需检查节点活性");
             return;

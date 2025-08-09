@@ -31,6 +31,12 @@ public class TestMessageController {
     }
 
 
+    //发送ping
+    @GetMapping("/sendPing")
+    public Result sendPing() throws Exception {
+        return syncBlockChainService.sendPing();
+    }
+
 
 
 
