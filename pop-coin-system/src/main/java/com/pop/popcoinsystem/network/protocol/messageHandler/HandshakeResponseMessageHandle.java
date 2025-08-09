@@ -29,7 +29,7 @@ public class HandshakeResponseMessageHandle implements MessageHandler{
         return doHandle(kademliaNodeServer, (HandshakeResponseMessage) message);
     }
 
-    protected EmptyKademliaMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull HandshakeResponseMessage message) throws InterruptedException, ConnectException, UnsupportedChainException {
+    protected EmptyKademliaMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull HandshakeResponseMessage message) throws InterruptedException, ConnectException, UnsupportedChainException, FullBucketException {
         log.info("收到握手响应");
         NodeInfo sender = message.getSender();//消息来源
         Handshake handshake = message.getData();
@@ -42,34 +42,7 @@ public class HandshakeResponseMessageHandle implements MessageHandler{
             throw new UnsupportedChainException(errorMessage);
         }
         ExternalNodeInfo data = handshake.getExternalNodeInfo();
-        try {
-            log.info("成功更新节点 {} 到路由表", sender.getId());
-            //ping消息应该携带 节点基本消息外的额外消息如
-            kademliaNodeServer.getRoutingTable().update(data);
-        }catch (FullBucketException e){
-            kademliaNodeServer.getRoutingTable().forceUpdate(data);
-        }
-        BlockChainServiceImpl blockChainService = kademliaNodeServer.getBlockChainService();
-        Block block = blockChainService.getMainLatestBlock();
-        byte[] remoteLatestHash  = handshake.getLatestBlockHash();
-        long remoteLatestHeight  = handshake.getLatestBlockHeight();
-        byte[] remoteChainWork = handshake.getChainWork();//工作总量
-        byte[] localLatestHash  = block==null? GENESIS_PREV_BLOCK_HASH: block.getHash();
-        long localLatestHeight  = block==null? -1L:blockChainService.getMainLatestHeight();
-        byte[] localChainWork = block==null? new byte[0]:block.getChainWork();
-
-        // 3. 比较差异并发起同步
-        kademliaNodeServer.getBlockChainService().compareAndSync(
-                kademliaNodeServer,
-                sender,
-                localLatestHeight,
-                localLatestHash,
-                localChainWork,
-                remoteLatestHeight,
-                remoteLatestHash,
-                remoteChainWork
-
-        );
+        kademliaNodeServer.getRoutingTable().update(data);
         //再发送查找节点的请求
         log.debug("收到响应后再发送查找节点的请求");
         FindNodeRequestMessage findNodeRequestMessage = new FindNodeRequestMessage();

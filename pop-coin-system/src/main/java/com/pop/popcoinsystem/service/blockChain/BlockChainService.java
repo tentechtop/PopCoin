@@ -16,6 +16,8 @@ import com.pop.popcoinsystem.data.vo.result.ListPageResult;
 import com.pop.popcoinsystem.data.vo.result.TPageResult;
 import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.network.common.NodeInfo;
+import com.pop.popcoinsystem.service.blockChain.asyn.SyncRequest;
+import com.pop.popcoinsystem.service.blockChain.asyn.SyncResponse;
 
 import java.net.ConnectException;
 import java.util.List;
@@ -177,8 +179,6 @@ public interface BlockChainService {
 
     BlockHeader getBlockHeader(long height);
 
-
-
     List<BlockHeader> getBlockHeaders(long startHeight, int count);
 
     Map<Long,byte[]> getBlockHashes(List<Long> heightsToCheck);
@@ -191,4 +191,6 @@ public interface BlockChainService {
 
 
     byte[] GENESIS_BLOCK_HASH();
+
+    SyncResponse RequestSynchronization(SyncRequest syncRequest);
 }

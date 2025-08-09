@@ -11,7 +11,11 @@ import com.pop.popcoinsystem.data.script.*;
 import com.pop.popcoinsystem.exception.UnsupportedAddressException;
 import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.common.NodeInfo;
+import com.pop.popcoinsystem.network.protocol.message.HandshakeResponseMessage;
+import com.pop.popcoinsystem.network.protocol.messageData.Handshake;
 import com.pop.popcoinsystem.network.rpc.RpcProxyFactory;
+import com.pop.popcoinsystem.service.blockChain.asyn.SyncRequest;
+import com.pop.popcoinsystem.service.blockChain.asyn.SyncResponse;
 import com.pop.popcoinsystem.service.blockChain.asyn.SynchronizedBlocksImpl;
 import com.pop.popcoinsystem.service.mining.MiningServiceImpl;
 import com.pop.popcoinsystem.service.blockChain.strategy.ScriptVerificationStrategy;
@@ -1583,6 +1587,37 @@ public class BlockChainServiceImpl implements BlockChainService {
 
     public byte[] GENESIS_BLOCK_HASH() {
         return popStorage.getMainBlockHashByHeight(0);
+    }
+
+    /**
+     * 请求同步
+     * @param syncRequest
+     * @return
+     */
+    @Override
+    public SyncResponse RequestSynchronization(SyncRequest syncRequest) {
+        SyncResponse syncResponse = new SyncResponse();
+        byte[] remoteGenesisBlockHash = syncRequest.getGenesisBlockHash();
+        byte[] localGenesisBlockHash = GENESIS_BLOCK_HASH();
+        if (!Arrays.equals(remoteGenesisBlockHash, localGenesisBlockHash)){
+            log.error("创世区块hash不一致,拒绝同步");
+            syncResponse.setAllowSync(false);
+            syncResponse.setRejectReason("创世区块hash不一致,拒绝同步");
+            return syncResponse;
+        }
+        byte[] remoteLatestHash  = syncRequest.getLatestBlockHash();
+        long remoteLatestHeight  = syncRequest.getLatestBlockHeight();
+        byte[] remoteChainWork = syncRequest.getChainWork();
+        Block localLatestBock = getMainLatestBlock();
+        byte[] localLatestHash  = localLatestBock==null? GENESIS_PREV_BLOCK_HASH: localLatestBock.getHash();
+        long localLatestHeight  = localLatestBock==null? -1L:localLatestBock.getHeight();
+        byte[] localChainWork = localLatestBock==null? new byte[0]:localLatestBock.getChainWork();
+        syncResponse.setAllowSync(true);
+        syncResponse.setLatestBlockHeight(localLatestHeight);
+        syncResponse.setLatestBlockHash(localLatestHash);
+        syncResponse.setChainWork(localChainWork);
+        syncResponse.setRejectReason("");
+        return syncResponse;
     }
 
 

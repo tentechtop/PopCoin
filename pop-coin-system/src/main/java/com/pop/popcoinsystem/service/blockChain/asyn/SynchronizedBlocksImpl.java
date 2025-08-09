@@ -77,7 +77,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
             t.setDaemon(true);
             return t;
         });
-        scheduler.scheduleAtFixedRate(this::detectAndSync, 0, 15, TimeUnit.SECONDS);
+        scheduler.scheduleAtFixedRate(this::findTheHighest, 0, 15, TimeUnit.SECONDS);
     }
 
     public void compareAndSync(NodeInfo remoteNode,
@@ -558,7 +558,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
         finishSync();
     }
 
-    private void detectAndSync() {
+    private void findTheHighest() {
         getNetworkMaxHeight();
     }
     private void getNetworkMaxHeight() {
@@ -578,48 +578,38 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                     if (remoteHeight > maxHeight) {
                         maxHeight = remoteHeight;
                         log.info("更新网络最高高度为: {} (来自节点 {})", maxHeight, node.getId());
-                        PingKademliaMessage pingKademliaMessage = new PingKademliaMessage();
-                        pingKademliaMessage.setSender(local);//本节点信息
-                        pingKademliaMessage.setReceiver(node);
-                        pingKademliaMessage.setReqResId();
-                        pingKademliaMessage.setResponse(false);
-                        try {
-                            KademliaMessage kademliaMessage = kademliaNodeServer.getUdpClient().sendMessageWithResponse(pingKademliaMessage);
-                            if (kademliaMessage == null){
-                                log.error("未收到引导节点{}的Pong消息", node);
-                                return;
-                            }
-                            if (kademliaMessage instanceof PongKademliaMessage){
-                                log.info("收到引导节点{}的Pong消息", node);
-                                //向引导节点发送握手请求 收到握手回复后检查 自己的区块链信息
-                                byte[] bytes = localBlockChainService.GENESIS_BLOCK_HASH();
-                                if (bytes == null){
-                                    Handshake handshake = new Handshake();
-                                    handshake.setExternalNodeInfo(kademliaNodeServer.getExternalNodeInfo());//携带我的节点信息
-                                    handshake.setGenesisBlockHash(localBlockChainService.GENESIS_BLOCK_HASH());
-                                    handshake.setLatestBlockHash(null);
-                                    handshake.setLatestBlockHeight(-1);
-                                    handshake.setChainWork(new byte[0]);
-                                    HandshakeRequestMessage handshakeRequestMessage = new HandshakeRequestMessage(handshake);
-                                    handshakeRequestMessage.setSender(kademliaNodeServer.getNodeInfo());//本节点信息
-                                    handshakeRequestMessage.setReceiver(node);
-                                    kademliaNodeServer.getTcpClient().sendMessage(handshakeRequestMessage);
-                                }else {
-                                    Block mainLatestBlock =localBlockChainService.getMainLatestBlock();
-                                    Handshake handshake = new Handshake();
-                                    handshake.setExternalNodeInfo(kademliaNodeServer.getExternalNodeInfo());//携带我的节点信息
-                                    handshake.setGenesisBlockHash(localBlockChainService.GENESIS_BLOCK_HASH());
-                                    handshake.setLatestBlockHash(mainLatestBlock.getHash());
-                                    handshake.setLatestBlockHeight(mainLatestBlock.getHeight());
-                                    handshake.setChainWork(mainLatestBlock.getChainWork());
-                                    HandshakeRequestMessage handshakeRequestMessage = new HandshakeRequestMessage(handshake);
-                                    handshakeRequestMessage.setSender(kademliaNodeServer.getNodeInfo());//本节点信息
-                                    handshakeRequestMessage.setReceiver(node);
-                                    kademliaNodeServer.getTcpClient().sendMessage(handshakeRequestMessage);
-                                }
-                            }
-                        }catch (Exception e){
-                            log.error("与节点{}通信失败: {}", node.getId(), e.getMessage());
+                        //发送最高高度广播给临近节点帮助同步 TODO
+
+
+                        Block mainLatestBlock =localBlockChainService.getMainLatestBlock();
+                        SyncRequest syncRequest = new SyncRequest();
+                        byte[] localLatestChainWork = mainLatestBlock.getChainWork();
+                        byte[] localLatestHash = mainLatestBlock.getHash();
+                        long localLatestHeight = mainLatestBlock.getHeight();
+
+                        syncRequest.setChainWork(localLatestChainWork);
+                        syncRequest.setLatestBlockHash(localLatestHash);
+                        syncRequest.setLatestBlockHeight(localLatestHeight);
+                        syncRequest.setGenesisBlockHash(localBlockChainService.GENESIS_BLOCK_HASH());
+                        SyncResponse syncResponse = remoteService.RequestSynchronization(syncRequest);
+
+                        //拿到响应后对比
+                        if (!syncResponse.isAllowSync()) {
+                            log.error("同步请求被拒绝：{}", syncResponse.getRejectReason());
+                        }else {
+                            //拿到响应数据提交差异
+                            long remoteLatestBlockHeight = syncResponse.getLatestBlockHeight();
+                            byte[] remoteLatestBlockHash = syncResponse.getLatestBlockHash();
+                            byte[] remoteLatestChainWork = syncResponse.getChainWork();
+                            compareAndSync(
+                                    node,
+                                    localLatestHeight,
+                                    localLatestHash,
+                                    localLatestChainWork,
+                                    remoteLatestBlockHeight,
+                                    remoteLatestBlockHash,
+                                    remoteLatestChainWork
+                            );
                         }
                     }
                 } catch (Exception e) {

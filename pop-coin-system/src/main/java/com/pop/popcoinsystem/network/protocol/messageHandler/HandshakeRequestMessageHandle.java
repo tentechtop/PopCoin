@@ -55,28 +55,9 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
             kademliaNodeServer.getRoutingTable().delete(senderNodeInfo);
             return null;
         }
+
         //如果对方节点信息不存在就初始化对方的分数信息
-
         kademliaNodeServer.getRoutingTable().update(senderNodeInfo);//更新对方的节点信息
-
-        byte[] remoteLatestHash  = handshake.getLatestBlockHash();
-        long remoteLatestHeight  = handshake.getLatestBlockHeight();
-        byte[] remoteChainWork = handshake.getChainWork();//工作总量
-        byte[] localLatestHash  = block==null? GENESIS_PREV_BLOCK_HASH: block.getHash();
-        long localLatestHeight  = block==null? -1L:blockChainService.getMainLatestHeight();
-        byte[] localChainWork = block==null? new byte[0]:block.getChainWork();
-        // 3. 比较差异并发起同步
-        kademliaNodeServer.getBlockChainService().compareAndSync(
-                kademliaNodeServer,
-                sender,
-                localLatestHeight,
-                localLatestHash,
-                localChainWork,
-                remoteLatestHeight,
-                remoteLatestHash,
-                remoteChainWork
-        );
-
         //返回握手响应 携带自己的节点信息 和区块链信息 用于对方是否需要同步
         Handshake handshakeResponse = new Handshake();
         handshakeResponse.setExternalNodeInfo(kademliaNodeServer.getExternalNodeInfo());
