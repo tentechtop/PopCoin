@@ -113,7 +113,7 @@ public class UDPClient {
         // 返回CompletableFuture，让调用者可以灵活处理异步结果
         return CompletableFuture.supplyAsync(() -> {
             try {
-                return sendMessageWithResponse(message, 5, TimeUnit.SECONDS);;
+                return sendMessageWithResponse(message, 5, TimeUnit.SECONDS);
             } catch (Exception e) {
                 throw new CompletionException(e);
             }
