@@ -648,7 +648,6 @@ public class BlockChainServiceImpl implements BlockChainService {
                 log.info("移除交易池中的交易: {}", transaction.getTxId());
             }
         }
-
         // 检查是否出现分叉（父区块是否为主链最新区块）
         boolean isFork = !Arrays.equals(block.getPreviousHash(), currentMainHash);
         // 1. 处理主链延伸（非分叉情况）
