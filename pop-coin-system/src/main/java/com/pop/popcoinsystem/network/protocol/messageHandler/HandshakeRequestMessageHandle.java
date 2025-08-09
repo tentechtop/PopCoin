@@ -64,13 +64,6 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
         byte[] localLatestHash  = block==null? GENESIS_PREV_BLOCK_HASH: block.getHash();
         long localLatestHeight  = block==null? -1L:blockChainService.getMainLatestHeight();
         byte[] localChainWork = block==null? new byte[0]:block.getChainWork();
-
-        log.info("本地高度:{}",localLatestHash);
-        log.info("远程高度:{}",remoteLatestHeight);
-        log.info("本地工作总量:{}",localChainWork);
-        log.info("远程工作总量:{}",remoteChainWork);
-        log.info("本地和远程比较 工作量比较:{}", DifficultyUtils.compare(localChainWork,remoteChainWork));
-
         // 3. 比较差异并发起同步
         kademliaNodeServer.getBlockChainService().compareAndSync(
                 kademliaNodeServer,
@@ -90,6 +83,7 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
         handshakeResponse.setLatestBlockHash(block.getHash());
         handshakeResponse.setLatestBlockHeight(block.getHeight());
         handshakeResponse.setChainWork(block.getChainWork());
+        handshakeResponse.setHandshakeSuccess(true);
         HandshakeResponseMessage handshakeResponseMessage = new HandshakeResponseMessage(handshakeResponse);
         handshakeResponseMessage.setSender(me);
         handshakeResponseMessage.setReceiver(message.getSender());

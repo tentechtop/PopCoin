@@ -46,7 +46,6 @@ public class HandshakeResponseMessageHandle implements MessageHandler{
         }catch (FullBucketException e){
             kademliaNodeServer.getRoutingTable().forceUpdate(data);
         }
-
         BlockChainServiceImpl blockChainService = kademliaNodeServer.getBlockChainService();
         Block block = blockChainService.getMainLatestBlock();
         byte[] remoteLatestHash  = handshake.getLatestBlockHash();
@@ -55,10 +54,6 @@ public class HandshakeResponseMessageHandle implements MessageHandler{
         byte[] localLatestHash  = block==null? GENESIS_PREV_BLOCK_HASH: block.getHash();
         long localLatestHeight  = block==null? -1L:blockChainService.getMainLatestHeight();
         byte[] localChainWork = block==null? new byte[0]:block.getChainWork();
-
-        log.info("本地高度:{}",localLatestHeight);
-        log.info("远程高度:{}",remoteLatestHeight);
-        log.info("本地和远程比较 工作量比较:{}", DifficultyUtils.compare(localChainWork,remoteChainWork));
 
         // 3. 比较差异并发起同步
         kademliaNodeServer.getBlockChainService().compareAndSync(
