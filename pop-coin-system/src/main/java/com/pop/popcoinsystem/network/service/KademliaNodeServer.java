@@ -466,7 +466,7 @@ public class KademliaNodeServer {
                 udpClient.removeChannel(node.getId());
                 continue;
             }
-            log.info("节点 {} 活跃，最后活跃时间：{}前s", node.getId(), inactiveTime/1000);
+            log.info("节点 {} 活跃，最后活跃时间：{}s前", node.getId(), inactiveTime/1000);
 
             // 2. 节点即将过期（接近阈值阈值），发送Ping确认活性
             if (inactiveTime > NODE_EXPIRATION_TIME * 0.8) {
