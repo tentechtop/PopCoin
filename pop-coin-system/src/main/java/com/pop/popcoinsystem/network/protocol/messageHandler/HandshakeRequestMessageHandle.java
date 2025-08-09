@@ -35,7 +35,7 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
         //将该节点添加到路由表中  一定是活跃节点记录下
         NodeInfo sender = message.getSender();
         Handshake handshake = message.getData();
-        ExternalNodeInfo senderNodeInfo = handshake.getExternalNodeInfo();//请求方节点信息
+        ExternalNodeInfo externalNodeInfo = handshake.getExternalNodeInfo();//请求方节点信息
         NodeInfo me = kademliaNodeServer.getNodeInfo();
         BlockChainServiceImpl blockChainService = kademliaNodeServer.getBlockChainService();
         Block block = blockChainService.getMainLatestBlock();
@@ -52,12 +52,15 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
             handshakeResponseMessage.setSender(me);
             handshakeResponseMessage.setReceiver(message.getSender());
             kademliaNodeServer.getTcpClient().sendMessage(handshakeResponseMessage);
-            kademliaNodeServer.getRoutingTable().delete(senderNodeInfo);
+            kademliaNodeServer.getRoutingTable().delete(externalNodeInfo);
             return null;
         }
-        log.info("握手成功");
+        log.info("对方节点类型:{}", externalNodeInfo.getNodeType());
+        log.info("握手成功 节点信息:{}", externalNodeInfo);
+
+
         //如果对方节点信息不存在就初始化对方的分数信息
-        kademliaNodeServer.getRoutingTable().forceUpdate(senderNodeInfo);//更新对方的节点信息
+        kademliaNodeServer.getRoutingTable().update(externalNodeInfo);//更新对方的节点信息
         //返回握手响应 携带自己的节点信息 和区块链信息 用于对方是否需要同步
         Handshake handshakeResponse = new Handshake();
         handshakeResponse.setExternalNodeInfo(kademliaNodeServer.getExternalNodeInfo());
