@@ -463,34 +463,13 @@ public class KademliaNodeServer {
             }
             log.info("节点 {} 活跃，最后活跃时间：{}s前", node.getId(), inactiveTime/1000);
 
-            // 2. 节点即将过期（接近阈值阈值），发送Ping确认活性
-            if (inactiveTime > NODE_EXPIRATION_TIME * 0.8) {
-                log.info("节点 {} 即将过期，发送Ping确认活性", node.getId());
-                // 构建Ping消息
-                PingKademliaMessage pingMsg = new PingKademliaMessage();
-                pingMsg.setSender(nodeInfo);
-                pingMsg.setReceiver(node.extractNodeInfo());
-                pingMsg.setReqResId();
-                pingMsg.setResponse(false);
-                CompletableFuture<KademliaMessage> kademliaMessageCompletableFuture = udpClient.sendMessageWithResponse(pingMsg);
-            }
+            // 构建Ping消息
+            PingKademliaMessage pingMsg = new PingKademliaMessage();
+            pingMsg.setSender(nodeInfo);
+            pingMsg.setReceiver(node.extractNodeInfo());
+            udpClient.sendAsyncMessage(pingMsg);
         }
     }
-
-
-
-    /**
-     * 清理过期的广播消息
-     */
-/*
-    private void cleanExpiredBroadcastMessages(long now) {
-        broadcastMessages.entrySet().removeIf(entry ->
-                now - entry.getValue() > MESSAGE_EXPIRATION_TIME
-        );
-        log.debug("清理 过期广播消息，剩余: {}", broadcastMessages.size());
-    }
-*/
-
 
 
 
