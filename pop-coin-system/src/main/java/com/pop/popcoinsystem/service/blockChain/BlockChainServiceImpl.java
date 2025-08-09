@@ -66,13 +66,60 @@ public class BlockChainServiceImpl implements BlockChainService {
     @Autowired
     private SynchronizedBlocksImpl blockSynchronizer; // 复用异步同步器
     @PostConstruct
-    private void initBlockChain() throws Exception {
+    private void initBlockChain() {
         Block genesisBlock = getMainBlockByHeight(0);
-        if (genesisBlock == null){
-            popStorage.updateMainLatestHeight(-1);
-            popStorage.updateMainLatestBlockHash(GENESIS_PREV_BLOCK_HASH);
+        if (genesisBlock == null) {
+            genesisBlock = Block.createGenesisBlock();
+            // 寻找符合难度的nonce
+            int nonce = 27746;
+/*            while (true) {
+                genesisBlock.setNonce(nonce);
+                // 计算区块哈希
+                byte[] blockHash = genesisBlock.computeHash();
+                if (DifficultyUtils.isValidHash(blockHash, DifficultyUtils.difficultyToCompact(1L))) {
+                    validHash = blockHash;
+                    log.info("创世区块挖掘成功！nonce={}, 哈希={}",
+                            nonce, CryptoUtil.bytesToHex(blockHash));
+                    break;
+                }
+                // 防止无限循环（实际可根据需求调整最大尝试次数）
+                if (nonce % 100000 == 0) {
+                    log.debug("已尝试{}次，继续寻找有效nonce...", nonce);
+                }
+                nonce++;
+                // 安全限制：最多尝试1亿次（防止极端情况）
+                if (nonce >= 100_000_000_0) {
+                    throw new RuntimeException("创世区块挖矿超时，未找到有效nonce");
+                }
+            }*/
+            // 9. 设置计算得到的哈希和nonce
+            genesisBlock.setNonce(nonce);
+            byte[] validHash = genesisBlock.computeHash();
+            if (DifficultyUtils.isValidHash(validHash, DifficultyUtils.difficultyToCompact(1L))) {
+                log.info("创世区块初始化成功！nonce={}, 哈希={}",
+                        nonce, CryptoUtil.bytesToHex(validHash));
+                genesisBlock.setHash(validHash);
+                //保存区块
+                popStorage.addBlock(genesisBlock);
+                //保存最新的区块hash
+                popStorage.updateMainLatestBlockHash(validHash);
+                //最新区块高度
+                popStorage.updateMainLatestHeight(genesisBlock.getHeight());
+                //保存主链中 高度高度到 hash的索引
+                popStorage.addMainHeightToBlockIndex(genesisBlock.getHeight(), validHash);
+                applyBlock(genesisBlock);
+            }else {
+                log.error("创世区块初始化失败！nonce={}, 哈希={}",
+                        nonce, CryptoUtil.bytesToHex(validHash));
+                popStorage.updateMainLatestHeight(-1);
+                popStorage.updateMainLatestBlockHash(GENESIS_PREV_BLOCK_HASH);
+            }
         }
     }
+
+
+
+
 
     //孤儿区块池  key是父区块hash   value是一个 hashMap
     private final Cache<byte[], ConcurrentHashMap<byte[],Block>> orphanBlocks = CacheBuilder.newBuilder()
@@ -1338,7 +1385,6 @@ public class BlockChainServiceImpl implements BlockChainService {
         TXInput input = new TXInput(zeroTxId, 0, scriptSig);
         // 创建输出，将奖励发送到指定地址
         TXOutput output = new TXOutput(calculateBlockReward(height), scriptPubKey);
-
         coinbaseTx.setVersion(TRANSACTION_VERSION_1);
         coinbaseTx.getInputs().add(input);
         coinbaseTx.getOutputs().add(output);

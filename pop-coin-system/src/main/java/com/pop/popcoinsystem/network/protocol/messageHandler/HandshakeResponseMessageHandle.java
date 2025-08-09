@@ -32,6 +32,12 @@ public class HandshakeResponseMessageHandle implements MessageHandler{
         log.info("收到握手响应 验证链信息是否一致....");
         NodeInfo sender = message.getSender();//消息来源
         Handshake handshake = message.getData();
+        Boolean handshakeSuccess = handshake.getHandshakeSuccess();
+        if (!handshakeSuccess){
+            String errorMessage = handshake.getErrorMessage();
+            log.error("握手失败:{}", errorMessage);
+            throw new UnsupportedChainException(errorMessage);
+        }
         ExternalNodeInfo data = handshake.getExternalNodeInfo();
         try {
             log.info("成功更新节点 {} 到路由表", sender.getId());
@@ -43,7 +49,6 @@ public class HandshakeResponseMessageHandle implements MessageHandler{
 
         BlockChainServiceImpl blockChainService = kademliaNodeServer.getBlockChainService();
         Block block = blockChainService.getMainLatestBlock();
-
         byte[] remoteLatestHash  = handshake.getLatestBlockHash();
         long remoteLatestHeight  = handshake.getLatestBlockHeight();
         byte[] remoteChainWork = handshake.getChainWork();//工作总量
@@ -54,7 +59,6 @@ public class HandshakeResponseMessageHandle implements MessageHandler{
         log.info("本地高度:{}",localLatestHeight);
         log.info("远程高度:{}",remoteLatestHeight);
         log.info("本地和远程比较 工作量比较:{}", DifficultyUtils.compare(localChainWork,remoteChainWork));
-
 
         // 3. 比较差异并发起同步
         kademliaNodeServer.getBlockChainService().compareAndSync(
@@ -68,7 +72,6 @@ public class HandshakeResponseMessageHandle implements MessageHandler{
                 remoteChainWork
 
         );
-
         //再发送查找节点的请求
         log.debug("收到响应后再发送查找节点的请求");
         FindNodeRequestMessage findNodeRequestMessage = new FindNodeRequestMessage();

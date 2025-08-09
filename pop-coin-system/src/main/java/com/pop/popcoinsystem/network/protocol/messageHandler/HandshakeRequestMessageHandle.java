@@ -46,8 +46,18 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
 
         byte[] genesisBlockHash = handshake.getGenesisBlockHash();
         byte[] genesisHsh = kademliaNodeServer.getBlockChainService().GENESIS_BLOCK_HASH();
-
-
+        if (!Arrays.equals(genesisHsh, genesisBlockHash)){
+            log.error("区块链信息不一致 对方节点未提供创世区块哈希，拒绝握手");
+            //删除节点
+            kademliaNodeServer.getRoutingTable().delete(senderNodeInfo);
+            //回复握手失败
+            Handshake handshake1 = new Handshake();
+            handshake1.setHandshakeSuccess(false);
+            handshake1.setErrorMessage("区块链信息不一致，未提供创世区块哈希，拒绝握手");
+            HandshakeResponseMessage handshakeResponseMessage = new HandshakeResponseMessage(handshake1);
+            kademliaNodeServer.getTcpClient().sendMessage(handshakeResponseMessage);
+            return null;
+        }
         byte[] remoteLatestHash  = handshake.getLatestBlockHash();
         long remoteLatestHeight  = handshake.getLatestBlockHeight();
         byte[] remoteChainWork = handshake.getChainWork();//工作总量
@@ -60,7 +70,6 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
         log.info("本地工作总量:{}",localChainWork);
         log.info("远程工作总量:{}",remoteChainWork);
         log.info("本地和远程比较 工作量比较:{}", DifficultyUtils.compare(localChainWork,remoteChainWork));
-
 
         // 3. 比较差异并发起同步
         kademliaNodeServer.getBlockChainService().compareAndSync(
