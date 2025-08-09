@@ -834,11 +834,12 @@ public class MiningServiceImpl {
             log.info("当前挖矿区块包含{}个已确认交易，将取消并重启挖矿", confirmedTxIds.size());
             // 取消当前挖矿任务
             cancelCurrentMining();
-            // 重启挖矿（自动选择新的有效交易）
-            try {
-                startMining();
-            } catch (Exception e) {
-                log.error("重启挖矿任务失败", e);
+            if (!isMining) { // 确认已停止后再重启
+                try {
+                    startMining();
+                } catch (Exception e) {
+                    log.error("重启挖矿任务失败", e);
+                }
             }
         }
     }
@@ -869,11 +870,26 @@ public class MiningServiceImpl {
             return;
         }
         log.info("取消当前挖矿任务（区块高度：{}）", currentMiningBlock.getHeight());
-        isMining = false; // 触发挖矿循环退出
-        currentMiningBlock = null; // 清空当前挖矿区块
-        // 中断CPU挖矿线程（若使用线程池）
+        isMining = false;
+        currentMiningBlock = null;
         if (executor != null) {
-            executor.shutdownNow(); // 强制中断所有挖矿线程
+            executor.shutdownNow();
+            try {
+                // 等待线程池终止（最多等待5秒）
+                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    log.warn("部分挖矿线程未能及时终止");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            executor = null; // 标记为null，确保initExecutor重新创建
+        }
+        if (cudaContext != null) {
+            try {
+                cuCtxSynchronize(); // 强制同步，终止当前GPU任务
+            } catch (CudaException e) {
+                log.warn("GPU任务中断异常", e);
+            }
         }
     }
 
