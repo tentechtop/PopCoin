@@ -466,27 +466,17 @@ public class KademliaNodeServer {
             // 2. 节点即将过期（接近阈值阈值），发送Ping确认活性
             if (inactiveTime > NODE_EXPIRATION_TIME * 0.8) {
                 log.info("节点 {} 即将过期，发送Ping确认活性", node.getId());
-                sendPingCheckPing(node);
+                // 构建Ping消息
+                PingKademliaMessage pingMsg = new PingKademliaMessage();
+                pingMsg.setSender(nodeInfo);
+                pingMsg.setReceiver(node.extractNodeInfo());
+                pingMsg.setReqResId();
+                pingMsg.setResponse(false);
+                CompletableFuture<KademliaMessage> kademliaMessageCompletableFuture = udpClient.sendMessageWithResponse(pingMsg);
             }
         }
     }
 
-    /**
-     * 向节点发送Ping消息检查活性，超时未响应则移除
-     */
-    private void sendPingCheckPing(ExternalNodeInfo node) {
-        try {
-            // 构建Ping消息
-            PingKademliaMessage pingMsg = new PingKademliaMessage();
-            pingMsg.setSender(nodeInfo);
-            pingMsg.setReceiver(BeanCopyUtils.copyObject(node, NodeInfo.class));
-            pingMsg.setReqResId();
-            pingMsg.setResponse(false);
-            udpClient.sendAsyncMessage(pingMsg);
-        } catch (Exception e) {
-            log.error("向节点 {} 发送Ping检查失败", node.getId(), e);
-        }
-    }
 
 
     /**
