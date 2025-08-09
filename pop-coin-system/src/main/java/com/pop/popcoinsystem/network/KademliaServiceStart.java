@@ -7,7 +7,7 @@ import com.pop.popcoinsystem.network.common.NodeSettings;
 import com.pop.popcoinsystem.network.enums.NodeType;
 import com.pop.popcoinsystem.network.rpc.RpcServiceRegistry;
 import com.pop.popcoinsystem.network.service.KademliaNodeServer;
-import com.pop.popcoinsystem.storage.StorageService;
+import com.pop.popcoinsystem.storage.NodeInfoStorageService;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.NetworkUtil;
@@ -26,7 +26,6 @@ import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.List;
-import java.util.Map;
 
 @Data
 @Slf4j
@@ -34,13 +33,15 @@ import java.util.Map;
 @ConfigurationProperties(prefix = "kademlia") // 绑定kademlia前缀的配置
 public class KademliaServiceStart {
     @Autowired
-    private StorageService storageService;
+    private NodeInfoStorageService storageService;
 
-    @Value("${kademlia.node.udpPort}")
+    @Value("${kademlia.node.udpPort:8334}")
     private int udpPort;
 
-    @Value("${kademlia.node.tcpPort}")
+    @Value("${kademlia.node.tcpPort:8333}")
     private int tcpPort;
+
+    private int isBootstrap;
 
     // 引导节点列表（从配置文件读取）
     private List<BootstrapNode> bootstrap;
@@ -123,11 +124,7 @@ public class KademliaServiceStart {
     }
 
 
-    //  bootstrap:
-    //    - ip: 192.168.137.102
-    //      tcpPort: 8333
-    //      udpPort: 8334
-    //      nodeId: 0
+
 
     @Bean
     public CommandLineRunner registerRpcService(RpcServiceRegistry registry) {
@@ -137,19 +134,22 @@ public class KademliaServiceStart {
                 kademliaNodeServer.setRpcServiceRegistry(registry);
                 kademliaNodeServer.start();  // 启动服务器
                 try {
-                    log.info("正在连接引导节点......:{}",bootstrap);
-                    if (bootstrap != null && !bootstrap.isEmpty()) {
-                        for (BootstrapNode bootstrapNode : bootstrap) {
-                            NodeInfo nodeInfo = NodeInfo.builder()
-                                    .id(bootstrapNode.getNodeId())
-                                    .ipv4(bootstrapNode.getIp())
-                                    .tcpPort(bootstrapNode.getTcpPort())
-                                    .udpPort(bootstrapNode.getUdpPort())
-                                    .build();
-                            kademliaNodeServer.connectToBootstrapNodes(nodeInfo); // 假设存在单个节点连接方法
+                    log.info("是否连接引导节点:{}",isBootstrap);
+                    if (isBootstrap==1){
+                        log.info("正在连接引导节点......:{}",bootstrap);
+                        if (bootstrap != null && !bootstrap.isEmpty()) {
+                            for (BootstrapNode bootstrapNode : bootstrap) {
+                                NodeInfo nodeInfo = NodeInfo.builder()
+                                        .id(bootstrapNode.getNodeId())
+                                        .ipv4(bootstrapNode.getIp())
+                                        .tcpPort(bootstrapNode.getTcpPort())
+                                        .udpPort(bootstrapNode.getUdpPort())
+                                        .build();
+                                kademliaNodeServer.connectToBootstrapNodes(nodeInfo); // 假设存在单个节点连接方法
+                            }
+                        } else {
+                            log.warn("未配置任何引导节点");
                         }
-                    } else {
-                        log.warn("未配置任何引导节点");
                     }
                 }catch (Exception e){
                     log.error("引导节点连接失败:{}", e.getMessage());

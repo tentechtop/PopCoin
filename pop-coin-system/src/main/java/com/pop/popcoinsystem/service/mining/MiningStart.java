@@ -8,6 +8,7 @@ import com.pop.popcoinsystem.storage.StorageService;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,11 @@ import java.security.PublicKey;
 @Slf4j
 @Service
 public class MiningStart implements ApplicationRunner {
+
+    @Value("${system.start-mining:0}")
+    private int startMining;
+
+
     @Autowired
     private MiningServiceImpl miningService;
     @Autowired
@@ -106,8 +112,9 @@ public class MiningStart implements ApplicationRunner {
         String p2WPKHAddressByPK = CryptoUtil.ECDSASigner.createP2WPKHAddressByPK(bytesTest);
         log.info("p2PKH Test 测试钱包地址: {}", p2PKHAddressByPK);
         log.info("p2WPKH Test 测试钱包地址: {}", p2WPKHAddressByPK);
-
-        /*miningService.startMining();*/
+        if (startMining == 1){
+            miningService.startMining();
+        }
     }
 
     public Result<String> startMining(Miner miner) throws Exception {

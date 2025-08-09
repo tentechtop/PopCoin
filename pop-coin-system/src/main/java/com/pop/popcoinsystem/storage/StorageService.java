@@ -16,6 +16,8 @@ import com.pop.popcoinsystem.network.common.NodeSettings;
 import com.pop.popcoinsystem.util.ByteUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.SerializeUtils;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.rocksdb.*;
 
@@ -32,37 +34,9 @@ import static com.pop.popcoinsystem.util.YamlReaderUtils.loadYaml;
 @Slf4j
 public class StorageService {
 
-    //存储路径
-    private static String storagePath = STORAGE_PATH;
-    static {
-        Map<String, Object> config = loadYaml("application.yml");
-        if (config != null) {
-            storagePath = (String) getNestedValue(config, "system.storagePath");
-            log.debug("读取存储路径: " + storagePath);
-        }
-    }
-
-    // 数据库存储路径
-    private static String DB_PATH = storagePath+"/network" + NET_VERSION + ".db/";
-
-    //这些KEY都保存在BLOCK_CHAIN 中 因为他们单独特殊
     private static final byte[] KEY_UTXO_COUNT = "key_utxo_count".getBytes();//UTXO总数
     private static final byte[] KEY_MAIN_LATEST_HEIGHT = "key_main_latest_height".getBytes();//主链当前高度 最新高度
     private static final byte[] KEY_MAIN_LATEST_BLOCK_HASH = "key_main_latest_block_hash".getBytes();
-
-    //区块链当前工作总量chainWork
-    private static final byte[] KEY_CHAIN_WORK = "key_chain_work".getBytes();
-    //最新区块难度值
-    private static final byte[] KEY_BLOCK_DIFFICULTY = "key_block_difficulty".getBytes();
-
-    /*节点相关设置*/
-    private static final byte[] KEY_NODE_SETTING = "key_node_setting".getBytes();
-
-    private static final byte[] KEY_SELF_NODE_INFO = "key_self_node_info".getBytes();
-
-    private static final byte[] KEY_MINER = "key_miner".getBytes();
-
-
 
 
 
@@ -962,12 +936,15 @@ public class StorageService {
     }
 
 
-
-
     // 常量定义
-    private static final String UTXO_INDEX_SEPARATOR = "_UTXO_"; // 分隔符
+    private static final String UTXO_INDEX_SEPARATOR = "_U_"; // 分隔符
 
     //UTXO操作........................................................................................................
+    public static String getUTXOKey(byte[] txId, int vout) {
+        // 从数据库中获取 UTXO
+        return CryptoUtil.bytesToHex(txId) + ":" + vout;
+    }
+
     public void putUTXO(UTXO utxo) {
         rwLock.writeLock().lock();
         byte[] serialize = SerializeUtils.serialize(utxo);
@@ -1465,7 +1442,6 @@ public class StorageService {
         return null;
     }
 
-
     /**
      * 生成索引键: <20字节脚本哈希(hex)>_UTXO_<utxoKey>
      * @param scriptHash 20字节脚本哈希
@@ -1505,213 +1481,22 @@ public class StorageService {
     }
 
 
-
-    //同步........................................................................................................
-    //以标准配置（160 位 ID + K=20）为例：
-    //最大节点信息数量 = 20 × 160 = 3200 个。
-    //新增路由表节点
-    public void addOrUpdateRouteTableNode(ExternalNodeInfo nodeInfo) {
-        try {
-            byte[] valueBytes = SerializeUtils.serialize(nodeInfo);
-            db.put(ColumnFamily.ROUTING_TABLE.getHandle(), nodeInfo.getId().toByteArray(), valueBytes);
-        } catch (RocksDBException e) {
-            log.error("新增路由表节点失败: key={}", nodeInfo.getId(), e);
-            throw new RuntimeException("新增路由表节点失败", e);
-        }
-    }
-    /**
-     * 批量新增或更新路由表节点
-     * @param nodeInfos 节点信息列表
-     */
-    public void addOrUpdateRouteTableNodeBatch(List<ExternalNodeInfo> nodeInfos) {
-        if (nodeInfos == null || nodeInfos.isEmpty()) {
-            log.warn("批量添加路由表节点：空列表，无需处理");
-            return;
-        }
-        rwLock.writeLock().lock();
-        WriteBatch writeBatch = null;
-        WriteOptions writeOptions = null;
-        try {
-            writeBatch = new WriteBatch();
-            writeOptions = new WriteOptions();
-            // 批量写入路由表节点
-            for (ExternalNodeInfo nodeInfo : nodeInfos) {
-                byte[] key = nodeInfo.getId().toByteArray();
-                byte[] valueBytes = SerializeUtils.serialize(nodeInfo);
-                writeBatch.put(ColumnFamily.ROUTING_TABLE.getHandle(), key, valueBytes);
-            }
-            // 执行批量写入（原子操作）
-            db.write(writeOptions, writeBatch);
-            log.info("批量添加路由表节点成功，数量：{}", nodeInfos.size());
-        } catch (RocksDBException e) {
-            log.error("批量添加路由表节点失败，数量：{}", nodeInfos.size(), e);
-            throw new RuntimeException("批量添加路由表节点失败", e);
-        } finally {
-            // 确保资源释放
-            if (writeBatch != null) {
-                writeBatch.close();
-            }
-            if (writeOptions != null) {
-                writeOptions.close();
-            }
-            rwLock.writeLock().unlock();
-        }
-    }
-
-    //获取路由表节点
-    public ExternalNodeInfo getRouteTableNode(BigInteger nodeId) {
-        try {
-            byte[] valueBytes = db.get(ColumnFamily.ROUTING_TABLE.getHandle(), nodeId.toByteArray());
-            if (valueBytes == null) {
-                return null; // 不存在返回null，避免抛出异常
-            }
-            return (ExternalNodeInfo)SerializeUtils.deSerialize(valueBytes);
-        } catch (RocksDBException e) {
-            log.error("获取路由表节点失败: key={}", nodeId, e);
-            throw new RuntimeException("获取路由表节点失败", e);
-        }
-    }
-    //删除
-    public void deleteRouteTableNode(BigInteger nodeId) {
-        try {
-            db.delete(ColumnFamily.ROUTING_TABLE.getHandle(), nodeId.toByteArray());
-        } catch (RocksDBException e) {
-            log.error("删除路由表节点失败: key={}", nodeId, e);
-            throw new RuntimeException("删除路由表节点失败", e);
-        }
-    }
-
-    /**
-     * 迭代查询所有路由表节点
-     * @return 所有路由表节点列表（无节点时返回空列表）
-     */
-    public List<ExternalNodeInfo> iterateAllRouteTableNodes() {
-        rwLock.readLock().lock();
-        RocksIterator iterator = null;
-        try {
-            // 获取路由表列族的迭代器
-            iterator = db.newIterator(ColumnFamily.ROUTING_TABLE.getHandle());
-            List<ExternalNodeInfo> nodeList = new ArrayList<>();
-
-            // 从第一个键开始遍历
-            iterator.seekToFirst();
-            while (iterator.isValid()) {
-                // 反序列化节点信息
-                byte[] valueBytes = iterator.value();
-                ExternalNodeInfo nodeInfo = (ExternalNodeInfo) SerializeUtils.deSerialize(valueBytes);
-                nodeList.add(nodeInfo);
-                // 移动到下一个键
-                iterator.next();
-            }
-            return nodeList;
-        } catch (Exception e) {
-            log.error("迭代查询所有路由表节点失败", e);
-            throw new RuntimeException("迭代查询路由表节点失败", e);
-        } finally {
-            // 确保迭代器关闭和锁释放
-            if (iterator != null) {
-                iterator.close();
-            }
-            rwLock.readLock().unlock();
-        }
-    }
-
-
-
-
-
-
-
-
-
-
-    //新增或者修改-本节点的设置信息 key - NODE_SETTING_KEY
-    public void addOrUpdateNodeSetting(NodeSettings value) {
-        try {
-            byte[] valueBytes = SerializeUtils.serialize(value);
-            db.put(ColumnFamily.NODE_INFO.getHandle(), KEY_NODE_SETTING, valueBytes);
-        } catch (RocksDBException e) {
-            log.error("节点状态失败: key={}", KEY_NODE_SETTING, e);
-            throw new RuntimeException("节点状态失败", e);
-        }
-    }
-
-    //获取本节点的设置信息
-    public NodeSettings getNodeSetting() {
-        try {
-            byte[] valueBytes = db.get(ColumnFamily.NODE_INFO.getHandle(), KEY_NODE_SETTING);
-            if (valueBytes == null) {
-                return null; // 不存在返回null，避免抛出异常
-            }
-            return (NodeSettings)SerializeUtils.deSerialize(valueBytes);
-        } catch (RocksDBException e) {
-            log.error("获取节点状态失败: key={}", KEY_NODE_SETTING, e);
-            throw new RuntimeException("获取节点状态失败", e);
-        }
-    }
-
-    public void addOrUpdateSelfNode(ExternalNodeInfo value) {
-        try {
-            byte[] valueBytes = SerializeUtils.serialize(value);
-            db.put(ColumnFamily.NODE_INFO.getHandle(), KEY_SELF_NODE_INFO, valueBytes);
-        } catch (RocksDBException e) {
-            log.error("节点状态失败: key={}", KEY_SELF_NODE_INFO, e);
-            throw new RuntimeException("节点状态失败", e);
-        }
-    }
-
-    //获取本节点的设置信息
-    public ExternalNodeInfo getNodeSelfNode() {
-        try {
-            byte[] valueBytes = db.get(ColumnFamily.NODE_INFO.getHandle(), KEY_SELF_NODE_INFO);
-            if (valueBytes == null) {
-                return null; // 不存在返回null，避免抛出异常
-            }
-            return (ExternalNodeInfo)SerializeUtils.deSerialize(valueBytes);
-        } catch (RocksDBException e) {
-            log.error("获取节点状态失败: key={}", KEY_SELF_NODE_INFO, e);
-            throw new RuntimeException("获取节点状态失败", e);
-        }
-    }
-
-
-
-    /**
-     * 新增或者修改本节点的矿工信息
-     */
-    public void addOrUpdateMiner(Miner value) {
-        try {
-            byte[] valueBytes = SerializeUtils.serialize(value);
-            db.put(ColumnFamily.MINER_INFO.getHandle(), KEY_MINER, valueBytes);
-        } catch (RocksDBException e) {
-            log.error("保存矿工信息失败: key={}", KEY_MINER, e);
-            throw new RuntimeException("保存矿工信息失败", e);
-        }
-    }
-    /**
-     * 获取本节点的矿工信息
-     */
-    public Miner getMiner() {
-        try {
-            byte[] valueBytes = db.get(ColumnFamily.MINER_INFO.getHandle(), KEY_MINER);
-            if (valueBytes == null) {
-                return null; // 不存在返回null，避免抛出异常
-            }
-            return (Miner)SerializeUtils.deSerialize(valueBytes);
-        } catch (RocksDBException e) {
-            log.error("获取矿工信息失败: key={}", KEY_MINER, e);
-            throw new RuntimeException("获取矿工信息失败", e);
-        }
-    }
-
-
-
     //..................................................................................................................
+    //存储路径
+    private static String storagePath = STORAGE_PATH;
+    static {
+        Map<String, Object> config = loadYaml("application.yml");
+        if (config != null) {
+            storagePath = (String) getNestedValue(config, "system.storagePath");
+            log.debug("读取存储路径: " + storagePath);
+        }
+    }
+
+    // 数据库存储路径
+    private static String DB_PATH = storagePath+"/blockChain/network" + NET_VERSION + ".db/";
+
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final RocksDB db;
-
-
-
 
     private static class InstanceHolder {
         private static final StorageService INSTANCE = new StorageService();
@@ -1815,11 +1600,44 @@ public class StorageService {
         }
     }
 
+    enum ColumnFamily {
+        //区块链信息  存储一切和区块链有关的信息
+        BLOCK_CHAIN("CF_BLOCK_CHAIN", "blockChain",new ColumnFamilyOptions()),
+        //hash->区块头
+        BLOCK("CF_BLOCK", "block",new ColumnFamilyOptions()),
+        //hash - >区块体
+        BLOCK_BODY("CF_BLOCK_BODY", "blockBody",new ColumnFamilyOptions()),
+        //hash -> 区块高度
+        BLOCK_HASH_HEIGHT("CF_BLOCK_HASH_HEIGHT", "blockHashHeight",new ColumnFamilyOptions()),
+        BLOCK_HASH_CHAIN_WORK("CF_BLOCK_HASH_CHAIN_WORK", "blockHashChainWork",new ColumnFamilyOptions()),
+        //主链索引 高度到区块哈希
+        MAIN_BLOCK_CHAIN_INDEX("CF_MAIN_BLOCK_CHAIN_INDEX", "mainBlockChainIndex",new ColumnFamilyOptions()),
 
-    public static String getUTXOKey(byte[] txId, int vout) {
-        // 从数据库中获取 UTXO
-        return CryptoUtil.bytesToHex(txId) + ":" + vout;
+        //交易到区块的索引 Map<String, byte[]>   一笔交易只可能存在于一个区块
+        TRANSACTION_INDEX("CF_TRANSACTION_INDEX", "transactionIndex", new ColumnFamilyOptions()),
+
+        // 备选链存储，用于处理分叉 Map<Long, Set<byte[]>>  高度到 多个区块hash
+        ALT_BLOCK_CHAIN_INDEX("CF_ALT_BLOCK_CHAIN_INDEX", "altBlockChainIndex",new ColumnFamilyOptions()),
+        //UTXO 基础索引
+        UTXO("CF_UTXO", "utxo",new ColumnFamilyOptions()
+                .setTableFormatConfig(new BlockBasedTableConfig()
+                        .setBlockCacheSize(128 * 1024 * 1024) // 64MB 块缓存
+                        .setCacheIndexAndFilterBlocks(true)) ),
+
+        //脚本hash_utxoKey - > 金额索引
+        SCRIPT_UTXO("CF_SCRIPT_UTXO", "scriptUtxo",new ColumnFamilyOptions()),
+
+        ;
+        final String logicalName;
+        final String actualName;
+        final ColumnFamilyOptions options;
+        ColumnFamily(String logicalName, String actualName, ColumnFamilyOptions options) {
+            this.logicalName = logicalName;
+            this.actualName = actualName;
+            this.options = options;
+        }
+        @Setter
+        @Getter
+        private ColumnFamilyHandle handle;
     }
-
-
 }
