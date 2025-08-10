@@ -540,6 +540,7 @@ public class KademliaNodeServer {
     }
 
 
+    @PreDestroy
     private void persistToStorage(){
         log.info("开始将路由表未过期的节点持久化到存储系统");
         // 随机生成节点ID，执行FindNode操作刷新路由表（Kademlia协议核心）
