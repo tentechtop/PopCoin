@@ -41,6 +41,7 @@ public class RequestResponseManager {
      */
     public static Promise<KademliaMessage> sendRequest(Channel channel, KademliaMessage message, long timeout, TimeUnit unit) {
         long requestId = message.getRequestId();
+        log.info("发送请求，requestId={}", requestId);
         // 获取通道的EventLoop
         EventLoop eventLoop = channel.eventLoop();
 

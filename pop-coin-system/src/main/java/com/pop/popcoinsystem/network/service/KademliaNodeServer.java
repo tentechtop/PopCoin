@@ -46,6 +46,7 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
+import java.net.SocketException;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -257,6 +258,14 @@ public class KademliaNodeServer {
                         @Override
                         public void initChannel(SocketChannel ch) throws Exception {
                             ChannelPipeline pipeline = ch.pipeline();
+                            pipeline.addLast(new ChannelDuplexHandler() {
+                                @Override
+                                public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+                                    // 捕获 Connection reset 异常
+                                    log.info("发生连接重置（Connection reset）");
+                                    super.exceptionCaught(ctx, cause);
+                                }
+                            });
                             // 帧解码器：解析类型(4) + 版本(4) + 内容长度(4) + 内容结构
                             pipeline.addLast(new LengthFieldBasedFrameDecoder(
                                     10 * 1024 * 1024,  // 最大帧长度
@@ -287,63 +296,81 @@ public class KademliaNodeServer {
     // 建立定时任务 直到连接成功
     public void connectToBootstrapNodes(NodeInfo bootstrapNodeInfo) throws Exception {
         if (bootstrapNodeInfo == null) return;
-        //向引导节点发送Ping消息 回复pong之后 将引导节点加入网络
-        PingKademliaMessage pingKademliaMessage = new PingKademliaMessage();
-        pingKademliaMessage.setSender(this.nodeInfo);//本节点信息
-        pingKademliaMessage.setReceiver(bootstrapNodeInfo);
-        pingKademliaMessage.setReqResId();
-        pingKademliaMessage.setResponse(false);
-        try {
-            CompletableFuture<KademliaMessage> kademliaMessageCompletableFuture = udpClient.sendMessageWithResponse(pingKademliaMessage);
-            KademliaMessage kademliaMessage = kademliaMessageCompletableFuture.get();
-            if (kademliaMessage == null){
-                log.error("未收到引导节点{}的Pong消息", bootstrapNodeInfo);
-                return;
-            }
-            if (kademliaMessage instanceof PongKademliaMessage){
-                log.info("收到引导节点{}的Pong消息", bootstrapNodeInfo);
-                //向引导节点发送握手请求 收到握手回复后检查 自己的区块链信息
-                BlockChainServiceImpl blockChainService = this.getBlockChainService();
-                byte[] bytes = blockChainService.GENESIS_BLOCK_HASH();
-                if (bytes == null){
+        // 重试间隔时间(毫秒)，可以根据需要调整
+        final long RETRY_INTERVAL = 5000;
+        // 持续重试直到连接成功
+        while (true) {
+            try {
+                // 向引导节点发送Ping消息 回复pong之后 将引导节点加入网络
+                PingKademliaMessage pingKademliaMessage = new PingKademliaMessage();
+                pingKademliaMessage.setSender(this.nodeInfo); // 本节点信息
+                pingKademliaMessage.setReceiver(bootstrapNodeInfo);
+                pingKademliaMessage.setReqResId();
+                pingKademliaMessage.setResponse(false);
+                CompletableFuture<KademliaMessage> kademliaMessageCompletableFuture = udpClient.sendMessageWithResponse(pingKademliaMessage);
+                // 可以考虑设置超时时间，避免无限等待
+                KademliaMessage kademliaMessage = kademliaMessageCompletableFuture.get(5, TimeUnit.SECONDS);
+                if (kademliaMessage == null) {
+                    log.warn("未收到引导节点{}的Pong消息，将在{}ms后重试",
+                            bootstrapNodeInfo, RETRY_INTERVAL);
+                    Thread.sleep(RETRY_INTERVAL);
+                    pingKademliaMessage.setReqResId();
+                    continue;
+                }
+                if (kademliaMessage instanceof PongKademliaMessage) {
+                    log.info("收到引导节点{}的Pong消息", bootstrapNodeInfo);
+                    // 向引导节点发送握手请求
+                    BlockChainServiceImpl blockChainService = this.getBlockChainService();
+                    byte[] genesisHash = blockChainService.GENESIS_BLOCK_HASH();
                     Handshake handshake = new Handshake();
-                    handshake.setExternalNodeInfo(this.getExternalNodeInfo());//携带我的节点信息
-                    handshake.setGenesisBlockHash(blockChainService.GENESIS_BLOCK_HASH());
-                    handshake.setLatestBlockHash(null);
-                    handshake.setLatestBlockHeight(-1);
-                    handshake.setChainWork(new byte[0]);
+                    handshake.setExternalNodeInfo(this.getExternalNodeInfo()); // 携带我的节点信息
+                    handshake.setGenesisBlockHash(genesisHash);
+                    if (genesisHash == null) {
+                        handshake.setLatestBlockHash(null);
+                        handshake.setLatestBlockHeight(-1);
+                        handshake.setChainWork(new byte[0]);
+                    } else {
+                        Block mainLatestBlock = blockChainService.getMainLatestBlock();
+                        handshake.setLatestBlockHash(mainLatestBlock.getHash());
+                        handshake.setLatestBlockHeight(mainLatestBlock.getHeight());
+                        handshake.setChainWork(mainLatestBlock.getChainWork());
+                    }
                     HandshakeRequestMessage handshakeRequestMessage = new HandshakeRequestMessage(handshake);
-                    handshakeRequestMessage.setSender(this.nodeInfo);//本节点信息
+                    handshakeRequestMessage.setSender(this.nodeInfo); // 本节点信息
                     handshakeRequestMessage.setReceiver(bootstrapNodeInfo);
                     this.getTcpClient().sendMessage(handshakeRequestMessage);
-                }else {
-                    Block mainLatestBlock =blockChainService.getMainLatestBlock();
-                    Handshake handshake = new Handshake();
-                    handshake.setExternalNodeInfo(this.getExternalNodeInfo());//携带我的节点信息
-                    handshake.setGenesisBlockHash(blockChainService.GENESIS_BLOCK_HASH());
-                    handshake.setLatestBlockHash(mainLatestBlock.getHash());
-                    handshake.setLatestBlockHeight(mainLatestBlock.getHeight());
-                    handshake.setChainWork(mainLatestBlock.getChainWork());
-                    HandshakeRequestMessage handshakeRequestMessage = new HandshakeRequestMessage(handshake);
-                    handshakeRequestMessage.setSender(this.nodeInfo);//本节点信息
-                    handshakeRequestMessage.setReceiver(bootstrapNodeInfo);
-                    this.getTcpClient().sendMessage(handshakeRequestMessage);
+                    log.info("成功与引导节点{}建立连接", bootstrapNodeInfo);
+                    break; // 连接成功，退出循环
+                } else {
+                    log.warn("收到引导节点{}的非Pong响应，将在{}ms后重试",
+                            bootstrapNodeInfo, RETRY_INTERVAL);
+                    Thread.sleep(RETRY_INTERVAL);
                 }
             }
-        }
-        // 明确捕获"连接被拒绝"异常
-        catch (ConnectException e) {
-            log.error("连接引导节点失败：目标节点 {}:{} 拒绝连接（可能未启动或端口错误）",
-                    bootstrapNodeInfo.getIpv4(), bootstrapNodeInfo.getUdpPort(), e);
-            // 可选：将无效的引导节点从配置中移除或标记为不可用
-        }
-        // 捕获其他网络异常（如超时、IO错误等）
-        catch (IOException e) {
-            log.error("与引导节点通信时发生网络错误", e);
-        }
-        // 捕获其他非网络异常
-        catch (Exception e) {
-            log.error("连接引导节点时发生错误: {}", e.getMessage());
+            // 明确捕获"连接被拒绝"异常
+            catch (ConnectException e) {
+                log.warn("连接引导节点失败：目标节点 {}:{} 拒绝连接，将在{}ms后重试",
+                        bootstrapNodeInfo.getIpv4(), bootstrapNodeInfo.getUdpPort(), RETRY_INTERVAL, e);
+                Thread.sleep(RETRY_INTERVAL);
+            }
+            // 捕获超时异常
+            catch (TimeoutException e) {
+                log.warn("与引导节点{}通信超时，将在{}ms后重试",
+                        bootstrapNodeInfo, RETRY_INTERVAL, e);
+                Thread.sleep(RETRY_INTERVAL);
+            }
+            // 捕获线程中断异常
+            catch (InterruptedException e) {
+                log.error("连接线程被中断", e);
+                Thread.currentThread().interrupt(); // 恢复中断状态
+                return; // 中断后退出
+            }
+            // 捕获其他异常
+            catch (Exception e) {
+                log.warn("连接引导节点时发生错误: {}，将在{}ms后重试",
+                        e.getMessage(), RETRY_INTERVAL, e);
+                Thread.sleep(RETRY_INTERVAL);
+            }
         }
     }
 

@@ -159,7 +159,7 @@ public class UDPClient {
                     // 成功：返回结果
                     resultFuture.complete(udpFuture.getNow());
                 } else if (future.isCancelled()) {
-                    // 取消：通常是超时导致
+                    // 超时导致
                     resultFuture.completeExceptionally(new TimeoutException("等待节点 " + nodeId + " 响应超时（" + timeout + " " + unit + "）"));
                 } else {
                     // 失败：传递异常
