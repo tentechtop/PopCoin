@@ -49,11 +49,13 @@ public class RoutingTable {
      * 更新路由表 添加或移动节点到适当的K桶
      */
     public boolean update(ExternalNodeInfo node) throws FullBucketException {
+        NodeInfoStorageService instance = NodeInfoStorageService.getInstance();
         ExternalNodeInfo original = findNode(node.getId());
         if (original != null){
             node.setScore(original.getScore());
+        }else {
+            instance.addOrUpdateRouteTableNode(node);
         }
-        NodeInfoStorageService instance = NodeInfoStorageService.getInstance();
         node.setNodeStatus(NodeStatus.ACTIVE);//在线
         node.onSuccessfulResponse(false);
         node.setLastSeen(new Date());
@@ -62,7 +64,7 @@ public class RoutingTable {
         lastBucketAccessTime.put(bucket.getId(), System.currentTimeMillis());
         node.setDistance(node.getId().xor(this.localNodeId));
         log.info("更新节点状态{}", node);
-        //持久化这个节点
+
         if (bucket.contains(node)) {
             bucket.pushToFront(node);
             return false;
@@ -78,6 +80,7 @@ public class RoutingTable {
         ExternalNodeInfo original = findNode(updateNode.getId());
         if (original == null){
             original = updateNode.extractExternalNodeInfo();
+            instance.addOrUpdateRouteTableNode(original);
         }
         original.updateAddInfo(updateNode);
         original.setNodeStatus(NodeStatus.ACTIVE);//在线
