@@ -466,7 +466,6 @@ public class KademliaNodeServer {
                 routingTable.offlineNode(node.getId());
                 //删除TCP中通道
                 tcpClient.removeChannel(node.getId());
-                udpClient.removeChannel(node.getId());
                 continue;
             }
             log.info("节点 {} 活跃，最后活跃时间：{}s前", node.getId(), inactiveTime/1000);
