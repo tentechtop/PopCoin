@@ -300,13 +300,12 @@ public class KademliaNodeServer {
         final long RETRY_INTERVAL = 5000;
         // 持续重试直到连接成功
         while (true) {
+            PingKademliaMessage pingKademliaMessage = new PingKademliaMessage();
+            pingKademliaMessage.setSender(this.nodeInfo); // 本节点信息
+            pingKademliaMessage.setReceiver(bootstrapNodeInfo);
+            pingKademliaMessage.setReqResId();
+            pingKademliaMessage.setResponse(false);
             try {
-                // 向引导节点发送Ping消息 回复pong之后 将引导节点加入网络
-                PingKademliaMessage pingKademliaMessage = new PingKademliaMessage();
-                pingKademliaMessage.setSender(this.nodeInfo); // 本节点信息
-                pingKademliaMessage.setReceiver(bootstrapNodeInfo);
-                pingKademliaMessage.setReqResId();
-                pingKademliaMessage.setResponse(false);
                 CompletableFuture<KademliaMessage> kademliaMessageCompletableFuture = udpClient.sendMessageWithResponse(pingKademliaMessage);
                 // 可以考虑设置超时时间，避免无限等待
                 KademliaMessage kademliaMessage = kademliaMessageCompletableFuture.get(5, TimeUnit.SECONDS);
@@ -352,17 +351,20 @@ public class KademliaNodeServer {
                 log.warn("连接引导节点失败：目标节点 {}:{} 拒绝连接，将在{}ms后重试",
                         bootstrapNodeInfo.getIpv4(), bootstrapNodeInfo.getUdpPort(), RETRY_INTERVAL, e);
                 Thread.sleep(RETRY_INTERVAL);
+                pingKademliaMessage.setReqResId();
             }
             // 捕获超时异常
             catch (TimeoutException e) {
                 log.warn("与引导节点{}通信超时，将在{}ms后重试",
                         bootstrapNodeInfo, RETRY_INTERVAL, e);
                 Thread.sleep(RETRY_INTERVAL);
+                pingKademliaMessage.setReqResId();
             }
             // 捕获线程中断异常
             catch (InterruptedException e) {
                 log.error("连接线程被中断", e);
                 Thread.currentThread().interrupt(); // 恢复中断状态
+                pingKademliaMessage.setReqResId();
                 return; // 中断后退出
             }
             // 捕获其他异常
@@ -370,6 +372,7 @@ public class KademliaNodeServer {
                 log.warn("连接引导节点时发生错误: {}，将在{}ms后重试",
                         e.getMessage(), RETRY_INTERVAL, e);
                 Thread.sleep(RETRY_INTERVAL);
+                pingKademliaMessage.setReqResId();
             }
         }
     }
