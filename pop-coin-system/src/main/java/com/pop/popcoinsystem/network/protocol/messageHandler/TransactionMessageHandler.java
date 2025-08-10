@@ -1,6 +1,7 @@
 package com.pop.popcoinsystem.network.protocol.messageHandler;
 
 import com.pop.popcoinsystem.data.transaction.Transaction;
+import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.TransactionMessage;
@@ -23,6 +24,8 @@ public class TransactionMessageHandler implements MessageHandler {
 
     protected TransactionMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull TransactionMessage message) throws InterruptedException {
         Transaction data = message.getData();
+        NodeInfo originalAuthor = message.getSender();
+
         log.info("收到交易消息{}",data);
         byte[] txId = data.getTxId();
         long txMessageId = ByteUtils.bytesToLong(txId);
@@ -34,7 +37,7 @@ public class TransactionMessageHandler implements MessageHandler {
             kademliaNodeServer.getBroadcastMessages().put(txMessageId, Boolean.TRUE);
             kademliaNodeServer.getBlockChainService().verifyAndAddTradingPool(data,false);
             message.setSender(kademliaNodeServer.getNodeInfo());
-            kademliaNodeServer.broadcastMessage(message,message.getSender());
+            kademliaNodeServer.broadcastMessage(message,originalAuthor);
         }
         return null;
     }

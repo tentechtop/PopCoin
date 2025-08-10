@@ -23,7 +23,7 @@ public class BlockMessageHandler implements MessageHandler {
     }
 
     protected BlockMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull BlockMessage message) throws InterruptedException, ConnectException {
-        NodeInfo sender = message.getSender();
+        NodeInfo originalAuthor = message.getSender();
         Block data = message.getData();
         byte[] bytes = data.getHash();
         long blockMessageId = ByteUtils.bytesToLong(bytes);
@@ -35,10 +35,10 @@ public class BlockMessageHandler implements MessageHandler {
             kademliaNodeServer.getBroadcastMessages().put(blockMessageId, Boolean.TRUE);
             kademliaNodeServer.getBlockChainService().verifyBlock(data,false);
             message.setSender(kademliaNodeServer.getNodeInfo());
-            kademliaNodeServer.broadcastMessage(message,message.getSender());
+            kademliaNodeServer.broadcastMessage(message,originalAuthor);
 
             Thread.startVirtualThread(() -> {
-                if (!Objects.equals(sender.getId(), kademliaNodeServer.getNodeInfo().getId())) {
+                if (!Objects.equals(originalAuthor.getId(), kademliaNodeServer.getNodeInfo().getId())) {
                     long remoteLatestBlockHeight = data.getHeight();
                     byte[] remoteLatestBlockHash = data.getHash();
                     byte[] remoteLatestChainWork = data.getChainWork();
@@ -48,10 +48,10 @@ public class BlockMessageHandler implements MessageHandler {
                     byte[] localLatestChainWork = mainLatestBlock.getChainWork();
                     //提交差异
                     if (localLatestHeight != remoteLatestBlockHeight) {
-                        log.info("与节点{}的区块高度不一致，提交差异", sender.getId());
+                        log.info("与节点{}的区块高度不一致，提交差异", originalAuthor.getId());
                         try {
                             localBlockChainService.compareAndSync(
-                                    sender,
+                                    originalAuthor,
                                     localLatestHeight,
                                     localLatestHash,
                                     localLatestChainWork,
