@@ -463,9 +463,10 @@ public class BlockChainServiceImpl implements BlockChainService {
     }
 
     /**
-     * 验证区块的中位时间是否符合协议要求
+     * 验证区块的区块头的中位时间是否符合协议要求
      */
     private boolean validateMedianTime(Block block) {
+        BlockHeader blockHeader = block.extractHeader();
         long blockHeight = block.getHeight();
         byte[] currentBlockHash = block.getHash();
         // 1. 确定实际窗口大小：最多11个，不足则取现有全部祖先
@@ -476,15 +477,16 @@ public class BlockChainServiceImpl implements BlockChainService {
         }
         // 2. 收集前N个祖先区块的时间戳（从父区块开始，主链追溯）
         List<Long> ancestorTimestamps = new ArrayList<>(actualWindowSize);
-        Block currentAncestor = getBlockByHash(block.getPreviousHash()); // 父区块（主链）
+        BlockHeader currentAncestor = getBlockHeaderByHash(block.getPreviousHash()); // 父区块（主链）
         for (int i = 0; i < actualWindowSize && currentAncestor != null; i++) {
             long blockTime = currentAncestor.getTime();
             if (blockTime > 0) { // 过滤无效时间戳
                 ancestorTimestamps.add(blockTime);
             }
             // 继续追溯上一个主链祖先（通过父哈希确保主链）
-            currentAncestor = getBlockByHash(currentAncestor.getPreviousHash());
+            currentAncestor = getBlockHeaderByHash(currentAncestor.getPreviousHash());
         }
+
         // 3. 处理收集结果（不足11个时基于现有数据计算）
         if (ancestorTimestamps.isEmpty()) {
             log.error("未收集到任何有效祖先时间戳，区块高度：{}", blockHeight);
@@ -1577,8 +1579,8 @@ public class BlockChainServiceImpl implements BlockChainService {
         return popStorage.getBlockHeightByHash(hash);
     }
 
-    private BlockHeader getBlockHeaderByHash(byte[] previousHash) {
-        return popStorage.getBlockHeaderByHash(previousHash);
+    private BlockHeader getBlockHeaderByHash(byte[] hash) {
+        return popStorage.getBlockHeaderByHash(hash);
     }
 
     public String GENESIS_BLOCK_HASH_HEX() {
