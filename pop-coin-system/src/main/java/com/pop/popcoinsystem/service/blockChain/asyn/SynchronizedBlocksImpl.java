@@ -564,13 +564,11 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
                         maxHeight = remoteHeight;
                         log.info("更新网络最高高度为: {} (来自节点 {})", maxHeight, node.getId());
                         //发送最高高度广播给临近节点帮助同步 TODO
-
                         Block mainLatestBlock =localBlockChainService.getMainLatestBlock();
                         SyncRequest syncRequest = new SyncRequest();
                         byte[] localLatestChainWork = mainLatestBlock.getChainWork();
                         byte[] localLatestHash = mainLatestBlock.getHash();
                         long localLatestHeight = mainLatestBlock.getHeight();
-
                         syncRequest.setChainWork(localLatestChainWork);
                         syncRequest.setLatestBlockHash(localLatestHash);
                         syncRequest.setLatestBlockHeight(localLatestHeight);

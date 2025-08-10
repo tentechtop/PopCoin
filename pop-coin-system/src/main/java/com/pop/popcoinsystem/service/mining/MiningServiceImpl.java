@@ -48,6 +48,8 @@ public class MiningServiceImpl {
     private StorageService storageService;
     @Autowired
     private MiningStorageService miningStorageService;
+    @Autowired
+    private SynchronizedBlocksImpl syncService; // 同步服务
 
     @Lazy
     @Autowired
@@ -91,8 +93,7 @@ public class MiningServiceImpl {
     private File tempPtxFile;
     private CUcontext cudaContext; // 类成员变量
 
-    @Autowired
-    private SynchronizedBlocksImpl syncService; // 同步服务
+
     // 记录同步前的挖矿状态，用于同步完成后恢复
     private volatile boolean wasMiningBeforeSync = false;
     // 挖矿超时时间（15分钟，单位：毫秒）
@@ -136,6 +137,11 @@ public class MiningServiceImpl {
             log.debug("资源已初始化，无需重复创建");
             return;
         }
+        //初始化地址 用于测试
+        Miner miner = miningStorageService.getMiner();
+        minerAddress = miner.getCoinBaseAddress().getFirst();
+        log.info("矿工钱包地址:{}",minerAddress);
+
         // 初始化区块链（创世区块检查）
         initBlockChain();
         // 初始化线程池

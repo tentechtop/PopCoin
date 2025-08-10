@@ -1370,7 +1370,7 @@ public class BlockChainServiceImpl implements BlockChainService {
         System.arraycopy(randomBytes, 0, combined, firstHash.length, randomBytes.length);
         // 对拼接后的数组进行第二次SHA256哈希
         byte[] secondHash = CryptoUtil.applyRIPEMD160(combined);
-        byte[] extraNonce = Arrays.copyOfRange(secondHash, 0, 8);
+        byte[] extraNonce = Arrays.copyOfRange(secondHash, 0, 16);
         ScriptSig scriptSig = new ScriptSig(extraNonce);//解锁脚本必须有随机字符 同一个矿工的coinBase会一模一样
         TXInput input = new TXInput(zeroTxId, 0, scriptSig);
         // 创建输出，将奖励发送到指定地址

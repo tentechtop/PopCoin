@@ -35,7 +35,6 @@ public class MiningStart implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
-        Miner miner = storageService.getMiner();
         WalletStorage walletStorage = WalletStorage.getInstance();
         Wallet walleta = walletStorage.getWallet("btcminer");
         if (walleta == null){
@@ -103,6 +102,14 @@ public class MiningStart implements ApplicationRunner {
         String p2WPKHAddressByPK = CryptoUtil.ECDSASigner.createP2WPKHAddressByPK(bytesTest);
         log.info("p2PKH Test 测试钱包地址: {}", p2PKHAddressByPK);
         log.info("p2WPKH Test 测试钱包地址: {}", p2WPKHAddressByPK);
+
+        ArrayList<String> strings = new ArrayList<>();
+        strings.add(p2WPKHAddressMiner);
+        Miner miner = new Miner();
+        miner.setCoinBaseAddress(strings);
+        miner.setName("btcminer");
+        setMinerInfo(miner);
+
 
         if (startMining == 1){
             miningService.startMining();

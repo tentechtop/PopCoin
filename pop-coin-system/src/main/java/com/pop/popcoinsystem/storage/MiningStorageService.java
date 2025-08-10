@@ -25,7 +25,7 @@ import static com.pop.popcoinsystem.util.YamlReaderUtils.loadYaml;
 
 @Slf4j
 public class MiningStorageService {
-    private static final byte[] KEY_MINER = "key_miner".getBytes();
+    private static final byte[] KEY_MINER = "btcminer".getBytes();
 
 
     /**
