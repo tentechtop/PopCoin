@@ -88,10 +88,7 @@ public class UDPClient {
                 InetSocketAddress targetAddr = new InetSocketAddress(receiver.getIpv4(), receiver.getUdpPort());
 
                 // 发送消息（通过DatagramPacket指定目标地址）
-                ChannelFuture future = globalChannel.writeAndFlush(new DatagramPacket(
-                        Unpooled.copiedBuffer(SerializeUtils.serialize(message)),
-                        targetAddr
-                ));
+                ChannelFuture future = globalChannel.writeAndFlush(message);
                 future.addListener((ChannelFutureListener) f -> {
                     if (!f.isSuccess()) {
                         log.error("Failed to send UDP message to {}: {}", targetAddr, f.cause().getMessage());
@@ -139,10 +136,7 @@ public class UDPClient {
         InetSocketAddress targetAddr = new InetSocketAddress(receiver.getIpv4(), receiver.getUdpPort());
 
         // 发送消息（通过DatagramPacket指定目标地址）
-        ChannelFuture future = globalChannel.writeAndFlush(new DatagramPacket(
-                Unpooled.copiedBuffer(SerializeUtils.serialize(message)),
-                targetAddr
-        ));
+        ChannelFuture future = globalChannel.writeAndFlush(message);
         future.addListener((ChannelFutureListener) f -> {
             if (!f.isSuccess()) {
                 log.error("Failed to send UDP message to {}: {}", targetAddr, f.cause().getMessage());
@@ -177,25 +171,6 @@ public class UDPClient {
             if (promise.isDone()) {
                 RequestResponseManager.clearRequest(message.getRequestId());
             }
-        }
-    }
-
-
-
-
-
-
-
-    /**
-     * 检查UDP通道是否关联到目标地址（UDP的connect只是设置默认目标）
-     */
-    private boolean isChannelConnectedTo(Channel channel, InetSocketAddress targetAddr) {
-        try {
-            // 获取UDP通道的默认目标地址
-            InetSocketAddress remoteAddr = (InetSocketAddress) channel.remoteAddress();
-            return remoteAddr != null && remoteAddr.equals(targetAddr);
-        } catch (Exception e) {
-            return false;
         }
     }
 
