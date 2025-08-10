@@ -1346,7 +1346,7 @@ public class BlockChainServiceImpl implements BlockChainService {
     }
 
     //创建一笔CoinBase交易
-    public static  Transaction createCoinBaseTransaction(String to, long height,long totalFee) {
+    public static  Transaction createCoinBaseTransaction(String to, long height,long totalFee,int mergeTxOut) {
         //地址到公钥哈希
         AddressType addressType = CryptoUtil.ECDSASigner.getAddressType(to);
         byte[] bytes = CryptoUtil.ECDSASigner.getAddressHash(to);//地址哈希
@@ -1377,10 +1377,16 @@ public class BlockChainServiceImpl implements BlockChainService {
         TXOutput output = new TXOutput(calculateBlockReward(height), scriptPubKey);
         coinbaseTx.setVersion(TRANSACTION_VERSION_1);
         coinbaseTx.getInputs().add(input);
-        coinbaseTx.getOutputs().add(output);
-        if (totalFee > 0){
-            TXOutput outputFee = new TXOutput(totalFee, scriptPubKey);
-            coinbaseTx.getOutputs().add(outputFee);
+        //合并交易奖励和手续费
+        if (mergeTxOut == 1 ){
+            coinbaseTx.getOutputs().add(new TXOutput(calculateBlockReward(height) + totalFee, scriptPubKey));
+        }else {
+            //不合并
+            coinbaseTx.getOutputs().add(output);
+            if (totalFee > 0){
+                TXOutput outputFee = new TXOutput(totalFee, scriptPubKey);
+                coinbaseTx.getOutputs().add(outputFee);
+            }
         }
         // 计算并设置交易ID
         coinbaseTx.setTxId(coinbaseTx.calculateTxId());

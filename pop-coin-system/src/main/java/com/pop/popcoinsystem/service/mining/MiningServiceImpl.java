@@ -59,6 +59,10 @@ public class MiningServiceImpl {
     @Value("${system.mining.miner-address:1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa}")
     private String minerAddress;
 
+    //是否合并奖励和手续费
+    @Value("${system.mining.merge-tx-out:1}")
+    private int mergeTxOut = 1;
+
     // 跟踪当前正在挖矿的区块
     private volatile Block currentMiningBlock;
 
@@ -212,7 +216,7 @@ public class MiningServiceImpl {
         newBlock.setDifficultyTarget(DifficultyUtils.difficultyToCompact(currentDifficulty));
 
         // 交易相关（含CoinBase）
-        Transaction coinBase = BlockChainServiceImpl.createCoinBaseTransaction(minerAddress, newHeight, calculateTotalFee(selectedTxs));
+        Transaction coinBase = BlockChainServiceImpl.createCoinBaseTransaction(minerAddress, newHeight, calculateTotalFee(selectedTxs),mergeTxOut);
         List<Transaction> blockTxs = new ArrayList<>(selectedTxs);
         blockTxs.addFirst(coinBase); // CoinBase放在首位
         newBlock.setTransactions(blockTxs);

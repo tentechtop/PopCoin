@@ -21,7 +21,7 @@ public class PongMessageHandler implements MessageHandler{
     }
 
     protected EmptyKademliaMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull PongKademliaMessage message) throws InterruptedException, FullBucketException, ConnectException {
-        log.info("收到pong");
+        log.debug("收到pong");
         ExternalNodeInfo node = kademliaNodeServer.getRoutingTable().findNode(message.getSender().getId());
         if (node == null){
             NodeInfo sender = message.getSender();

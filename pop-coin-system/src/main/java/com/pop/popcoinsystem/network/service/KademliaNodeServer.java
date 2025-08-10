@@ -531,7 +531,6 @@ public class KademliaNodeServer {
     public static class UDPKademliaMessageEncoder extends MessageToMessageEncoder<KademliaMessage<?>> {
         @Override
         protected void encode(ChannelHandlerContext channelHandlerContext, KademliaMessage<?> kademliaMessage, List<Object> list) throws Exception {
-           log.info("编码消息: {}", kademliaMessage);
             // 序列化消息
             byte[] data = KademliaMessage.serialize(kademliaMessage);
             // 创建 ByteBuf 并写入消息数据
@@ -567,7 +566,7 @@ public class KademliaNodeServer {
             log.debug("消息类型:{}", MessageType.getDescriptionByCode(messageType));
             // 读取总长度（内容长度字段 + 内容长度）
             int netVersion = byteBuf.readInt();
-            log.info("网络版本:{}", netVersion);
+            log.debug("网络版本:{}", netVersion);
             //是否和我的网络版本一致
             if (netVersion != NET_VERSION) {
                 log.warn("网络版本不一致");
