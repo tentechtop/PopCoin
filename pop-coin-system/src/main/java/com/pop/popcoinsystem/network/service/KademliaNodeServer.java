@@ -299,8 +299,6 @@ public class KademliaNodeServer {
                 PingKademliaMessage pingKademliaMessage = new PingKademliaMessage();
                 pingKademliaMessage.setSender(this.nodeInfo); // 本节点信息
                 pingKademliaMessage.setReceiver(node.extractNodeInfo());
-                pingKademliaMessage.setReqResId();
-                pingKademliaMessage.setResponse(false);
                 udpClient.sendAsyncMessage(pingKademliaMessage);
             });
         }
