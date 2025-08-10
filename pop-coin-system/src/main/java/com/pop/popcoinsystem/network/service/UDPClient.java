@@ -1,5 +1,6 @@
 package com.pop.popcoinsystem.network.service;
 
+import com.pop.popcoinsystem.exception.ResponseTimeoutException;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.rpc.RequestResponseManager;
@@ -11,6 +12,7 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.DatagramPacket;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.util.AttributeKey;
+import io.netty.util.concurrent.FutureListener;
 import io.netty.util.concurrent.Promise;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -115,7 +117,8 @@ public class UDPClient {
         // 返回CompletableFuture，让调用者可以灵活处理异步结果
         return CompletableFuture.supplyAsync(() -> {
             try {
-                return sendMessageWithResponse(message, 5, TimeUnit.SECONDS);
+                CompletableFuture<KademliaMessage> kademliaMessageCompletableFuture = sendMessageWithResponse(message, 5, TimeUnit.SECONDS);
+                return kademliaMessageCompletableFuture.get();
             } catch (Exception e) {
                 throw new CompletionException(e);
             }
@@ -124,54 +127,68 @@ public class UDPClient {
 
 
 
-    public KademliaMessage sendMessageWithResponse(KademliaMessage message, long timeout, TimeUnit unit)
+    public CompletableFuture<KademliaMessage> sendMessageWithResponse(KademliaMessage message, long timeout, TimeUnit unit)
             throws ConnectException, TimeoutException, InterruptedException, Exception {
         if (message == null || message.getReceiver() == null) {
             throw new IllegalArgumentException("消息或接收者不能为空");
         }
-        //请求ID已经在消息创建阶段设置
+        CompletableFuture<KademliaMessage> resultFuture = new CompletableFuture<>();
         long requestId = message.getRequestId();
-        NodeInfo receiver = message.getReceiver();
-        BigInteger nodeId = receiver.getId();
-        InetSocketAddress targetAddr = new InetSocketAddress(receiver.getIpv4(), receiver.getUdpPort());
-
-        // 发送消息（通过DatagramPacket指定目标地址）
-        ChannelFuture future = globalChannel.writeAndFlush(message);
-        future.addListener((ChannelFutureListener) f -> {
-            if (!f.isSuccess()) {
-                log.error("Failed to send UDP message to {}: {}", targetAddr, f.cause().getMessage());
-                kademliaNodeServer.offlineNode(receiver.getId());
-            }
-        });
-        // 标记为请求消息（非响应）
-        message.setResponse(false);
-        // 发送请求并获取Promise（内部异步处理）
-        Promise<KademliaMessage> promise = RequestResponseManager.sendRequest(globalChannel, message, timeout, unit);
         try {
-            // 阻塞等待结果
-            if (!promise.await(timeout, unit)) {
-                // 超时：主动取消并抛出超时异常
-                promise.cancel(false);
-                throw new TimeoutException("等待节点 " + nodeId + " 响应超时（" + timeout +" "+ unit + "）");
-            }
-            // 检查结果状态
-            if (promise.isSuccess()) {
-                return promise.getNow();
-            } else {
-                // 失败：抛出具体异常
-                Throwable cause = promise.cause();
-                if (cause instanceof Exception) {
-                    throw (Exception) cause;
-                } else {
-                    throw new Exception("发送消息失败：" + cause.getMessage(), cause);
+            //请求ID已经在消息创建阶段设置
+            NodeInfo receiver = message.getReceiver();
+
+            BigInteger nodeId = receiver.getId();
+            InetSocketAddress targetAddr = new InetSocketAddress(receiver.getIpv4(), receiver.getUdpPort());
+            // 发送消息（通过DatagramPacket指定目标地址）
+            ChannelFuture future = globalChannel.writeAndFlush(message);
+            future.addListener((ChannelFutureListener) f -> {
+                if (!f.isSuccess()) {
+                    log.error("Failed to send UDP message to {}: {}", targetAddr, f.cause().getMessage());
+                    kademliaNodeServer.offlineNode(receiver.getId());
                 }
-            }
-        } finally {
-            // 清理：如果消息处理完成，从管理器中移除
-            if (promise.isDone()) {
-                RequestResponseManager.clearRequest(message.getRequestId());
-            }
+            });
+            // 标记为请求消息（非响应）
+            message.setResponse(false);
+            // 发送请求并获取Promise（内部异步处理）
+            Promise<KademliaMessage> promise = RequestResponseManager.sendRequest(globalChannel, message, timeout, unit);
+
+            // 添加异步监听器处理结果（替代同步await）
+            promise.addListener((FutureListener<KademliaMessage>) udpFuture -> {
+                if (udpFuture.isSuccess()) {
+                    // 成功：返回结果
+                    resultFuture.complete(udpFuture.getNow());
+                } else if (future.isCancelled()) {
+                    // 取消：通常是超时导致
+                    resultFuture.completeExceptionally(new TimeoutException("等待节点 " + nodeId + " 响应超时（" + timeout + " " + unit + "）"));
+                } else {
+                    // 失败：传递异常
+                    Throwable cause = future.cause();
+                    if (cause instanceof Exception) {
+                        resultFuture.completeExceptionally((Exception) cause);
+                    } else {
+                        resultFuture.completeExceptionally(new Exception("发送消息失败：" + cause.getMessage(), cause));
+                    }
+                }
+            });
+
+            // 额外的超时保护（防止监听器未触发）
+            resultFuture.orTimeout(timeout, unit)
+                    .exceptionally(ex -> {
+                        if (ex instanceof TimeoutException) {
+                            promise.cancel(false);
+                            RequestResponseManager.clearRequest(requestId);
+                            throw new CompletionException(
+                                    new ResponseTimeoutException("双重超时保护：节点 " + nodeId + " 响应超时"));
+                        }
+                        throw new CompletionException(ex);
+                    });
+        }catch (Exception e){
+            // 捕获通道获取过程中的异常
+            resultFuture.completeExceptionally(e);
+            RequestResponseManager.clearRequest(requestId); // 确保清理
         }
+        return resultFuture;
     }
 
     /**

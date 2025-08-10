@@ -139,7 +139,7 @@ public class KademliaServiceStart {
                 kademliaNodeServer.setRpcServiceRegistry(registry);
                 kademliaNodeServer.start();  // 启动服务器
                 try {
-                    log.info("是否连接引导节点:{}",isBootstrap);
+                    log.debug("是否连接引导节点:{}",isBootstrap);
                     if (isBootstrap==1){
                         log.info("正在连接引导节点......:{}",bootstrap);
                         if (bootstrap != null && !bootstrap.isEmpty()) {
@@ -150,7 +150,7 @@ public class KademliaServiceStart {
                                         .tcpPort(bootstrapNode.getTcpPort())
                                         .udpPort(bootstrapNode.getUdpPort())
                                         .build();
-                                kademliaNodeServer.connectToBootstrapNodes(nodeInfo); // 假设存在单个节点连接方法
+                                kademliaNodeServer.connectToBootstrapNodes(nodeInfo);
                             }
                         } else {
                             log.warn("未配置任何引导节点");
