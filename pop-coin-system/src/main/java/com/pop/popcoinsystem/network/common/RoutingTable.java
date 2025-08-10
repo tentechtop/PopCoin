@@ -457,7 +457,7 @@ public class RoutingTable {
         // 遍历所有桶
         for (Bucket bucket : buckets) {
             // 遍历桶中所有节点ID（需Bucket提供获取所有节点的方法）
-            List<BigInteger> nodeIds = new ArrayList<>(bucket.getNodeIds()); // 避免遍历中修改引发并发异常
+            List<BigInteger> nodeIds = new ArrayList<>((Collection) bucket.getNodeIds()); // 避免遍历中修改引发并发异常
             for (BigInteger nodeId : nodeIds) {
                 // 跳过本地节点
                 if (nodeId.equals(localNodeId)) {

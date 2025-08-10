@@ -23,8 +23,6 @@ public class Bucket {
         this.id = id;
     }
 
-
-
     public int size() {
         return nodeIds.size();
     }
@@ -37,19 +35,38 @@ public class Bucket {
     }
 
     /**
-     * 推送到最前面 将节点添加到路由表或更新已有节点的信息，并将其移至对应 K 桶的头部（表示活跃度最高）。
-     * @param node
+     * 推送到头部（线程安全版本）
+     * 先移除旧节点，再添加到头部，保证顺序正确性
      */
     public void pushToFront(ExternalNodeInfo node) {
-        nodeIds.remove(node.getId());
-        nodeIds.add(0, node.getId());
-        //更新最后访问时间
-        nodeMap.get(node.getId()).setLastSeen(node.getLastSeen());
+        BigInteger nodeId = node.getId();
+        // 1. 先移除（若存在）
+        nodeIds.remove(nodeId); // ConcurrentLinkedDeque的remove是线程安全的
+        // 2. 添加到头部
+        nodeIds.addFirst(nodeId); // 线程安全的头部添加
+        // 3. 更新映射中的节点信息（如最后活跃时间）
+        ExternalNodeInfo existingNode = nodeMap.get(nodeId);
+        if (existingNode != null) {
+            existingNode.setLastSeen(node.getLastSeen());
+        } else {
+            // 若映射中没有，补充添加（避免数据不一致）
+            nodeMap.put(nodeId, node);
+        }
+        // 更新最后访问时间
+        this.lastAccessTime = System.currentTimeMillis();
     }
 
+    /**
+     * 添加节点到头部（线程安全）
+     */
     public void add(ExternalNodeInfo node) {
-        nodeIds.add(0,node.getId());
-        nodeMap.put(node.getId(), node);
+        BigInteger nodeId = node.getId();
+        // 避免重复添加
+        if (!nodeIds.contains(nodeId)) {
+            nodeIds.addFirst(nodeId);
+            nodeMap.put(nodeId, node);
+            this.lastAccessTime = System.currentTimeMillis();
+        }
     }
 
     public ExternalNodeInfo getNode(BigInteger id) {
@@ -60,9 +77,13 @@ public class Bucket {
         return null;
     }
 
-    public void remove(BigInteger nodeId){
+    /**
+     * 移除节点（线程安全）
+     */
+    public void remove(BigInteger nodeId) {
         nodeIds.remove(nodeId);
         nodeMap.remove(nodeId);
+        this.lastAccessTime = System.currentTimeMillis();
     }
 
     public void remove(ExternalNodeInfo node){
@@ -74,18 +95,27 @@ public class Bucket {
      * 将节点添加到链表末尾（表示活跃度较低），若节点已存在则先移除再添加到末尾
      * @param node 要操作的节点
      */
+    /**
+     * 推送到末尾（线程安全）
+     */
     public void pushToAfter(ExternalNodeInfo node) {
-        // 先移除节点（若已存在）
-        nodeIds.remove(node.getId());
-        // 将节点添加到链表末尾
-        nodeIds.add(node.getId());
-        // 更新节点的最后访问时间
-        ExternalNodeInfo existingNode = nodeMap.get(node.getId());
+        BigInteger nodeId = node.getId();
+        nodeIds.remove(nodeId);
+        nodeIds.addLast(nodeId); // 线程安全的尾部添加
+        ExternalNodeInfo existingNode = nodeMap.get(nodeId);
         if (existingNode != null) {
             existingNode.setLastSeen(node.getLastSeen());
         } else {
-            // 若节点不存在于映射中，补充添加（避免数据不一致）
-            nodeMap.put(node.getId(), node);
+            nodeMap.put(nodeId, node);
         }
+        this.lastAccessTime = System.currentTimeMillis();
+    }
+
+    /**
+     * 获取所有节点ID（用于遍历，返回不可修改的视图避免并发问题）
+     */
+    public Iterable<BigInteger> getNodeIds() {
+        // 返回迭代器的快照，避免遍历中被修改导致异常
+        return () -> nodeIds.iterator();
     }
 }
