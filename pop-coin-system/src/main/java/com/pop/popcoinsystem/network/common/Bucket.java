@@ -5,13 +5,14 @@ import lombok.Data;
 import java.math.BigInteger;
 import java.util.LinkedList;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 
 @Data
 public class Bucket {
     // 桶ID 也可以是距离
     private  int id;
     //存储节点ID 保证节点顺序 用LinkedList保证插入修改速度
-    private LinkedList<BigInteger> nodeIds;
+    private ConcurrentLinkedDeque<BigInteger> nodeIds = new ConcurrentLinkedDeque<>();
     //ID与节点信息的映射
     private final ConcurrentHashMap<BigInteger, ExternalNodeInfo> nodeMap = new ConcurrentHashMap<>();
     //最后访问时间
@@ -19,7 +20,6 @@ public class Bucket {
 
 
     public Bucket(int id) {
-        this.nodeIds = new LinkedList<>();
         this.id = id;
     }
 

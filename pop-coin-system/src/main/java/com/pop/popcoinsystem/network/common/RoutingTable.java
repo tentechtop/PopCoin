@@ -12,8 +12,10 @@ import lombok.extern.slf4j.Slf4j;
 import java.math.BigInteger;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Predicate;
 
 @Slf4j
 @NoArgsConstructor
@@ -21,12 +23,11 @@ public class RoutingTable {
     /* 路由表所有者的ID（节点ID） */
     protected BigInteger localNodeId;
     /* 存储桶列表 */
-    protected ArrayList<Bucket> buckets;
+    protected CopyOnWriteArrayList<Bucket> buckets;//读多写少场景
     //路由表参数
     protected transient NodeSettings nodeSettings;
     // 最后访问时间，用于刷新桶
     private final Map<Integer, Long> lastBucketAccessTime = new ConcurrentHashMap<>();
-
     /**
      * 初始化路由表
      */
@@ -34,7 +35,7 @@ public class RoutingTable {
         log.debug("初始化路由表");
         this.localNodeId = localNodeId;
         this.nodeSettings = nodeSettings;
-        buckets = new ArrayList<>();
+        buckets = new CopyOnWriteArrayList<>();
         for (int i = 0; i < nodeSettings.getIdentifierSize() + 1; i++) {
             buckets.add(createBucketOfId(i));
         }
@@ -89,6 +90,7 @@ public class RoutingTable {
         }
         throw new FullBucketException();
     }
+
 
 
     /**
@@ -210,172 +212,88 @@ public class RoutingTable {
      * @param destinationId 目标节点ID
      * @return 最接近的K个节点的列表
      */
+    /**
+     * 功能：从路由表中查找与destinationId最接近的 K 个节点（K 通常为 20）。
+     * @param destinationId 目标节点ID
+     * @return 最接近的K个节点的列表
+     */
+    // 带目标ID参数，查找活跃节点
     public List<ExternalNodeInfo> findClosest(BigInteger destinationId) {
-        // 用于存储结果的列表
-        ArrayList<ExternalNodeInfo> closestNodeList = new ArrayList<>(nodeSettings.getBucketSize());
-        // 获取目标ID所在的桶
-        Bucket targetBucket = this.findBucket(destinationId);
-
-        // 使用优先队列（最大堆）来维护当前最近的K个节点
-        PriorityQueue<ExternalNodeInfo> closestNodes = new PriorityQueue<>(
-                nodeSettings.getBucketSize(),
-                (a, b) -> getDistance(b.getId()).compareTo(getDistance(a.getId()))
-        );
-        // 计算目标ID的前缀
-        int targetPrefix = findBucket(destinationId).getId();
-        // 首先检查目标桶
-        // 处理目标桶中的所有节点
-        for (BigInteger nodeId : targetBucket.getNodeIds()) {
-            ExternalNodeInfo node = targetBucket.getNode(nodeId);
-            // 只处理活跃节点
-            if (node == null || node.getNodeStatus() != NodeStatus.ACTIVE) {
-                continue;
-            }
-            addIfCloser(node, destinationId, closestNodes);
-        }
-        // 然后扩展搜索到相邻的桶
-        int left = targetPrefix - 1;
-        int right = targetPrefix + 1;
-        // 交替向两边扩展搜索
-        while ((left >= 0 || right < buckets.size()) && closestNodes.size() < nodeSettings.getBucketSize()) {
-            if (left >= 0) {
-                Bucket bucket = buckets.get(left);
-                for (BigInteger nodeId : bucket.getNodeIds()) {
-                    ExternalNodeInfo node = bucket.getNode(nodeId);
-                    addIfCloser(node, destinationId, closestNodes);
-                }
-                left--;
-            }
-            if (right < buckets.size()) {
-                Bucket bucket = buckets.get(right);
-                for (BigInteger nodeId : bucket.getNodeIds()) {
-                    ExternalNodeInfo node = bucket.getNode(nodeId);
-                    addIfCloser(node, destinationId, closestNodes);
-                }
-                right++;
-            }
-        }
-        // 将优先队列中的节点转移到结果列表中
-        while (!closestNodes.isEmpty()) {
-            closestNodeList.add(closestNodes.poll());
-        }
-        // 结果需要按距离从小到大排序
-        closestNodeList.sort(Comparator.comparing(node -> getDistance(node.getId())));
-        return closestNodeList;
+        return findClosestInternal(destinationId, node -> node.getNodeStatus() == NodeStatus.ACTIVE);
     }
 
-
+    // 无参数(目标为本地节点)，查找活跃节点
     public List<ExternalNodeInfo> findClosest() {
-        BigInteger destinationId = localNodeId;
-        // 用于存储结果的列表
-        ArrayList<ExternalNodeInfo> closestNodeList = new ArrayList<>(nodeSettings.getBucketSize());
-        // 获取目标ID所在的桶
-        Bucket targetBucket = this.findBucket(destinationId);
-        // 使用优先队列（最大堆）来维护当前最近的K个节点
-        PriorityQueue<ExternalNodeInfo> closestNodes = new PriorityQueue<>(
-                nodeSettings.getBucketSize(),
-                (a, b) -> getDistance(b.getId()).compareTo(getDistance(a.getId()))
-        );
-        // 计算目标ID的前缀
-        int targetPrefix = findBucket(destinationId).getId();
-        // 首先检查目标桶
-        // 处理目标桶中的所有节点
-        for (BigInteger nodeId : targetBucket.getNodeIds()) {
-            ExternalNodeInfo node = targetBucket.getNode(nodeId);
-            if (node == null || node.getNodeStatus() != NodeStatus.ACTIVE) {
-                continue;
-            }
-            addIfCloser(node, destinationId, closestNodes);
-        }
-        // 然后扩展搜索到相邻的桶
-        int left = targetPrefix - 1;
-        int right = targetPrefix + 1;
-        // 交替向两边扩展搜索
-        while ((left >= 0 || right < buckets.size()) && closestNodes.size() < nodeSettings.getBucketSize()) {
-            if (left >= 0) {
-                Bucket bucket = buckets.get(left);
-                for (BigInteger nodeId : bucket.getNodeIds()) {
-                    ExternalNodeInfo node = bucket.getNode(nodeId);
-                    addIfCloser(node, destinationId, closestNodes);
-                }
-                left--;
-            }
-
-            if (right < buckets.size()) {
-                Bucket bucket = buckets.get(right);
-                for (BigInteger nodeId : bucket.getNodeIds()) {
-                    ExternalNodeInfo node = bucket.getNode(nodeId);
-                    addIfCloser(node, destinationId, closestNodes);
-                }
-                right++;
-            }
-        }
-        // 将优先队列中的节点转移到结果列表中
-        while (!closestNodes.isEmpty()) {
-            closestNodeList.add(closestNodes.poll());
-        }
-        // 结果需要按距离从小到大排序
-        closestNodeList.sort(Comparator.comparing(node -> getDistance(node.getId())));
-        //去除自己 一般不存在
-        //closestNodeList.removeIf(node -> node.getId().equals(localNodeId));
-        return closestNodeList;
+        return findClosestInternal(localNodeId, node -> node.getNodeStatus() == NodeStatus.ACTIVE);
     }
 
+    // 查找所有节点(包括非活跃)，目标为本地节点
     public List<ExternalNodeInfo> findALLClosest() {
-        BigInteger destinationId = localNodeId;
+        return findClosestInternal(localNodeId, node -> true); // 不筛选状态
+    }
+
+    /**
+     * 内部公共实现方法
+     * @param destinationId 目标ID
+     * @param nodeFilter 节点筛选条件
+     * @return 排序后的最近节点列表
+     */
+    private List<ExternalNodeInfo> findClosestInternal(BigInteger destinationId, Predicate<ExternalNodeInfo> nodeFilter) {
         // 用于存储结果的列表
         ArrayList<ExternalNodeInfo> closestNodeList = new ArrayList<>(nodeSettings.getBucketSize());
         // 获取目标ID所在的桶
         Bucket targetBucket = this.findBucket(destinationId);
+
         // 使用优先队列（最大堆）来维护当前最近的K个节点
         PriorityQueue<ExternalNodeInfo> closestNodes = new PriorityQueue<>(
                 nodeSettings.getBucketSize(),
                 (a, b) -> getDistance(b.getId()).compareTo(getDistance(a.getId()))
         );
+
         // 计算目标ID的前缀
-        int targetPrefix = findBucket(destinationId).getId();
+        int targetPrefix = targetBucket.getId();
+
         // 处理目标桶中的所有节点
-        for (BigInteger nodeId : targetBucket.getNodeIds()) {
-            ExternalNodeInfo node = targetBucket.getNode(nodeId);
-            if (node == null) {
-                continue;
-            }
-            addIfCloser(node, destinationId, closestNodes);
-        }
-        // 然后扩展搜索到相邻的桶
+        processBucketNodes(targetBucket, destinationId, closestNodes, nodeFilter);
+
+        // 扩展搜索到相邻的桶
         int left = targetPrefix - 1;
         int right = targetPrefix + 1;
+
         // 交替向两边扩展搜索
         while ((left >= 0 || right < buckets.size()) && closestNodes.size() < nodeSettings.getBucketSize()) {
             if (left >= 0) {
-                Bucket bucket = buckets.get(left);
-                for (BigInteger nodeId : bucket.getNodeIds()) {
-                    ExternalNodeInfo node = bucket.getNode(nodeId);
-                    addIfCloser(node, destinationId, closestNodes);
-                }
+                processBucketNodes(buckets.get(left), destinationId, closestNodes, nodeFilter);
                 left--;
             }
-
             if (right < buckets.size()) {
-                Bucket bucket = buckets.get(right);
-                for (BigInteger nodeId : bucket.getNodeIds()) {
-                    ExternalNodeInfo node = bucket.getNode(nodeId);
-                    addIfCloser(node, destinationId, closestNodes);
-                }
+                processBucketNodes(buckets.get(right), destinationId, closestNodes, nodeFilter);
                 right++;
             }
         }
-        // 将优先队列中的节点转移到结果列表中
-        while (!closestNodes.isEmpty()) {
-            closestNodeList.add(closestNodes.poll());
-        }
-        // 结果需要按距离从小到大排序
+
+        // 转移优先队列中的节点到结果列表
+        closestNodeList.addAll(closestNodes);
+        // 按距离从小到大排序
         closestNodeList.sort(Comparator.comparing(node -> getDistance(node.getId())));
-        //去除自己 一般不存在
-        //closestNodeList.removeIf(node -> node.getId().equals(localNodeId));
+
         return closestNodeList;
     }
 
+    /**
+     * 处理单个桶中的节点，筛选并添加到优先队列
+     */
+    private void processBucketNodes(Bucket bucket, BigInteger destinationId,
+                                    PriorityQueue<ExternalNodeInfo> closestNodes,
+                                    Predicate<ExternalNodeInfo> nodeFilter) {
+        // 遍历线程安全的迭代器
+        for (BigInteger nodeId : bucket.getNodeIds()) {
+            ExternalNodeInfo node = bucket.getNode(nodeId);
+            if (node != null && nodeFilter.test(node)) {
+                addIfCloser(node, destinationId, closestNodes);
+            }
+        }
+    }
 
 
     /**
