@@ -158,7 +158,7 @@ public class KademliaServiceStart {
                         }
                     }
                     //连接到历史节点
-                    kademliaNodeServer.connectToNetwork();
+                    kademliaNodeServer.sendOnlineStatus();
                 }catch (Exception e){
                     log.error("引导节点连接失败:{}", e.getMessage());
                 }

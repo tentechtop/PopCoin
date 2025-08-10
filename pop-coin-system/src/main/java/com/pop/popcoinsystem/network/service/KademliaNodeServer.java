@@ -292,7 +292,7 @@ public class KademliaNodeServer {
     }
 
     //向所有已知节点发送Ping
-    public void connectToNetwork() {
+    public void sendOnlineStatus() {
         List<ExternalNodeInfo> allNodes = routingTable.findALLClosest();
         for (ExternalNodeInfo node : allNodes){
             Thread.startVirtualThread(() -> {
