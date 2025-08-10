@@ -350,33 +350,17 @@ public class WalletService {
         while (hasMore) {
             TPageResult<UTXOSearch> pageResult = null;
             // 带重试的分页查询
-            for (int i = 0; i < retryCount; i++) {
-                try {
-                    pageResult = blockChainService.selectUtxoAmountsByScriptHash(
-                            scriptHash, pageSize, cursor);
-                    break; // 成功查询则退出重试
-                } catch (Exception e) {
-                    log.warn("查询{} UTXO失败（第{}次重试）-> cursor: {}",
-                            scriptType, i + 1, cursor, e);
-                    if (i == retryCount - 1) {
-                        throw new RuntimeException("超过最大重试次数，查询" + scriptType + " UTXO失败", e);
-                    }
-                    // 重试前短暂休眠
-                    try { Thread.sleep(500 * (i + 1)); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
-                }
-            }
-
+            pageResult = blockChainService.selectUtxoAmountsByScriptHash(
+                    scriptHash, pageSize, cursor);
             if (pageResult == null) {
                 log.error("{} UTXO查询返回空结果 -> cursor: {}", scriptType, cursor);
                 break;
             }
-
             UTXOSearch searchResult = pageResult.getData();
             if (searchResult == null) {
                 log.warn("{} UTXO分页数据为空 -> cursor: {}", scriptType, cursor);
                 break;
             }
-
             // 收集UTXO并累加余额
             Set<String> currentPageUTXOs = searchResult.getUtxos();
             if (currentPageUTXOs != null && !currentPageUTXOs.isEmpty()) {
@@ -388,7 +372,6 @@ public class WalletService {
                 log.info("{} UTXO分页处理完成 -> 本次获取: {}, 累计: {}, 余额: {}",
                         scriptType, currentPageUTXOs.size(), totalFetched, typeBalance);
             }
-
             // 更新分页状态
             hasMore = !pageResult.isLastPage();
             cursor = pageResult.getLastKey();
@@ -405,6 +388,9 @@ public class WalletService {
 
 
     public Result getBalance(WalletBalanceVO walletBalanceVO) {
+        BuildWalletUTXODTO buildWalletUTXODTO = new BuildWalletUTXODTO();
+        buildWalletUTXODTO.setWalletName(walletBalanceVO.getWalletName());
+        buildWalletUTXO(buildWalletUTXODTO);
         WalletStorage instance = WalletStorage.getInstance();
         Wallet wallet = instance.getWallet(walletBalanceVO.getWalletName());
         return Result.ok(wallet);
@@ -443,6 +429,9 @@ public class WalletService {
      * @return 交易DTO
      */
     public Result<TransactionDTO> createTransaction(TransferVO transferVO) {
+        BuildWalletUTXODTO buildWalletUTXODTO = new BuildWalletUTXODTO();
+        buildWalletUTXODTO.setWalletName(transferVO.getWalletName());
+        buildWalletUTXO(buildWalletUTXODTO);
         String walletName = transferVO.getWalletName();
         try {
             WalletStorage instance = WalletStorage.getInstance();

@@ -9,6 +9,17 @@ import java.io.Serializable;
 @Data
 public class Wallet implements Serializable {
     private String name;//钱包名称
+
+    //钱包类型
+    /**
+     * {@link WalletType}
+     */
+    private int walletType;
+
+
+    //余额 单位聪
+    private long  balance = 0L;
+
     private String privateKeyHex;
     private String publicKeyHex;
 
@@ -19,18 +30,12 @@ public class Wallet implements Serializable {
     private String privateKeyHex2;
     private String publicKeyHex2;
 
-    //钱包类型
-    /**
-     * {@link WalletType}
-     */
-    private int walletType;
 
     private String password;
 
     private String passwordHash;
 
-    //余额 单位聪
-    private long  balance = 0L;
+
 
 
 
