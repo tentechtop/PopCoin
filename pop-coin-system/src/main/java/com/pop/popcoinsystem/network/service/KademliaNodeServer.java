@@ -297,26 +297,36 @@ public class KademliaNodeServer {
     // 建立定时任务 直到连接成功
     public void connectToBootstrapNodes(NodeInfo bootstrapNodeInfo) throws Exception {
         if (bootstrapNodeInfo == null) return;
-        // 重试间隔时间(毫秒)，可以根据需要调整
-        final long RETRY_INTERVAL = 5000;
-        // 持续重试直到连接成功
-        while (true) {
+
+        // 重试配置参数
+        final int MAX_RETRIES = 1024;                // 最大重试次数
+        final long INITIAL_RETRY_INTERVAL = 5000;    // 初始重试间隔(毫秒)
+        final long MAX_RETRY_INTERVAL = 60000;       // 最大重试间隔(毫秒，避免间隔过大)
+        int retryCount = 0;                          // 重试计数器
+
+        // 重试直到连接成功或达到最大重试次数
+        while (retryCount < MAX_RETRIES) {
             PingKademliaMessage pingKademliaMessage = new PingKademliaMessage();
             pingKademliaMessage.setSender(this.nodeInfo); // 本节点信息
             pingKademliaMessage.setReceiver(bootstrapNodeInfo);
             pingKademliaMessage.setReqResId();
             pingKademliaMessage.setResponse(false);
+
             try {
                 CompletableFuture<KademliaMessage> kademliaMessageCompletableFuture = udpClient.sendMessageWithResponse(pingKademliaMessage);
-                // 可以考虑设置超时时间，避免无限等待
+                // 设置超时时间，避免无限等待
                 KademliaMessage kademliaMessage = kademliaMessageCompletableFuture.get(5, TimeUnit.SECONDS);
+
                 if (kademliaMessage == null) {
-                    log.warn("未收到引导节点{}的Pong消息，将在{}ms后重试",
-                            bootstrapNodeInfo, RETRY_INTERVAL);
-                    Thread.sleep(RETRY_INTERVAL);
+                    log.warn("未收到引导节点{}的Pong消息，第{}次重试将在{}ms后进行",
+                            bootstrapNodeInfo, retryCount + 1, calculateBackoffInterval(retryCount, INITIAL_RETRY_INTERVAL, MAX_RETRY_INTERVAL));
+                    // 计算并执行退避休眠
+                    Thread.sleep(calculateBackoffInterval(retryCount, INITIAL_RETRY_INTERVAL, MAX_RETRY_INTERVAL));
+                    retryCount++;
                     pingKademliaMessage.setReqResId();
                     continue;
                 }
+
                 if (kademliaMessage instanceof PongKademliaMessage) {
                     log.info("收到引导节点{}的Pong消息", bootstrapNodeInfo);
                     // 向引导节点发送握手请求
@@ -325,6 +335,7 @@ public class KademliaNodeServer {
                     Handshake handshake = new Handshake();
                     handshake.setExternalNodeInfo(this.getExternalNodeInfo()); // 携带我的节点信息
                     handshake.setGenesisBlockHash(genesisHash);
+
                     if (genesisHash == null) {
                         handshake.setLatestBlockHash(null);
                         handshake.setLatestBlockHeight(-1);
@@ -335,47 +346,70 @@ public class KademliaNodeServer {
                         handshake.setLatestBlockHeight(mainLatestBlock.getHeight());
                         handshake.setChainWork(mainLatestBlock.getChainWork());
                     }
+
                     HandshakeRequestMessage handshakeRequestMessage = new HandshakeRequestMessage(handshake);
                     handshakeRequestMessage.setSender(this.nodeInfo); // 本节点信息
                     handshakeRequestMessage.setReceiver(bootstrapNodeInfo);
                     this.getTcpClient().sendMessage(handshakeRequestMessage);
-                    log.info("成功与引导节点{}建立连接", bootstrapNodeInfo);
-                    break; // 连接成功，退出循环
+                    log.info("成功与引导节点{}建立连接，共尝试{}次", bootstrapNodeInfo, retryCount + 1);
+                    return; // 连接成功，退出方法
                 } else {
-                    log.warn("收到引导节点{}的非Pong响应，将在{}ms后重试",
-                            bootstrapNodeInfo, RETRY_INTERVAL);
-                    Thread.sleep(RETRY_INTERVAL);
+                    log.warn("收到引导节点{}的非Pong响应，第{}次重试将在{}ms后进行",
+                            bootstrapNodeInfo, retryCount + 1, calculateBackoffInterval(retryCount, INITIAL_RETRY_INTERVAL, MAX_RETRY_INTERVAL));
+                    Thread.sleep(calculateBackoffInterval(retryCount, INITIAL_RETRY_INTERVAL, MAX_RETRY_INTERVAL));
+                    retryCount++;
                 }
             }
             // 明确捕获"连接被拒绝"异常
             catch (ConnectException e) {
-                log.warn("连接引导节点失败：目标节点 {}:{} 拒绝连接，将在{}ms后重试",
-                        bootstrapNodeInfo.getIpv4(), bootstrapNodeInfo.getUdpPort(), RETRY_INTERVAL, e);
-                Thread.sleep(RETRY_INTERVAL);
+                log.warn("连接引导节点失败：目标节点 {}:{} 拒绝连接，第{}次重试将在{}ms后进行",
+                        bootstrapNodeInfo.getIpv4(), bootstrapNodeInfo.getUdpPort(), retryCount + 1,
+                        calculateBackoffInterval(retryCount, INITIAL_RETRY_INTERVAL, MAX_RETRY_INTERVAL), e);
+                Thread.sleep(calculateBackoffInterval(retryCount, INITIAL_RETRY_INTERVAL, MAX_RETRY_INTERVAL));
+                retryCount++;
                 pingKademliaMessage.setReqResId();
             }
             // 捕获超时异常
             catch (TimeoutException e) {
-                log.warn("与引导节点{}通信超时，将在{}ms后重试",
-                        bootstrapNodeInfo, RETRY_INTERVAL, e);
-                Thread.sleep(RETRY_INTERVAL);
+                log.warn("与引导节点{}通信超时，第{}次重试将在{}ms后进行",
+                        bootstrapNodeInfo, retryCount + 1,
+                        calculateBackoffInterval(retryCount, INITIAL_RETRY_INTERVAL, MAX_RETRY_INTERVAL), e);
+                Thread.sleep(calculateBackoffInterval(retryCount, INITIAL_RETRY_INTERVAL, MAX_RETRY_INTERVAL));
+                retryCount++;
                 pingKademliaMessage.setReqResId();
             }
             // 捕获线程中断异常
             catch (InterruptedException e) {
-                log.error("连接线程被中断", e);
+                log.error("连接线程被中断，已重试{}次", retryCount, e);
                 Thread.currentThread().interrupt(); // 恢复中断状态
                 pingKademliaMessage.setReqResId();
                 return; // 中断后退出
             }
             // 捕获其他异常
             catch (Exception e) {
-                log.warn("连接引导节点时发生错误: {}，将在{}ms后重试",
-                        e.getMessage(), RETRY_INTERVAL, e);
-                Thread.sleep(RETRY_INTERVAL);
+                log.warn("连接引导节点时发生错误: {}，第{}次重试将在{}ms后进行",
+                        e.getMessage(), retryCount + 1,
+                        calculateBackoffInterval(retryCount, INITIAL_RETRY_INTERVAL, MAX_RETRY_INTERVAL), e);
+                Thread.sleep(calculateBackoffInterval(retryCount, INITIAL_RETRY_INTERVAL, MAX_RETRY_INTERVAL));
+                retryCount++;
                 pingKademliaMessage.setReqResId();
             }
         }
+
+        // 达到最大重试次数仍未成功，抛出异常
+        throw new Exception("已达到最大重试次数(" + MAX_RETRIES + "次)，无法连接到引导节点" + bootstrapNodeInfo);
+    }
+
+    /**
+     * 计算指数退避间隔时间
+     * @param retryCount 当前重试次数(从0开始)
+     * @param initialInterval 初始间隔
+     * @param maxInterval 最大间隔上限
+     * @return 计算后的间隔时间
+     */
+    private long calculateBackoffInterval(int retryCount, long initialInterval, long maxInterval) {
+        // 指数退避公式：initialInterval * (2^retryCount)，但不超过最大间隔
+        return Math.min(initialInterval * (1L << retryCount), maxInterval);
     }
 
 
