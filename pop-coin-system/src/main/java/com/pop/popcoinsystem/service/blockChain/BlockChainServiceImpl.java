@@ -204,8 +204,6 @@ public class BlockChainServiceImpl implements BlockChainService {
             log.info("区块已存在，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
             return true;
         }
-        //验证中位置时间
-
         // 防止未来时间（允许超前最多2小时）
         // 注意：block.getTime() 是秒级时间戳，需转换为毫秒后再比较
         long maxAllowedTime = (System.currentTimeMillis()/1000) + (2 * 60 * 60);
@@ -215,7 +213,7 @@ public class BlockChainServiceImpl implements BlockChainService {
                     block.getTime(), System.currentTimeMillis(), maxAllowedTime);
             return false;
         }
-        Block parentBlock = getBlockByHash(block.getPreviousHash());
+        BlockHeader parentBlock = getBlockHeaderByHash(block.getHash());
         if (block.getHeight() != 0){
             if (parentBlock == null) {
                 // 父区块不存在，加入孤儿区块池
@@ -224,10 +222,6 @@ public class BlockChainServiceImpl implements BlockChainService {
                 log.info("父区块不存在，加入孤儿池: 区块哈希={}, 父哈希={}",
                         CryptoUtil.bytesToHex(block.getHash()),
                         CryptoUtil.bytesToHex(parentHash));
-                return false;
-            }
-            if (parentBlock.getHeight() + 1 != block.getHeight()) {
-                log.warn("区块高度不连续，父区块高度：{}，当前区块高度：{}", parentBlock.getHeight(), block.getHeight());
                 return false;
             }
         }
