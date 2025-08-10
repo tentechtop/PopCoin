@@ -800,6 +800,7 @@ public class BlockChainServiceImpl implements BlockChainService {
      * 切换到新链，处理分叉回滚
      */
     private void switchToNewChain(Block newTipBlock) {
+        BlockHeader blockHeader = newTipBlock.extractHeader();
         // 1. 找到两个链的共同祖先
         Block commonAncestor = findCommonAncestor(newTipBlock);
         long ancestorHeight = commonAncestor.getHeight();
@@ -823,13 +824,14 @@ public class BlockChainServiceImpl implements BlockChainService {
             rollbackBlock(block);
         }
         // 4. 应用新链的区块
-        List<Block> blocksToApply = new ArrayList<>();
-        Block current = newTipBlock;
-        while (current.getHeight() > ancestorHeight) {
-            blocksToApply.add(0, current);
-            current = getBlockByHash(current.getPreviousHash());
+        List<BlockHeader> blocksToApply = new ArrayList<>();
+        BlockHeader current = newTipBlock.extractHeader();
+        while (getMainBlockHeightByHash(current.getHash()) > ancestorHeight) {
+            blocksToApply.addFirst(current);
+            current = getBlockHeaderByHash(current.getPreviousHash());
         }
-        for (Block block : blocksToApply) {
+        for (BlockHeader header : blocksToApply) {
+            Block block = getBlockByHash(header.getHash());
             //应用这些区块中的UTXO
             applyBlock(block);
             //将新链每个区块的高度与哈希写入主链索引
@@ -838,10 +840,8 @@ public class BlockChainServiceImpl implements BlockChainService {
         // 6. 更新主链和当前高度
         updateMainChainHeight(newTipBlock.getHeight());
         updateMainLatestBlockHash(newTipBlock.getHash());
-
         log.info("成功切换到新链，新高度: {}, 新哈希: {}", getMainLatestHeight(), CryptoUtil.bytesToHex(newTipBlock.getHash()));
     }
-
 
     //应用区块中的交易 添加交易产生的UTXO 销毁交易引用的UTXO “先恢复输入 UTXO，再删除输出 UTXO”
     public void applyBlock(Block block) {
