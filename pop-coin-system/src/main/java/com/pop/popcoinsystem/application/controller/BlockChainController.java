@@ -24,7 +24,6 @@ public class BlockChainController {
     @Autowired
     private BlockChainService blockChainService;
 
-
     /**
      * 查询当前区块链信息
      */
@@ -51,7 +50,6 @@ public class BlockChainController {
         }
         return blockChainService.getBlock(height);
     }
-
 
     @GetMapping("/getTransactionBlock/{txId}")
     public Result<BlockDTO> getTransactionBlock(@PathVariable("txId") String txId) {
@@ -84,7 +82,6 @@ public class BlockChainController {
         return Result.ok(utxodto);
     }
 
-
     /**
      * 根据范围查询区块
      */
@@ -99,43 +96,6 @@ public class BlockChainController {
         return blockChainService.getAllUTXO();
     }
 
-
-
-
-    /**
-     * 同步区块链全部数据
-     */
-    @PostMapping("/syncBlockChain")
-    public String syncBlockChain() {
-        return "";
-    }
-
-    /**
-     * 同步区块链最新数据
-     */
-    @PostMapping("/syncBlockChainLatest")
-    public String syncBlockChainLatest() {
-        return "";
-    }
-
-    /**
-     * 同步区块头
-     */
-    @PostMapping("/syncBlockHeaders")
-    public String syncBlockHeaders() {
-        return "";
-    }
-
-
-    /**
-     * 获取网络节点列表
-     */
-    @PostMapping("/getPeerList")
-    public String getPeerList() {
-        return "";
-    }
-
-
     /**
      * 查询地址中的余额
      */
@@ -143,44 +103,6 @@ public class BlockChainController {
     public Result getBalance(@PathVariable("address") String address) {
         return blockChainService.getBalance(address);
     }
-
-
-    /**
-     * 启动节点数据同步
-     */
-    @GetMapping("/startSync")
-    public Result startSync() {
-        return blockChainService.startSync();
-    }
-
-    /**
-     * 停止节点数据同步
-     */
-    @PostMapping("/stopSync")
-    public Result stopSync() {
-        return blockChainService.stopSync();
-    }
-
-
-    /**
-     * 获取同步进度
-     */
-    @PostMapping("/getSyncProgress")
-    public Result getSyncProgress() {
-        return blockChainService.getSyncProgress();
-    }
-
-
-    /**
-     * 获取本节点与网络的高度差
-     */
-    @PostMapping("/getHeightDiff")
-    public String getHeightDiff() {
-        return "";
-    }
-
-
-
 
 
 }

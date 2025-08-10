@@ -14,8 +14,8 @@ system:
   #存储路径 全路径
   storagePath: /ec/storage
   #挖矿方式
-  start-mining: 1 # 0关闭挖矿 1开启挖矿
-  mining-type: 1 # 1CPU 2GPU
+  start-mining: 0 # 0关闭挖矿 1开启挖矿
+  mining-type: 2 # 1CPU 2GPU
 
   # 网络版本 决定这个服务能否参与网络共识
   netVersion: 1
@@ -35,7 +35,7 @@ kademlia:
   node:
     tcpPort: 8333
     udpPort: 8334
-  isBootstrap: 1 # 0不连接到引导节点  1连接
+  isBootstrap: 0 # 0不连接到引导节点  1连接
   bootstrap:
     - ip: 192.168.137.102
       tcp-port: 8333

@@ -1079,8 +1079,7 @@ public class StorageService {
     public long getAllUTXO() {
         try {
             byte[] countBytes = db.get(ColumnFamily.BLOCK_CHAIN.getHandle(), KEY_UTXO_COUNT);
-            long count = countBytes == null ? 0 : ByteUtils.bytesToLong(countBytes);
-            return count;
+            return countBytes == null ? 0 : ByteUtils.bytesToLong(countBytes);
         } catch (RocksDBException e) {
             throw new RuntimeException(e);
         }
