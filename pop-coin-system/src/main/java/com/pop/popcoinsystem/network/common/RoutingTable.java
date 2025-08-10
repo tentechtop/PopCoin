@@ -48,6 +48,7 @@ public class RoutingTable {
      * 更新路由表 添加或移动节点到适当的K桶
      */
     public boolean update(ExternalNodeInfo node) throws FullBucketException {
+        NodeInfoStorageService instance = NodeInfoStorageService.getInstance();
         node.setNodeStatus(NodeStatus.ACTIVE);//在线
         node.onSuccessfulResponse(false);
         node.setLastSeen(new Date());
@@ -55,6 +56,8 @@ public class RoutingTable {
         // 更新桶的访问时间
         lastBucketAccessTime.put(bucket.getId(), System.currentTimeMillis());
         node.setDistance(node.getId().xor(this.localNodeId));
+        //持久化这个节点
+        instance.addOrUpdateRouteTableNode(node);
         if (bucket.contains(node)) {
             bucket.pushToFront(node);
             return false;
@@ -66,7 +69,9 @@ public class RoutingTable {
     }
 
     public boolean update(NodeInfo updateNode) throws FullBucketException {
-        ExternalNodeInfo node = updateNode.extractExternalNodeInfo();
+        NodeInfoStorageService instance = NodeInfoStorageService.getInstance();
+        ExternalNodeInfo node = findNode(updateNode.getId());
+        node.updateAddInfo(updateNode);
         node.setNodeStatus(NodeStatus.ACTIVE);//在线
         node.onSuccessfulResponse(false);
         node.setLastSeen(new Date());
@@ -74,6 +79,7 @@ public class RoutingTable {
         // 更新桶的访问时间
         lastBucketAccessTime.put(bucket.getId(), System.currentTimeMillis());
         node.setDistance(node.getId().xor(this.localNodeId));
+        instance.addOrUpdateRouteTableNode(node);
         if (bucket.contains(node)) {
             bucket.pushToFront(node);
             return false;
@@ -83,7 +89,6 @@ public class RoutingTable {
         }
         throw new FullBucketException();
     }
-
 
 
     /**
