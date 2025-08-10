@@ -135,4 +135,12 @@ public class MiningStart implements ApplicationRunner {
     public Result<String> stopMining() throws Exception {
         return miningService.stopMining();
     }
+
+    public Result<String> pauseMining() {
+        return miningService.pauseMining();
+    }
+
+    public Result<String> resumeMining() {
+        return miningService.resumeMining();
+    }
 }

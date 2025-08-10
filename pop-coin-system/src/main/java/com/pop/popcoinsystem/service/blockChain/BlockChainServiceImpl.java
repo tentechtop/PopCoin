@@ -200,7 +200,7 @@ public class BlockChainServiceImpl implements BlockChainService {
             return false;
         }
         // 检查是否是已知区块
-        if (getBlockByHash(block.getHash()) != null) {
+        if (getBlockHeaderByHash(block.getHash()) != null) {
             log.info("区块已存在，哈希：{}", CryptoUtil.bytesToHex(block.getHash()));
             return true;
         }

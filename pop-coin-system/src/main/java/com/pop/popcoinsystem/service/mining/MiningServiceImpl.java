@@ -266,7 +266,7 @@ public class MiningServiceImpl {
         if (isMining) {
             wasMiningBeforeSync = true;
             isMining = false; // 仅暂停循环，不释放资源
-            log.info("因同步暂停挖矿");
+            log.debug("因同步暂停挖矿");
         }
     }
 
@@ -840,6 +840,16 @@ public class MiningServiceImpl {
 
     public Map<byte[], Transaction> getTransactionPool() {
         return transactions;
+    }
+
+    public Result<String> pauseMining() {
+        pauseMiningForSync();
+        return Result.ok("暂停成功");
+    }
+
+    public Result<String> resumeMining() {
+        resumeMiningAfterSync();
+        return Result.ok("恢复成功");
     }
 
     // 挖矿结果类

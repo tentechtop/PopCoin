@@ -25,11 +25,39 @@ public class MiningController {
         return miningService.setMinerInfo(miner);
     }
 
+    /**
+     * 启动
+     * @param miner
+     * @return
+     * @throws Exception
+     */
     @PostMapping("/startMining")
     public Result<String> startMining(@RequestBody Miner miner) throws Exception {
         return miningService.startMining(miner);
     }
 
+    /**
+     * 暂停
+     */
+    @PostMapping("/pauseMining")
+    public Result<String> pauseMining() throws Exception {
+        return miningService.pauseMining();
+    }
+
+    /**
+     * 恢复
+     */
+    @PostMapping("/resumeMining")
+    public Result<String> resumeMining() throws Exception {
+        return miningService.resumeMining();
+    }
+
+
+    /**
+     * 终止
+     * @return
+     * @throws Exception
+     */
     @PostMapping("/stopMining")
     public Result<String> stopMining() throws Exception {
         return miningService.stopMining();
