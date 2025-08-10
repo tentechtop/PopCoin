@@ -19,24 +19,6 @@ public class myTest {
             NodeInfo nodeInfo1 = kademliaNodeServer.getNodeInfo();
 
 
-            sleep(1000);
-            KademliaNodeServer kademliaNodeServer2 = new KademliaNodeServer(BigInteger.valueOf(86L), "127.0.0.1", 8335, 8336);
-            kademliaNodeServer2.start();
-            kademliaNodeServer2.connectToBootstrapNodes(nodeInfo1);
-
-            sleep(1000);
-            KademliaNodeServer kademliaNodeServer3 = new KademliaNodeServer(BigInteger.valueOf(3L), "127.0.0.1", 8337, 8338);
-            kademliaNodeServer3.start();
-            kademliaNodeServer3.connectToBootstrapNodes(nodeInfo1);
-            NodeInfo nodeInfo = kademliaNodeServer3.getNodeInfo();
-
-
-            UDPClient udpClient = kademliaNodeServer3.getUdpClient();
-            PingKademliaMessage pingKademliaMessage = new PingKademliaMessage();
-            pingKademliaMessage.setSender(nodeInfo);
-            pingKademliaMessage.setReceiver(nodeInfo1);
-            udpClient.sendMessage(pingKademliaMessage);
-
 
 
 

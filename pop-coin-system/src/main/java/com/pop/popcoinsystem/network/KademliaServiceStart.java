@@ -140,6 +140,7 @@ public class KademliaServiceStart {
                 kademliaNodeServer.start();  // 启动服务器
                 try {
                     log.debug("是否连接引导节点:{}",isBootstrap);
+                    //连接到引导节点 确保入网
                     if (isBootstrap==1){
                         log.info("正在连接引导节点......:{}",bootstrap);
                         if (bootstrap != null && !bootstrap.isEmpty()) {
@@ -150,12 +151,14 @@ public class KademliaServiceStart {
                                         .tcpPort(bootstrapNode.getTcpPort())
                                         .udpPort(bootstrapNode.getUdpPort())
                                         .build();
-                                kademliaNodeServer.connectToBootstrapNodes(nodeInfo);
+                                kademliaNodeServer.connectToNode(nodeInfo);
                             }
                         } else {
                             log.warn("未配置任何引导节点");
                         }
                     }
+                    //连接到历史节点
+                    kademliaNodeServer.connectToNetwork();
                 }catch (Exception e){
                     log.error("引导节点连接失败:{}", e.getMessage());
                 }
@@ -164,6 +167,11 @@ public class KademliaServiceStart {
             }
         };
     }
+
+
+
+
+
 
 
 }
