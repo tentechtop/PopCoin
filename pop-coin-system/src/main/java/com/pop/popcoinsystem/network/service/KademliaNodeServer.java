@@ -299,7 +299,7 @@ public class KademliaNodeServer {
         if (bootstrapNodeInfo == null) return;
 
         // 重试配置参数
-        final int MAX_RETRIES = 96;                // 最大重试次数
+        final int MAX_RETRIES = 32;                // 最大重试次数
         final long INITIAL_RETRY_INTERVAL = 5000;    // 初始重试间隔(毫秒)
         final long MAX_RETRY_INTERVAL = 60000;       // 最大重试间隔(毫秒，避免间隔过大)
         int retryCount = 0;                          // 重试计数器
