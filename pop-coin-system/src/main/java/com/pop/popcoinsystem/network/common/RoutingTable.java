@@ -63,7 +63,6 @@ public class RoutingTable {
         node.setDistance(node.getId().xor(this.localNodeId));
         log.info("更新节点状态{}", node);
         //持久化这个节点
-        instance.addOrUpdateRouteTableNode(node);
         if (bucket.contains(node)) {
             bucket.pushToFront(node);
             return false;
@@ -89,7 +88,6 @@ public class RoutingTable {
         // 更新桶的访问时间
         lastBucketAccessTime.put(bucket.getId(), System.currentTimeMillis());
         original.setDistance(original.getId().xor(this.localNodeId));
-        instance.addOrUpdateRouteTableNode(original);
         if (bucket.contains(original)) {
             bucket.pushToFront(original);
             return false;

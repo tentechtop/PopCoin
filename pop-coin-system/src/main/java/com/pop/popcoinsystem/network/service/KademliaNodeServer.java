@@ -184,8 +184,8 @@ public class KademliaNodeServer {
             });
             //维护网络 首次执行立即开始，之后每 delay  秒执行一次 maintainNetwork 方法  单位秒
             long delay = 15;//15秒
-            long delay1 = 15 * 30;//450秒 7.5分钟
-            long delay2 = 15 * 60;//900秒 15分钟
+            long delay1 = 15 * 4 * 2;
+            long delay2 = 15 * 4 * 4;
             scheduler.scheduleAtFixedRate(this::maintainNetwork, 0, delay, TimeUnit.SECONDS);
             scheduler.scheduleAtFixedRate(this::refreshRoutingTable, delay1, delay1, TimeUnit.SECONDS);
             scheduler.scheduleAtFixedRate(this::persistToStorage, delay2, delay2, TimeUnit.SECONDS);
