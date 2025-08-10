@@ -42,7 +42,6 @@ public class HandshakeResponseMessageHandle implements MessageHandler{
             throw new UnsupportedChainException(errorMessage);
         }
         ExternalNodeInfo data = handshake.getExternalNodeInfo();
-
         log.info("对方节点类型:{}", data.getNodeType());
         kademliaNodeServer.getRoutingTable().update(data);
         //再发送查找节点的请求

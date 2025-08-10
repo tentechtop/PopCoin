@@ -49,6 +49,10 @@ public class RoutingTable {
      * 更新路由表 添加或移动节点到适当的K桶
      */
     public boolean update(ExternalNodeInfo node) throws FullBucketException {
+        ExternalNodeInfo original = findNode(node.getId());
+        if (original != null){
+            node.setScore(original.getScore());
+        }
         NodeInfoStorageService instance = NodeInfoStorageService.getInstance();
         node.setNodeStatus(NodeStatus.ACTIVE);//在线
         node.onSuccessfulResponse(false);
@@ -57,6 +61,7 @@ public class RoutingTable {
         // 更新桶的访问时间
         lastBucketAccessTime.put(bucket.getId(), System.currentTimeMillis());
         node.setDistance(node.getId().xor(this.localNodeId));
+        log.info("更新节点状态{}", node);
         //持久化这个节点
         instance.addOrUpdateRouteTableNode(node);
         if (bucket.contains(node)) {
@@ -71,21 +76,25 @@ public class RoutingTable {
 
     public boolean update(NodeInfo updateNode) throws FullBucketException {
         NodeInfoStorageService instance = NodeInfoStorageService.getInstance();
-        ExternalNodeInfo node = findNode(updateNode.getId());
-        node.updateAddInfo(updateNode);
-        node.setNodeStatus(NodeStatus.ACTIVE);//在线
-        node.onSuccessfulResponse(false);
-        node.setLastSeen(new Date());
-        Bucket bucket = this.findBucket(node.getId());
+        ExternalNodeInfo original = findNode(updateNode.getId());
+        if (original == null){
+            original = updateNode.extractExternalNodeInfo();
+        }
+        original.updateAddInfo(updateNode);
+        original.setNodeStatus(NodeStatus.ACTIVE);//在线
+        original.onSuccessfulResponse(false);
+        log.info("更新节点状态{}", original);
+        original.setLastSeen(new Date());
+        Bucket bucket = this.findBucket(original.getId());
         // 更新桶的访问时间
         lastBucketAccessTime.put(bucket.getId(), System.currentTimeMillis());
-        node.setDistance(node.getId().xor(this.localNodeId));
-        instance.addOrUpdateRouteTableNode(node);
-        if (bucket.contains(node)) {
-            bucket.pushToFront(node);
+        original.setDistance(original.getId().xor(this.localNodeId));
+        instance.addOrUpdateRouteTableNode(original);
+        if (bucket.contains(original)) {
+            bucket.pushToFront(original);
             return false;
         }else if (bucket.size() < this.nodeSettings.getBucketSize()) {
-            bucket.add(node);
+            bucket.add(original);
             return true;
         }
         throw new FullBucketException();

@@ -32,14 +32,7 @@ public class FindNodeRequestMessageHandler implements MessageHandler{
         BigInteger findId = message.getData();
         RoutingTable routingTable = kademliaNodeServer.getRoutingTable();
         FindNodeResult closestResult = routingTable.findClosestResult(findId);
-
-        ExternalNodeInfo node = routingTable.findNode(sender.getId());
-        if (node == null){
-            routingTable.update(message.getSender());
-        }else {
-            node.updateAddInfo(sender);
-            routingTable.update(node);
-        }
+        routingTable.update(sender);
         FindNodeResponseMessage findNodeResponseMessage = new FindNodeResponseMessage();
         findNodeResponseMessage.setSender(kademliaNodeServer.getNodeInfo());
         findNodeResponseMessage.setReceiver(sender);

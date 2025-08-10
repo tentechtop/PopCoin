@@ -63,14 +63,7 @@ public class FindNodeResponseMessageHandler implements MessageHandler{
                     log.error("未收到节点{}的pong消息", externalNode);
                     return;
                 }
-                ExternalNodeInfo node = routingTable.findNode(kademliaMessage.getSender().getId());
-                boolean update = false;
-                if (node == null){
-                    update = routingTable.update(kademliaMessage.getSender());
-                }else {
-                    node.updateAddInfo(kademliaMessage.getSender());
-                    update = routingTable.update(node);
-                }
+                boolean update = routingTable.update(externalNode);
                 if (update){
                     // 向这些活跃的节点发起查找
                     FindNodeRequestMessage findNodeRequestMessage = new FindNodeRequestMessage();
