@@ -185,10 +185,12 @@ public class KademliaNodeServer {
                 return thread;
             });
             //维护网络 首次执行立即开始，之后每 delay  秒执行一次 maintainNetwork 方法  单位秒
-            long delay = 15;
-            long delay1 = 60 * 30; //
+            long delay = 15;//15秒
+            long delay1 = 15 * 30;//450秒 7.5分钟
+            long delay2 = 15 * 60;//900秒 15分钟
             scheduler.scheduleAtFixedRate(this::maintainNetwork, 0, delay, TimeUnit.SECONDS);
-            scheduler.scheduleAtFixedRate(this::persistToStorage, delay1, delay1, TimeUnit.SECONDS);
+            scheduler.scheduleAtFixedRate(this::refreshRoutingTable, delay1, delay1, TimeUnit.SECONDS);
+            scheduler.scheduleAtFixedRate(this::persistToStorage, delay2, delay2, TimeUnit.SECONDS);
         } catch (Exception e) {
             log.error("KademliaNode start error", e);
             stop();
@@ -292,7 +294,6 @@ public class KademliaNodeServer {
     }
 
 
-    // 连接到引导节点
     // 建立定时任务 直到连接成功
     public void connectToBootstrapNodes(NodeInfo bootstrapNodeInfo) throws Exception {
         if (bootstrapNodeInfo == null) return;
@@ -468,7 +469,6 @@ public class KademliaNodeServer {
     private void persistToStorage(){
         log.info("开始将路由表未过期的节点持久化到存储系统");
         // 随机生成节点ID，执行FindNode操作刷新路由表（Kademlia协议核心）
-        refreshRoutingTable();
         routingTable.cleanExpiredNodes(NODE_EXPIRATION_TIME);
         routingTable.persistToStorage();
     }

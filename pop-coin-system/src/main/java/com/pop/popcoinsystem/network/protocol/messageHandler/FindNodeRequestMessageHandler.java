@@ -40,9 +40,6 @@ public class FindNodeRequestMessageHandler implements MessageHandler{
             node.updateAddInfo(sender);
             routingTable.update(node);
         }
-
-
-
         FindNodeResponseMessage findNodeResponseMessage = new FindNodeResponseMessage();
         findNodeResponseMessage.setSender(kademliaNodeServer.getNodeInfo());
         findNodeResponseMessage.setReceiver(sender);

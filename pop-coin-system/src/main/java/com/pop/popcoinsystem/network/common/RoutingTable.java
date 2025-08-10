@@ -114,27 +114,86 @@ public class RoutingTable {
     }
 
     public FindNodeResult findClosestResult(BigInteger destinationId) {
-        FindNodeResult findNodeResult = new FindNodeResult(destinationId);
-        Bucket bucket = this.findBucket(destinationId);
+        FindNodeResult result = new FindNodeResult(destinationId);
+        Bucket targetBucket = this.findBucket(destinationId);
 
-        for (int i = 1; findNodeResult.size() < this.nodeSettings.getBucketSize() && ((bucket.getId() - i) >= 0 ||
-                (bucket.getId() + i) <= this.nodeSettings.getIdentifierSize()); i++) {
-            if (bucket.getId() - i >= 0) {
-                Bucket bucketP = this.buckets.get(bucket.getId() - i);
-                addToAnswer(bucketP, findNodeResult, destinationId);
+        // 1. 先添加目标Bucket的节点（最关键的一步）
+        addToAnswer(targetBucket, result, destinationId);
+
+        // 2. 按距离递增遍历相邻Bucket（i=1,2...）
+        for (int i = 1; result.size() < nodeSettings.getFindNodeSize(); i++) {
+            // 检查前i个Bucket
+            if (targetBucket.getId() - i >= 0) {
+                Bucket prevBucket = buckets.get(targetBucket.getId() - i);
+                addToAnswer(prevBucket, result, destinationId);
             }
-            if (bucket.getId() + i <= this.nodeSettings.getIdentifierSize()) {
-                Bucket bucketN = this.buckets.get(bucket.getId() + i);
-                addToAnswer(bucketN, findNodeResult, destinationId);
+            // 检查后i个Bucket
+            if (targetBucket.getId() + i <= nodeSettings.getIdentifierSize()) {
+                Bucket nextBucket = buckets.get(targetBucket.getId() + i);
+                addToAnswer(nextBucket, result, destinationId);
+            }
+            // 所有Bucket都已遍历，终止循环
+            if (targetBucket.getId() - i < 0 && targetBucket.getId() + i > nodeSettings.getIdentifierSize()) {
+                break;
             }
         }
-        Collections.sort(findNodeResult.getNodes());
-        new FindNodeResultReducer(this.localNodeId, findNodeResult, this.nodeSettings.getFindNodeSize(), this.nodeSettings.getIdentifierSize()).reduce();
-        while (findNodeResult.size() > this.nodeSettings.getFindNodeSize()) {
-            findNodeResult.remove(findNodeResult.size() - 1); //TODO: Not the best thing.
+        // 去重（关键步骤）
+        removeDuplicates(result);
+        // 按距离排序
+        result.getNodes().sort(new Comparator<ExternalNodeInfo>() {
+            @Override
+            public int compare(ExternalNodeInfo node1, ExternalNodeInfo node2) {
+                // 计算两个节点与目标ID的距离（用节点自身ID，而非getDistance()）
+                BigInteger dist1 = distance(node1.getId(), destinationId);
+                BigInteger dist2 = distance(node2.getId(), destinationId);
+                // 按距离升序排列（距离越小越靠前）
+                return dist1.compareTo(dist2);
+            }
+        });
+        // 截断到指定数量
+        while (result.size() > nodeSettings.getFindNodeSize()) {
+            result.remove(result.size() - 1);
         }
-        return findNodeResult;
+        return result;
     }
+
+    /**
+     * 移除查找结果中的重复节点（基于节点ID判断）
+     * @param result 查找结果对象
+     */
+    private void removeDuplicates(FindNodeResult result) {
+        List<ExternalNodeInfo> nodes = result.getNodes();
+        if (nodes == null || nodes.size() <= 1) {
+            return; // 空列表或只有一个节点，无需去重
+        }
+        // 使用Set辅助去重（通过节点ID判断唯一性）
+        Set<BigInteger> seenNodeIds = new HashSet<>(nodes.size());
+        Iterator<ExternalNodeInfo> iterator = nodes.iterator();
+        while (iterator.hasNext()) {
+            ExternalNodeInfo node = iterator.next();
+            BigInteger nodeId = node.getId();
+
+            // 若ID已存在，则移除当前节点
+            if (seenNodeIds.contains(nodeId)) {
+                iterator.remove();
+                log.debug("移除重复节点: {}", nodeId);
+            } else {
+                seenNodeIds.add(nodeId);
+            }
+        }
+    }
+
+    /**
+     * 计算两个节点ID之间的距离（Kademlia协议定义：异或运算）
+     * @param nodeId1 第一个节点ID
+     * @param nodeId2 第二个节点ID
+     * @return 距离（异或结果，数值越小距离越近）
+     */
+    private BigInteger distance(BigInteger nodeId1, BigInteger nodeId2) {
+        // 异或运算得到距离（Kademlia核心距离定义）
+        return nodeId1.xor(nodeId2);
+    }
+
 
     public void addToAnswer (Bucket bucket, FindNodeResult answer, BigInteger destination){
         for (BigInteger id : bucket.getNodeIds()) {
