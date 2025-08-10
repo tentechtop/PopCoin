@@ -1014,26 +1014,33 @@ public class BlockChainServiceImpl implements BlockChainService {
      * @return 目标高度的区块哈希，若不存在则返回null
      */
     private byte[] getHashByHeightFromChain(Block chainTip, long targetHeight) {
+        if (chainTip == null) {
+            return null;
+        }
+        BlockHeader blockHeader = chainTip.extractHeader();
         // 目标高度超过链末端高度，直接返回null
         if (targetHeight > chainTip.getHeight()) {
             return null;
         }
-        Block current = chainTip;
+        BlockHeader current = blockHeader;
         // 向上追溯直到找到目标高度或到达链的起点
         while (current != null) {
-            if (current.getHeight() == targetHeight) {
+            if (getMainBlockHeightByHash(current.getHash()) == targetHeight) {
                 return current.getHash();
             }
-            if (current.getHeight() < targetHeight) {
+            if (getMainBlockHeightByHash(current.getHash()) < targetHeight) {
                 // 已越过目标高度仍未找到（通常是链不连续导致）
                 return null;
             }
             // 继续向上追溯父区块
-            current = getBlockByHash(current.getPreviousHash());
+            current = getBlockHeaderByHash(current.getPreviousHash());
         }
         return null;
     }
 
+    private long getMainBlockHeightByHash(byte[] hash) {
+        return popStorage.getBlockHeightByHash(hash);
+    }
     /**
      * 获取创世区块hash
      * @return
