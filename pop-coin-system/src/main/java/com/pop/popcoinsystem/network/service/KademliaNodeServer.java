@@ -336,7 +336,7 @@ public class KademliaNodeServer {
                         RpcProxyFactory proxyFactory = new RpcProxyFactory(this, bootstrapNodeInfo);
                         // 3. 获取服务代理对象
                         RpcService proxy = proxyFactory.createProxy(RpcService.class);
-                        PongKademliaMessage response = proxy.ping();
+                        PongKademliaMessage  response = proxy.ping();
                         // 3. 处理响应结果
                         if (response == null) {
                             log.warn("未收到引导节点{}的Pong消息，第{}次重试将在{}ms后进行",
@@ -694,6 +694,20 @@ public class KademliaNodeServer {
             // 反序列化为消息对象
             KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
             log.debug("UDP解码消息内容:{}", message);
+            // 添加到输出列表
+            // 1. 通过 datagramPacket 获取发送者地址
+ /*           InetSocketAddress senderAddress = datagramPacket.sender();
+            // 转换为 InetSocketAddress 以获取 IP 和端口
+            if (senderAddress instanceof InetSocketAddress) {
+                String senderIp = senderAddress.getAddress().getHostAddress(); // 发送者 IP
+                int senderPort = senderAddress.getPort(); // 发送者端口
+                log.info("收到 UDP 消息，发送者: {}:{}", senderIp, senderPort);
+                //如果IP和自己不一样才修改
+                if (!senderIp.equals(NetworkUtil.getLocalIp())) {
+                    message.getSender().setIpv4(senderIp);
+                    message.getSender().setUdpPort(senderPort);
+                }
+            }*/
             list.add(message);
         }
     }
@@ -709,16 +723,21 @@ public class KademliaNodeServer {
     public static class TCPKademliaMessageEncoder extends MessageToByteEncoder<KademliaMessage<?>> {
         @Override
         protected void encode(ChannelHandlerContext channelHandlerContext, KademliaMessage<?> kademliaMessage, ByteBuf byteBuf) throws Exception {
-            //序列化消息对象
-            byte[] data = KademliaMessage.serialize(kademliaMessage);
-            // 2. 写入消息类型（4字节整数）
-            byteBuf.writeInt(kademliaMessage.getType());  //4
-            //写入网络版本
-            byteBuf.writeInt(NET_VERSION);//4
-            //写入内容长度
-            byteBuf.writeInt(data.length);//4  //32 位（4 字节）的整数
-            //写入类容
-            byteBuf.writeBytes(data);
+            try {
+                //序列化消息对象
+                byte[] data = KademliaMessage.serialize(kademliaMessage);
+                // 2. 写入消息类型（4字节整数）
+                byteBuf.writeInt(kademliaMessage.getType());  //4
+                //写入网络版本
+                byteBuf.writeInt(NET_VERSION);//4
+                //写入内容长度
+                byteBuf.writeInt(data.length);//4  //32 位（4 字节）的整数
+                //写入类容
+                byteBuf.writeBytes(data);
+            } catch (Exception e) {
+                System.err.println("Encode error: " + e.getMessage());
+                throw e;
+            }
         }
     }
 
