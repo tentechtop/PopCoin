@@ -224,15 +224,6 @@ public class KademliaNodeServer {
                         @Override
                         protected void initChannel(NioDatagramChannel ch) throws Exception {
                             ChannelPipeline pipeline = ch.pipeline();
-                            // 帧解码器：解析类型(4) + 版本(4) + 内容长度(4) + 内容结构
-                            pipeline.addLast(new LengthFieldBasedFrameDecoder(
-                                    10 * 1024 * 1024,  // 最大帧长度
-                                    8,                 // 长度字段偏移量（跳过类型4字节 + 版本4字节）
-                                    4,                 // 长度字段长度（内容长度字段，4字节）
-                                    0,                 // 长度调整值（总长度 = 内容长度 + 12字节头部）
-                                    0                  // 不跳过字节
-                            ));
-                            pipeline.addLast(new LengthFieldPrepender(4));
                             pipeline.addLast(new UDPKademliaMessageEncoder());
                             pipeline.addLast(new UDPKademliaMessageDecoder());
                             pipeline.addLast(new KademliaUdpHandler(KademliaNodeServer.this));
@@ -273,15 +264,13 @@ public class KademliaNodeServer {
                                     super.exceptionCaught(ctx, cause);
                                 }
                             });
-                            // 帧解码器：解析类型(4) + 版本(4) + 内容长度(4) + 内容结构
                             pipeline.addLast(new LengthFieldBasedFrameDecoder(
                                     10 * 1024 * 1024,  // 最大帧长度
-                                    8,                 // 长度字段偏移量（跳过类型4字节 + 版本4字节）
+                                    0,                 // 长度字段偏移量（从起始位置开始）
                                     4,                 // 长度字段长度（内容长度字段，4字节）
-                                    0,                 // 长度调整值（总长度 = 内容长度 + 12字节头部）
-                                    0                  // 不跳过字节
+                                    0,                 // 长度调整值
+                                    4                  // 跳过长度字段本身
                             ));
-                            pipeline.addLast(new LengthFieldPrepender(4));
                             pipeline.addLast(new TCPKademliaMessageDecoder());
                             pipeline.addLast(new TCPKademliaMessageEncoder());
                             pipeline.addLast(new KademliaTcpHandler(KademliaNodeServer.this));
@@ -642,14 +631,9 @@ public class KademliaNodeServer {
             // 序列化消息
             byte[] data = KademliaMessage.serialize(kademliaMessage);
             // 创建 ByteBuf 并写入消息数据
-            ByteBuf buf = Unpooled.buffer(data.length + 12); // 4(类型) + 4(网络版本) + 4(内容长)
-            buf.writeInt(kademliaMessage.getType());  // 写入消息类型 4
-            //写入网络版本
-            buf.writeInt(NET_VERSION);//4
-            //写入内容长度
-            buf.writeInt(data.length);//4
-            //写入内容
-            buf.writeBytes(data);       // 写入消息内容
+            ByteBuf buf = Unpooled.buffer(data.length);
+            buf.writeInt(data.length);
+            buf.writeBytes(data);
             NodeInfo receiver = kademliaMessage.getReceiver();
             InetSocketAddress inetSocketAddress = new InetSocketAddress(receiver.getIpv4(),receiver.getUdpPort());
             // 创建 DatagramPacket 并添加到输出列表
@@ -662,52 +646,13 @@ public class KademliaNodeServer {
         @Override
         protected void decode(ChannelHandlerContext channelHandlerContext, DatagramPacket datagramPacket, List<Object> list) throws Exception {
             ByteBuf byteBuf = datagramPacket.content();
-            if (byteBuf.readableBytes() < 12) {
-                log.warn("确保有足够的数据读取消息类型和长度信息");
-                return;
-            }
-            // 标记当前读取位置
-            byteBuf.markReaderIndex();
-            // 读取消息类型
-            int messageType = byteBuf.readInt();
-            log.debug("消息类型:{}", MessageType.getDescriptionByCode(messageType));
-            // 读取总长度（内容长度字段 + 内容长度）
-            int netVersion = byteBuf.readInt();
-            log.debug("网络版本:{}", netVersion);
-            //是否和我的网络版本一致
-            if (netVersion != NET_VERSION) {
-                log.warn("网络版本不一致");
-                return;
-            }
-            // 读取内容长度
-            int contentLength = byteBuf.readInt();
-            log.debug("内容长度:{}", contentLength);
-            // 检查是否有足够的数据读取完整的消息内容
-            if (byteBuf.readableBytes() < contentLength) {
-                byteBuf.resetReaderIndex();
-                log.warn("没有足够的数据读取完整的消息内容");
-                return;
-            }
             // 读取消息内容
-            byte[] contentBytes = new byte[contentLength];
+            byte[] contentBytes = new byte[byteBuf.readableBytes()];
             byteBuf.readBytes(contentBytes);
             // 反序列化为消息对象
             KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
             log.debug("UDP解码消息内容:{}", message);
             // 添加到输出列表
-            // 1. 通过 datagramPacket 获取发送者地址
- /*           InetSocketAddress senderAddress = datagramPacket.sender();
-            // 转换为 InetSocketAddress 以获取 IP 和端口
-            if (senderAddress instanceof InetSocketAddress) {
-                String senderIp = senderAddress.getAddress().getHostAddress(); // 发送者 IP
-                int senderPort = senderAddress.getPort(); // 发送者端口
-                log.info("收到 UDP 消息，发送者: {}:{}", senderIp, senderPort);
-                //如果IP和自己不一样才修改
-                if (!senderIp.equals(NetworkUtil.getLocalIp())) {
-                    message.getSender().setIpv4(senderIp);
-                    message.getSender().setUdpPort(senderPort);
-                }
-            }*/
             list.add(message);
         }
     }
@@ -726,13 +671,7 @@ public class KademliaNodeServer {
             try {
                 //序列化消息对象
                 byte[] data = KademliaMessage.serialize(kademliaMessage);
-                // 2. 写入消息类型（4字节整数）
-                byteBuf.writeInt(kademliaMessage.getType());  //4
-                //写入网络版本
-                byteBuf.writeInt(NET_VERSION);//4
-                //写入内容长度
-                byteBuf.writeInt(data.length);//4  //32 位（4 字节）的整数
-                //写入类容
+                byteBuf.writeInt(data.length);
                 byteBuf.writeBytes(data);
             } catch (Exception e) {
                 System.err.println("Encode error: " + e.getMessage());
@@ -747,34 +686,7 @@ public class KademliaNodeServer {
     public static class TCPKademliaMessageDecoder extends ByteToMessageDecoder {
         @Override
         protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf, List<Object> list) throws Exception {
-            if (byteBuf.readableBytes() < 12) {
-                log.warn("确保有足够的数据读取消息类型和长度信息");
-                return;
-            }
-            // 标记当前读取位置
-            byteBuf.markReaderIndex();
-            // 读取消息类型
-            int messageType = byteBuf.readInt();
-            log.debug("消息类型:{}", MessageType.getDescriptionByCode(messageType));
-            // 读取总长度（内容长度字段 + 内容长度）
-            int netVersion = byteBuf.readInt();
-            log.debug("网络版本:{}", netVersion);
-            //是否和我的网络版本一致
-            if (netVersion != NET_VERSION) {
-                log.warn("网络版本不一致");
-                return;
-            }
-            // 读取内容长度
-            int contentLength = byteBuf.readInt();
-            log.debug("内容长度:{}", contentLength);
-            // 检查是否有足够的数据读取完整的消息内容
-            if (byteBuf.readableBytes() < contentLength) {
-                byteBuf.resetReaderIndex();
-                log.warn("没有足够的数据读取完整的消息内容");
-                return;
-            }
-            // 读取消息内容
-            byte[] contentBytes = new byte[contentLength];
+            byte[] contentBytes = new byte[byteBuf.readableBytes()];
             byteBuf.readBytes(contentBytes);
             // 反序列化为消息对象
             KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
