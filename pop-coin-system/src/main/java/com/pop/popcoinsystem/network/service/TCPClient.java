@@ -6,8 +6,6 @@ import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.RpcRequestMessage;
 import com.pop.popcoinsystem.network.rpc.RequestResponseManager;
-import com.pop.popcoinsystem.network.service.util.KademliaFrameDecoder;
-import com.pop.popcoinsystem.network.service.util.KademliaFrameEncoder;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -68,8 +66,8 @@ public class TCPClient {
                         // 1. 添加异常处理器（放在编解码器之前，优先捕获异常）
                         pipeline.addLast(new ConnectionExceptionHandler(nodeTCPChannel, kademliaNodeServer));
                         // 独立编解码器，解除耦合
-                        pipeline.addLast(new KademliaFrameDecoder());
-                        pipeline.addLast(new KademliaFrameEncoder());
+                        pipeline.addLast(new KademliaNodeServer.TCPKademliaMessageDecoder());
+                        pipeline.addLast(new KademliaNodeServer.TCPKademliaMessageEncoder());
                     }
                 });
 

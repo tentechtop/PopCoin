@@ -4,8 +4,6 @@ import com.pop.popcoinsystem.exception.ResponseTimeoutException;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.rpc.RequestResponseManager;
-import com.pop.popcoinsystem.network.service.util.UDPFrameDecoderAdapter;
-import com.pop.popcoinsystem.network.service.util.UDPMessageWrapper;
 import com.pop.popcoinsystem.util.SerializeUtils;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.Unpooled;
@@ -58,8 +56,8 @@ public class UDPClient {
                     @Override
                     protected void initChannel(NioDatagramChannel ch) throws Exception {
                         ChannelPipeline pipeline = ch.pipeline();
-                        pipeline.addLast(new UDPFrameDecoderAdapter());
-                        pipeline.addLast(new UDPMessageWrapper());
+                        pipeline.addLast(new KademliaNodeServer.UDPKademliaMessageDecoder());
+                        pipeline.addLast(new KademliaNodeServer.UDPKademliaMessageEncoder());
                     }
                 });
         // 初始化全局通道（绑定一次本地临时端口）
