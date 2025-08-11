@@ -46,6 +46,7 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.net.SocketException;
 import java.util.*;
 import java.util.concurrent.*;
@@ -692,11 +693,23 @@ public class KademliaNodeServer {
             // 反序列化为消息对象
             KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
             log.debug("UDP解码消息内容:{}", message);
-            String ipv4 = channelHandlerContext.channel().remoteAddress().toString().substring(1);
-            int port = channelHandlerContext.channel().remoteAddress().hashCode();
-            log.info("消息来自:{}:{}", ipv4,port);
-            message.getSender().setIpv4(ipv4);
-            message.getSender().setUdpPort(port);
+            Channel channel = channelHandlerContext.channel();
+            SocketAddress remoteAddress = channel.remoteAddress();
+            if (remoteAddress != null) {
+                // 处理远程地址
+                String ipv4 = remoteAddress.toString().substring(1);
+                // 注意：用hashCode()获取端口是不正确的，应该这样做：
+                if (remoteAddress instanceof InetSocketAddress inetSocketAddress) {
+                    int port = inetSocketAddress.getPort();
+                    String host = inetSocketAddress.getHostString();
+                    // 使用host和port
+                    message.getSender().setIpv4(host);
+                    message.getSender().setUdpPort(port);
+                }
+            } else {
+                // 处理地址为null的情况，可能是日志记录或其他逻辑
+                log.warn("远程地址为null");
+            }
             // 添加到输出列表
             list.add(message);
         }
@@ -770,11 +783,23 @@ public class KademliaNodeServer {
             KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
             // 添加到输出列表
             //解析发送者的IP和端口
-            String ipv4 = channelHandlerContext.channel().remoteAddress().toString().substring(1);
-            int port = channelHandlerContext.channel().remoteAddress().hashCode();
-            log.info("消息来自:{}:{}", ipv4,port);
-            message.getSender().setIpv4(ipv4);
-            message.getSender().setTcpPort(port);
+            Channel channel = channelHandlerContext.channel();
+            SocketAddress remoteAddress = channel.remoteAddress();
+            if (remoteAddress != null) {
+                // 处理远程地址
+                String ipv4 = remoteAddress.toString().substring(1);
+                // 注意：用hashCode()获取端口是不正确的，应该这样做：
+                if (remoteAddress instanceof InetSocketAddress inetSocketAddress) {
+                    int port = inetSocketAddress.getPort();
+                    String host = inetSocketAddress.getHostString();
+                    // 使用host和port
+                    message.getSender().setIpv4(host);
+                    message.getSender().setTcpPort(port);
+                }
+            } else {
+                // 处理地址为null的情况，可能是日志记录或其他逻辑
+                log.warn("远程地址为null");
+            }
             list.add(message);
         }
     }
