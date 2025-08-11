@@ -13,7 +13,7 @@ import java.io.Serializable;
 public interface RpcService {
 
     //ping
-    PongKademliaMessage ping(PingKademliaMessage pingKademliaMessage) throws InterruptedException, FullBucketException;
+    PongKademliaMessage ping() throws InterruptedException, FullBucketException;
 
 
 

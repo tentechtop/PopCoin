@@ -335,9 +335,9 @@ public class KademliaNodeServer {
 
                         RpcProxyFactory proxyFactory = new RpcProxyFactory(this, bootstrapNodeInfo);
                         // 3. 获取服务代理对象
-                        BlockChainService proxy = proxyFactory.createProxy(BlockChainService.class);
-                        byte[] bytes = proxy.GENESIS_BLOCK_HASH();
-                        log.info("获取创世块hash:{}", bytes);
+                        RpcService proxy = proxyFactory.createProxy(RpcService.class);
+                        PongKademliaMessage pongKademliaMessage = proxy.ping();
+                        log.info("获取到{}...", pongKademliaMessage);
 
                         CompletableFuture<KademliaMessage> kademliaMessageCompletableFuture = udpClient.sendMessageWithResponse(pingMessage);
                         KademliaMessage response = kademliaMessageCompletableFuture.get();

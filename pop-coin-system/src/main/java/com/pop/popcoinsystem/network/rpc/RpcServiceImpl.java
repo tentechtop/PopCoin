@@ -23,16 +23,10 @@ public class RpcServiceImpl implements RpcService {
     private KademliaNodeServer kademliaNodeServer;
 
     @Override
-    public PongKademliaMessage ping(PingKademliaMessage message) throws InterruptedException, FullBucketException {
+    public PongKademliaMessage ping() throws InterruptedException, FullBucketException {
         log.info("收到ping--rpc");
-        NodeInfo sender = message.getSender();
-        kademliaNodeServer.getRoutingTable().update(sender);
         PongKademliaMessage pongKademliaMessage = new PongKademliaMessage();
-        long requestId = message.getRequestId();
         pongKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());
-        pongKademliaMessage.setReceiver(message.getSender());
-        pongKademliaMessage.setRequestId(requestId);
-        pongKademliaMessage.setResponse(true);
         return pongKademliaMessage;
     }
 }
