@@ -330,9 +330,7 @@ public class KademliaNodeServer {
             try {
                 while (retryCount < MAX_RETRIES) {
                     // 1. 创建Ping消息（提取为辅助方法，减少重复代码）
-                    PingKademliaMessage pingMessage = createPingMessage(bootstrapNodeInfo);
                     try {
-
                         RpcProxyFactory proxyFactory = new RpcProxyFactory(this, bootstrapNodeInfo);
                         // 3. 获取服务代理对象
                         RpcService proxy = proxyFactory.createProxy(RpcService.class);
