@@ -12,6 +12,7 @@ import com.pop.popcoinsystem.network.protocol.messageData.RpcRequestData;
 import com.pop.popcoinsystem.service.blockChain.BlockChainService;
 import com.pop.popcoinsystem.service.transaction.TransactionService;
 import com.pop.popcoinsystem.util.CryptoUtil;
+import com.pop.popcoinsystem.util.StunUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
@@ -84,8 +85,16 @@ public class SyncBlockChainServiceImpl {
         nodeInfo.setTcpPort(8333);
         nodeInfo.setUdpPort(8333);
 
+        NodeInfo nodeInfo1 = kademliaNodeServer.getNodeInfo();
+        StunUtils.StunInfo publicAddress = StunUtils.getPublicAddress();
+        String publicIp = publicAddress.getPublicIp();
+        int publicPort = publicAddress.getPublicPort();
+        nodeInfo1.setTcpPort(publicPort);
+        nodeInfo1.setIpv4(publicIp);
+        nodeInfo1.setUdpPort(publicPort);
+
         PingKademliaMessage pingKademliaMessage = new PingKademliaMessage();
-        pingKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());//本节点信息
+        pingKademliaMessage.setSender(nodeInfo1);//本节点信息
         pingKademliaMessage.setReceiver(nodeInfo);
         CompletableFuture<KademliaMessage> kademliaMessageCompletableFuture = kademliaNodeServer.getUdpClient().sendMessageWithResponse(pingKademliaMessage);
         KademliaMessage kademliaMessage = kademliaMessageCompletableFuture.get(5, TimeUnit.SECONDS);

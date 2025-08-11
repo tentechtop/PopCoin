@@ -57,11 +57,7 @@ public class KademliaUdpHandler extends SimpleChannelInboundHandler<KademliaMess
                 //收到广播消息
                 MessageHandler messageHandler = KademliaMessageHandler.get(message.getType());
                 try {
-                    KademliaMessage<? extends Serializable> kademliaMessage = messageHandler.handleMesage(nodeServer, message);
-                    //处理回复 用同一个通道回复
-                    if (kademliaMessage != null){
-                        ctx.channel().writeAndFlush(kademliaMessage);
-                    }
+                    messageHandler.handleMesage(nodeServer, message);
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
