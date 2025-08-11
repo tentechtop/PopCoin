@@ -263,7 +263,7 @@ public class KademliaNodeServer {
                             pipeline.addLast(new TCPKademliaMessageEncoder());
                             // 添加LengthFieldBasedFrameDecoder解决TCP粘包问题
                             pipeline.addLast(new LengthFieldBasedFrameDecoder(
-                                    1024 * 1024, // 最大帧长度
+                                    1024 * 1024 * 1024, // 最大帧长度
                                     0, // 长度字段偏移量
                                     4, // 长度字段字节数
                                     0, // 长度字段调整
@@ -335,7 +335,7 @@ public class KademliaNodeServer {
             try {
                 //序列化消息对象
                 byte[] data = KademliaMessage.serialize(kademliaMessage);
-                byteBuf.writeBytes(data);//// 长度前缀已由LengthFieldPrepender处理
+                byteBuf.writeBytes(data);// 长度前缀已由LengthFieldPrepender处理
             } catch (Exception e) {
                 System.err.println("Encode error: " + e.getMessage());
                 throw e;
