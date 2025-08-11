@@ -269,8 +269,10 @@ public class KademliaNodeServer {
                                     0,                 // 长度字段偏移量（从起始位置开始）
                                     4,                 // 长度字段长度（内容长度字段，4字节）
                                     0,                 // 长度调整值
-                                    4                  // 跳过长度字段本身
+                                    0                  // 跳过长度字段本身
                             ));
+
+
                             pipeline.addLast(new TCPKademliaMessageDecoder());
                             pipeline.addLast(new TCPKademliaMessageEncoder());
                             pipeline.addLast(new KademliaTcpHandler(KademliaNodeServer.this));
@@ -646,8 +648,17 @@ public class KademliaNodeServer {
         @Override
         protected void decode(ChannelHandlerContext channelHandlerContext, DatagramPacket datagramPacket, List<Object> list) throws Exception {
             ByteBuf byteBuf = datagramPacket.content();
+            // 读取内容长度
+            int contentLength = byteBuf.readInt();
+            log.debug("内容长度:{}", contentLength);
+            // 检查是否有足够的数据读取完整的消息内容
+            if (byteBuf.readableBytes() < contentLength) {
+                byteBuf.resetReaderIndex();
+                log.warn("没有足够的数据读取完整的消息内容");
+                return;
+            }
             // 读取消息内容
-            byte[] contentBytes = new byte[byteBuf.readableBytes()];
+            byte[] contentBytes = new byte[contentLength];
             byteBuf.readBytes(contentBytes);
             // 反序列化为消息对象
             KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
@@ -686,7 +697,19 @@ public class KademliaNodeServer {
     public static class TCPKademliaMessageDecoder extends ByteToMessageDecoder {
         @Override
         protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf, List<Object> list) throws Exception {
-            byte[] contentBytes = new byte[byteBuf.readableBytes()];
+            // 标记当前读取位置
+            byteBuf.markReaderIndex();
+
+            int contentLength = byteBuf.readInt();
+            log.debug("内容长度:{}", contentLength);
+            // 检查是否有足够的数据读取完整的消息内容
+            if (byteBuf.readableBytes() < contentLength) {
+                byteBuf.resetReaderIndex();
+                log.warn("没有足够的数据读取完整的消息内容");
+                return;
+            }
+            // 读取消息内容
+            byte[] contentBytes = new byte[contentLength];
             byteBuf.readBytes(contentBytes);
             // 反序列化为消息对象
             KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
