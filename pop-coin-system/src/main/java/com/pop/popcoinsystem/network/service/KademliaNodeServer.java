@@ -225,13 +225,6 @@ public class KademliaNodeServer {
                         protected void initChannel(NioDatagramChannel ch) throws Exception {
                             ChannelPipeline pipeline = ch.pipeline();
                             // 帧解码器：解析类型(4) + 版本(4) + 内容长度(4) + 内容结构
-                            pipeline.addLast(new LengthFieldBasedFrameDecoder(
-                                    10 * 1024 * 1024,  // 最大帧长度
-                                    8,                 // 长度字段偏移量（跳过类型4字节 + 版本4字节）
-                                    4,                 // 长度字段长度（内容长度字段，4字节）
-                                    0,                 // 长度调整值（总长度 = 内容长度 + 12字节头部）
-                                    0                  // 不跳过字节
-                            ));
                             pipeline.addLast(new LengthFieldPrepender(4));
                             pipeline.addLast(new UDPKademliaMessageEncoder());
                             pipeline.addLast(new UDPKademliaMessageDecoder());
@@ -273,14 +266,6 @@ public class KademliaNodeServer {
                                     super.exceptionCaught(ctx, cause);
                                 }
                             });
-                            // 帧解码器：解析类型(4) + 版本(4) + 内容长度(4) + 内容结构
-                            pipeline.addLast(new LengthFieldBasedFrameDecoder(
-                                    10 * 1024 * 1024,  // 最大帧长度
-                                    8,                 // 长度字段偏移量（跳过类型4字节 + 版本4字节）
-                                    4,                 // 长度字段长度（内容长度字段，4字节）
-                                    0,                 // 长度调整值（总长度 = 内容长度 + 12字节头部）
-                                    0                  // 不跳过字节
-                            ));
                             pipeline.addLast(new LengthFieldPrepender(4));
                             pipeline.addLast(new TCPKademliaMessageDecoder());
                             pipeline.addLast(new TCPKademliaMessageEncoder());
