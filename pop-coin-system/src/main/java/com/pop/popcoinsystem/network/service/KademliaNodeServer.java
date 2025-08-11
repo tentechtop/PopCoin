@@ -23,6 +23,7 @@ import com.pop.popcoinsystem.service.transaction.TransactionService;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.NetworkUtil;
+import com.pop.popcoinsystem.util.SerializeUtils;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
@@ -205,98 +206,7 @@ public class KademliaNodeServer {
 
 
 
-    // UDP服务 - 节点发现
-    public void startUdpDiscovererServer() {
-        try {
-            udpGroup = new NioEventLoopGroup();
-            udpBootstrap = new Bootstrap();
-            udpBootstrap.group(udpGroup)
-                    .channel(NioDatagramChannel.class)
-                    // 核心Channel参数优化
-                    .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT) // 池化内存分配（减少GC）
-                    .option(ChannelOption.SO_RCVBUF, 64*1024*1024) // 接收缓冲区
-                    .option(ChannelOption.SO_REUSEADDR, true) // 允许端口复用（多线程共享端口）
-                    .option(ChannelOption.SO_BROADCAST, true) // 支持广播（按需开启）
-                    .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 1000) // UDP无连接，超时设短（1秒）
-                    .option(ChannelOption.RCVBUF_ALLOCATOR, new FixedRecvByteBufAllocator(1024 * 64)) // 固定接收缓冲区大小（64KB，减少动态调整开销）
 
-                    .handler(new ChannelInitializer<NioDatagramChannel>() {
-                        @Override
-                        protected void initChannel(NioDatagramChannel ch) throws Exception {
-                            ChannelPipeline pipeline = ch.pipeline();
-                            // 帧解码器：解析类型(4) + 版本(4) + 内容长度(4) + 内容结构
-                            pipeline.addLast(new LengthFieldBasedFrameDecoder(
-                                    10 * 1024 * 1024,  // 最大帧长度
-                                    8,                 // 长度字段偏移量（跳过类型4字节 + 版本4字节）
-                                    4,                 // 长度字段长度（内容长度字段，4字节）
-                                    0,                 // 长度调整值（总长度 = 内容长度 + 12字节头部）
-                                    0                  // 不跳过字节
-                            ));
-                            pipeline.addLast(new LengthFieldPrepender(4));
-                            pipeline.addLast(new UDPKademliaMessageEncoder());
-                            pipeline.addLast(new UDPKademliaMessageDecoder());
-                            pipeline.addLast(new KademliaUdpHandler(KademliaNodeServer.this));
-                        }
-                    });
-
-            udpBindFuture = nodeInfo.getIpv4() != null ? udpBootstrap.bind(nodeInfo.getIpv4(), nodeInfo.getUdpPort()).sync() : udpBootstrap.bind(nodeInfo.getUdpPort()).sync();
-            log.info("UDP服务已启动，地址{} 端口: {}", nodeInfo.getIpv4(),nodeInfo.getUdpPort());
-            this.udpClient = new UDPClient(KademliaNodeServer.this);
-        } catch (Exception e) {
-            log.error("KademliaNode startUdpServer error", e);
-        }
-    }
-
-    // TCP服务 - 数据传输
-    public void startTcpTransmitServer() {
-        try {
-            bossGroup = new NioEventLoopGroup();
-            workerGroup = new NioEventLoopGroup();
-            tcpBootstrap = new ServerBootstrap();
-            tcpBootstrap.group(bossGroup, workerGroup)
-                    .channel(NioServerSocketChannel.class)
-
-                    // 3. TCP参数优化
-                    .option(ChannelOption.SO_REUSEADDR, true) // 允许端口复用
-                    .option(ChannelOption.SO_RCVBUF, 64* 1024 * 1024) // 接收缓冲区
-                    .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)
-
-                    .childHandler(new ChannelInitializer<SocketChannel>() {
-                        @Override
-                        public void initChannel(SocketChannel ch) throws Exception {
-                            ChannelPipeline pipeline = ch.pipeline();
-                            pipeline.addLast(new ChannelDuplexHandler() {
-                                @Override
-                                public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-                                    // 捕获 Connection reset 异常
-                                    log.info("发生连接重置（Connection reset）");
-                                    super.exceptionCaught(ctx, cause);
-                                }
-                            });
-                            // 帧解码器：解析类型(4) + 版本(4) + 内容长度(4) + 内容结构
-                            pipeline.addLast(new LengthFieldBasedFrameDecoder(
-                                    10 * 1024 * 1024,  // 最大帧长度
-                                    8,                 // 长度字段偏移量（跳过类型4字节 + 版本4字节）
-                                    4,                 // 长度字段长度（内容长度字段，4字节）
-                                    0,                 // 长度调整值（总长度 = 内容长度 + 12字节头部）
-                                    0                  // 不跳过字节
-                            ));
-                            pipeline.addLast(new LengthFieldPrepender(4));
-                            pipeline.addLast(new TCPKademliaMessageDecoder());
-                            pipeline.addLast(new TCPKademliaMessageEncoder());
-                            pipeline.addLast(new KademliaTcpHandler(KademliaNodeServer.this));
-                        }
-                    })
-                    .option(ChannelOption.SO_BACKLOG, 128)
-                    .childOption(ChannelOption.SO_KEEPALIVE, true);
-
-            tcpBindFuture = nodeInfo.getIpv4() != null ? tcpBootstrap.bind(nodeInfo.getIpv4(), nodeInfo.getTcpPort()).sync() : tcpBootstrap.bind(nodeInfo.getTcpPort()).sync();
-            log.info("TCP服务已启动，端口: {}", nodeInfo.getTcpPort());
-            this.tcpClient = new TCPClient(KademliaNodeServer.this);
-        } catch (Exception e) {
-            log.error("KademliaNode startTcpServer error", e);
-        }
-    }
 
     //向所有已知节点发送Ping
     public void sendOnlineStatus() {
@@ -636,20 +546,112 @@ public class KademliaNodeServer {
     }
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // UDP服务 - 节点发现
+    public void startUdpDiscovererServer() {
+        try {
+            udpGroup = new NioEventLoopGroup();
+            udpBootstrap = new Bootstrap();
+            udpBootstrap.group(udpGroup)
+                    .channel(NioDatagramChannel.class)
+                    // 核心Channel参数优化
+                    .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT) // 池化内存分配（减少GC）
+                    .option(ChannelOption.SO_RCVBUF, 64*1024*1024) // 接收缓冲区
+                    .option(ChannelOption.SO_REUSEADDR, true) // 允许端口复用（多线程共享端口）
+                    .option(ChannelOption.SO_BROADCAST, true) // 支持广播（按需开启）
+                    .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 1000) // UDP无连接，超时设短（1秒）
+                    .option(ChannelOption.RCVBUF_ALLOCATOR, new FixedRecvByteBufAllocator(1024 * 64)) // 固定接收缓冲区大小（64KB，减少动态调整开销）
+
+                    .handler(new ChannelInitializer<NioDatagramChannel>() {
+                        @Override
+                        protected void initChannel(NioDatagramChannel ch) throws Exception {
+                            ChannelPipeline pipeline = ch.pipeline();
+                            // 帧解码器：解析类型(4) + 版本(4) + 内容长度(4) + 内容结构
+                            pipeline.addLast(createFrameDecoder());
+                            pipeline.addLast(new LengthFieldPrepender(4));
+                            pipeline.addLast(new UDPKademliaMessageEncoder());
+                            pipeline.addLast(new UDPKademliaMessageDecoder());
+                            pipeline.addLast(new KademliaUdpHandler(KademliaNodeServer.this));
+                        }
+                    });
+
+            udpBindFuture = nodeInfo.getIpv4() != null ? udpBootstrap.bind(nodeInfo.getIpv4(), nodeInfo.getUdpPort()).sync() : udpBootstrap.bind(nodeInfo.getUdpPort()).sync();
+            log.info("UDP服务已启动，地址{} 端口: {}", nodeInfo.getIpv4(),nodeInfo.getUdpPort());
+            this.udpClient = new UDPClient(KademliaNodeServer.this);
+        } catch (Exception e) {
+            log.error("KademliaNode startUdpServer error", e);
+        }
+    }
+
+    // TCP服务 - 数据传输
+    public void startTcpTransmitServer() {
+        try {
+            bossGroup = new NioEventLoopGroup();
+            workerGroup = new NioEventLoopGroup();
+            tcpBootstrap = new ServerBootstrap();
+            tcpBootstrap.group(bossGroup, workerGroup)
+                    .channel(NioServerSocketChannel.class)
+
+                    // 3. TCP参数优化
+                    .option(ChannelOption.SO_REUSEADDR, true) // 允许端口复用
+                    .option(ChannelOption.SO_RCVBUF, 64* 1024 * 1024) // 接收缓冲区
+                    .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)
+
+                    .childHandler(new ChannelInitializer<SocketChannel>() {
+                        @Override
+                        public void initChannel(SocketChannel ch) throws Exception {
+                            ChannelPipeline pipeline = ch.pipeline();
+                            pipeline.addLast(new ChannelDuplexHandler() {
+                                @Override
+                                public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+                                    // 捕获 Connection reset 异常
+                                    log.info("发生连接重置（Connection reset）");
+                                    super.exceptionCaught(ctx, cause);
+                                }
+                            });
+                            // 帧解码器：解析类型(4) + 版本(4) + 内容长度(4) + 内容结构
+                            pipeline.addLast(createFrameDecoder());
+                            pipeline.addLast(new LengthFieldPrepender(4));
+                            pipeline.addLast(new TCPKademliaMessageDecoder());
+                            pipeline.addLast(new TCPKademliaMessageEncoder());
+                            pipeline.addLast(new KademliaTcpHandler(KademliaNodeServer.this));
+                        }
+                    })
+                    .option(ChannelOption.SO_BACKLOG, 128)
+                    .childOption(ChannelOption.SO_KEEPALIVE, true);
+
+            tcpBindFuture = nodeInfo.getIpv4() != null ? tcpBootstrap.bind(nodeInfo.getIpv4(), nodeInfo.getTcpPort()).sync() : tcpBootstrap.bind(nodeInfo.getTcpPort()).sync();
+            log.info("TCP服务已启动，端口: {}", nodeInfo.getTcpPort());
+            this.tcpClient = new TCPClient(KademliaNodeServer.this);
+        } catch (Exception e) {
+            log.error("KademliaNode startTcpServer error", e);
+        }
+    }
+
+
     public static class UDPKademliaMessageEncoder extends MessageToMessageEncoder<KademliaMessage<?>> {
         @Override
         protected void encode(ChannelHandlerContext channelHandlerContext, KademliaMessage<?> kademliaMessage, List<Object> list) throws Exception {
             // 序列化消息
-            byte[] data = KademliaMessage.serialize(kademliaMessage);
-            // 创建 ByteBuf 并写入消息数据
-            ByteBuf buf = Unpooled.buffer(data.length + 12); // 4(类型) + 4(网络版本) + 4(内容长)
-            buf.writeInt(kademliaMessage.getType());  // 写入消息类型 4
-            //写入网络版本
-            buf.writeInt(NET_VERSION);//4
-            //写入内容长度
-            buf.writeInt(data.length);//4
-            //写入内容
-            buf.writeBytes(data);       // 写入消息内容
+            byte[] data = SerializeUtils.serialize(kademliaMessage);
+            // 只需要分配内容长度的缓冲区，LengthFieldPrepender会添加长度字段
+            ByteBuf buf = Unpooled.buffer(data.length + 8); // 类型(4) + 版本(4) + 内容
+            buf.writeInt(kademliaMessage.getType());
+            buf.writeInt(NET_VERSION);
+            buf.writeBytes(data);
+
             NodeInfo receiver = kademliaMessage.getReceiver();
             InetSocketAddress inetSocketAddress = new InetSocketAddress(receiver.getIpv4(),receiver.getUdpPort());
             // 创建 DatagramPacket 并添加到输出列表
@@ -662,60 +664,15 @@ public class KademliaNodeServer {
         @Override
         protected void decode(ChannelHandlerContext channelHandlerContext, DatagramPacket datagramPacket, List<Object> list) throws Exception {
             ByteBuf byteBuf = datagramPacket.content();
-            if (byteBuf.readableBytes() < 12) {
-                log.warn("确保有足够的数据读取消息类型和长度信息");
-                return;
-            }
-            // 标记当前读取位置
-            byteBuf.markReaderIndex();
-            // 读取消息类型
-            int messageType = byteBuf.readInt();
-            log.debug("消息类型:{}", MessageType.getDescriptionByCode(messageType));
-            // 读取总长度（内容长度字段 + 内容长度）
-            int netVersion = byteBuf.readInt();
-            log.debug("网络版本:{}", netVersion);
-            //是否和我的网络版本一致
-            if (netVersion != NET_VERSION) {
-                log.warn("网络版本不一致{}", netVersion);
-                return;
-            }
-            // 读取内容长度
-            int contentLength = byteBuf.readInt();
-            log.debug("内容长度:{}", contentLength);
-            // 检查是否有足够的数据读取完整的消息内容
-            if (byteBuf.readableBytes() < contentLength) {
-                byteBuf.resetReaderIndex();
-                log.warn("没有足够的数据读取完整的消息内容");
-                return;
-            }
-            // 读取消息内容
-            byte[] contentBytes = new byte[contentLength];
+            byte[] contentBytes = new byte[byteBuf.readableBytes()];
             byteBuf.readBytes(contentBytes);
             // 反序列化为消息对象
             KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
             log.debug("UDP解码消息内容:{}", message);
             // 添加到输出列表
-            // 1. 通过 datagramPacket 获取发送者地址
- /*           InetSocketAddress senderAddress = datagramPacket.sender();
-            // 转换为 InetSocketAddress 以获取 IP 和端口
-            if (senderAddress instanceof InetSocketAddress) {
-                String senderIp = senderAddress.getAddress().getHostAddress(); // 发送者 IP
-                int senderPort = senderAddress.getPort(); // 发送者端口
-                log.info("收到 UDP 消息，发送者: {}:{}", senderIp, senderPort);
-                //如果IP和自己不一样才修改
-                if (!senderIp.equals(NetworkUtil.getLocalIp())) {
-                    message.getSender().setIpv4(senderIp);
-                    message.getSender().setUdpPort(senderPort);
-                }
-            }*/
             list.add(message);
         }
     }
-
-
-
-
-
 
     /**
      * Kademlia消息编码器  将一个 Java 对象（类型为T）编码为ByteBuf（字节流）。
@@ -723,21 +680,11 @@ public class KademliaNodeServer {
     public static class TCPKademliaMessageEncoder extends MessageToByteEncoder<KademliaMessage<?>> {
         @Override
         protected void encode(ChannelHandlerContext channelHandlerContext, KademliaMessage<?> kademliaMessage, ByteBuf byteBuf) throws Exception {
-            try {
-                //序列化消息对象
-                byte[] data = KademliaMessage.serialize(kademliaMessage);
-                // 2. 写入消息类型（4字节整数）
-                byteBuf.writeInt(kademliaMessage.getType());  //4
-                //写入网络版本
-                byteBuf.writeInt(NET_VERSION);//4
-                //写入内容长度
-                byteBuf.writeInt(data.length);//4  //32 位（4 字节）的整数
-                //写入类容
-                byteBuf.writeBytes(data);
-            } catch (Exception e) {
-                System.err.println("Encode error: " + e.getMessage());
-                throw e;
-            }
+            byte[] data = SerializeUtils.serialize(kademliaMessage);
+            byteBuf.writeInt(kademliaMessage.getType());  // 消息类型
+            byteBuf.writeInt(NET_VERSION);    // 网络版本
+            byteBuf.writeInt(data.length);    // 内容长度
+            byteBuf.writeBytes(data);         // 内容
         }
     }
 
@@ -747,34 +694,7 @@ public class KademliaNodeServer {
     public static class TCPKademliaMessageDecoder extends ByteToMessageDecoder {
         @Override
         protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf, List<Object> list) throws Exception {
-            if (byteBuf.readableBytes() < 12) {
-                log.warn("确保有足够的数据读取消息类型和长度信息");
-                return;
-            }
-            // 标记当前读取位置
-            byteBuf.markReaderIndex();
-            // 读取消息类型
-            int messageType = byteBuf.readInt();
-            log.debug("消息类型:{}", MessageType.getDescriptionByCode(messageType));
-            // 读取总长度（内容长度字段 + 内容长度）
-            int netVersion = byteBuf.readInt();
-            log.debug("网络版本:{}", netVersion);
-            //是否和我的网络版本一致
-            if (netVersion != NET_VERSION) {
-                log.warn("网络版本不一致");
-                return;
-            }
-            // 读取内容长度
-            int contentLength = byteBuf.readInt();
-            log.debug("内容长度:{}", contentLength);
-            // 检查是否有足够的数据读取完整的消息内容
-            if (byteBuf.readableBytes() < contentLength) {
-                byteBuf.resetReaderIndex();
-                log.warn("没有足够的数据读取完整的消息内容");
-                return;
-            }
-            // 读取消息内容
-            byte[] contentBytes = new byte[contentLength];
+            byte[] contentBytes = new byte[byteBuf.readableBytes()];
             byteBuf.readBytes(contentBytes);
             // 反序列化为消息对象
             KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
@@ -786,5 +706,17 @@ public class KademliaNodeServer {
             log.info("接收到消息来自:{}  {}  {} ", hostAddress,hostName, port);
             list.add(message);
         }
+    }
+
+    // 统一的帧解码器配置方法
+    private static LengthFieldBasedFrameDecoder createFrameDecoder() {
+        return new LengthFieldBasedFrameDecoder(
+                10 * 1024 * 1024,  // 最大帧长度
+                8,                 // 长度字段偏移量(跳过类型4字节 + 版本4字节)
+                4,                 // 长度字段长度(内容长度字段，4字节)
+                0,                 // 长度调整值(内容长度不包含自身)
+                12,                // 跳过头部字节数(类型+版本+长度=12字节)
+                true               // 严格模式，确保帧完整
+        );
     }
 }
