@@ -348,12 +348,10 @@ public class KademliaNodeServer {
                             resultFuture.complete(null); // 连接成功，完成Future
                             return;
                         }
-
                         // 4. 计算退避时间并等待（虚拟线程中用LockSupport更高效，避免Thread.sleep的监控器占用）
                         long backoffInterval = calculateBackoffInterval(retryCount, INITIAL_RETRY_INTERVAL, MAX_RETRY_INTERVAL);
                         LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(backoffInterval));
                         retryCount++;
-
                     } catch (ConnectException e) {
                         // 连接被拒绝异常处理
                         log.warn("连接引导节点失败：目标节点 {}:{} 拒绝连接，第{}次重试将在{}ms后进行",
@@ -380,18 +378,15 @@ public class KademliaNodeServer {
                         handleRetry(retryCount++, INITIAL_RETRY_INTERVAL, MAX_RETRY_INTERVAL);
                     }
                 }
-
                 // 达到最大重试次数，标记失败
                 resultFuture.completeExceptionally(
                         new Exception("已达到最大重试次数(" + MAX_RETRIES + "次)，无法连接到引导节点" + bootstrapNodeInfo)
                 );
-
             } catch (Exception e) {
                 // 捕获循环外的异常，确保Future正确完成
                 resultFuture.completeExceptionally(e);
             }
         });
-
         return resultFuture;
     }
 

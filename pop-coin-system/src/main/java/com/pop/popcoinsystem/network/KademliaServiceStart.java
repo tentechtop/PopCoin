@@ -121,7 +121,6 @@ public class KademliaServiceStart {
         externalNodeInfo.setNodeType(nodeSetting.getNodeType());
         externalNodeInfo.setPublicKey(CryptoUtil.hexToBytes(nodeSetting.getPublicKeyHex()));
         server.setExternalNodeInfo(externalNodeInfo);
-
         storageService.addOrUpdateSelfNode(externalNodeInfo);
         //自己要用单独的KEY保存不再放在路由表中
         server.setNodeSettings(NodeSettings.Default.build());

@@ -59,7 +59,10 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
                 //广播消息
                 MessageHandler messageHandler = KademliaMessageHandler.get(message.getType());
                 try {
-                    messageHandler.handleMesage(nodeServer, message);
+                    KademliaMessage<? extends Serializable> kademliaMessage = messageHandler.handleMesage(nodeServer, message);
+                    if (kademliaMessage != null){
+                        ctx.channel().writeAndFlush(kademliaMessage);
+                    }
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
@@ -92,7 +95,7 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
             if (response != null) {
                 // 标记为响应消息
                 response.setResponse(true);
-                nodeServer.getTcpClient().sendMessage(response);//已经优化 会复用通道
+                ctx.channel().writeAndFlush(response);
             }
         } catch (Exception e) {
             log.error("处理请求消息 {} 时发生异常", message.getRequestId(), e);

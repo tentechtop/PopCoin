@@ -63,8 +63,6 @@ public class RoutingTable {
         // 更新桶的访问时间
         lastBucketAccessTime.put(bucket.getId(), System.currentTimeMillis());
         node.setDistance(node.getId().xor(this.localNodeId));
-        log.info("更新节点状态{}", node);
-
         if (bucket.contains(node)) {
             bucket.pushToFront(node);
             return false;
