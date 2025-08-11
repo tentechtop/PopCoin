@@ -701,10 +701,10 @@ public class KademliaNodeServer {
                 int senderPort = senderAddress.getPort(); // 发送者端口
                 log.info("收到 UDP 消息，发送者: {}:{}", senderIp, senderPort);
                 //如果IP和自己不一样才修改
-                if (!senderIp.equals(NetworkUtil.getLocalIp())) {
+  /*              if (!senderIp.equals(NetworkUtil.getLocalIp())) {
                     message.getSender().setIpv4(senderIp);
                     message.getSender().setUdpPort(senderPort);
-                }
+                }*/
             }
             list.add(message);
         }
