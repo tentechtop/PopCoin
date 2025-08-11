@@ -336,27 +336,19 @@ public class KademliaNodeServer {
                         RpcProxyFactory proxyFactory = new RpcProxyFactory(this, bootstrapNodeInfo);
                         // 3. 获取服务代理对象
                         RpcService proxy = proxyFactory.createProxy(RpcService.class);
-                        PongKademliaMessage pongKademliaMessage = proxy.ping();
-                        log.info("获取到{}...", pongKademliaMessage);
-
-                        CompletableFuture<KademliaMessage> kademliaMessageCompletableFuture = udpClient.sendMessageWithResponse(pingMessage);
-                        KademliaMessage response = kademliaMessageCompletableFuture.get();
-
+                        PongKademliaMessage response = proxy.ping();
+                        log.info("获取到{}...", response);
                         // 3. 处理响应结果
                         if (response == null) {
                             log.warn("未收到引导节点{}的Pong消息，第{}次重试将在{}ms后进行",
                                     bootstrapNodeInfo, retryCount + 1,
                                     calculateBackoffInterval(retryCount, INITIAL_RETRY_INTERVAL, MAX_RETRY_INTERVAL));
-                        } else if (response instanceof PongKademliaMessage) {
+                        } else {
                             // 3.1 收到Pong，执行握手逻辑（提取为辅助方法）
                             performHandshake(bootstrapNodeInfo);
                             log.info("成功与引导节点{}建立连接，共尝试{}次", bootstrapNodeInfo, retryCount + 1);
                             resultFuture.complete(null); // 连接成功，完成Future
                             return;
-                        } else {
-                            log.warn("收到引导节点{}的非Pong响应，第{}次重试将在{}ms后进行",
-                                    bootstrapNodeInfo, retryCount + 1,
-                                    calculateBackoffInterval(retryCount, INITIAL_RETRY_INTERVAL, MAX_RETRY_INTERVAL));
                         }
 
                         // 4. 计算退避时间并等待（虚拟线程中用LockSupport更高效，避免Thread.sleep的监控器占用）
