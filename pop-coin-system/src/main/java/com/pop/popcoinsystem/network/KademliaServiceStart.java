@@ -11,6 +11,7 @@ import com.pop.popcoinsystem.storage.NodeInfoStorageService;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.NetworkUtil;
+import com.pop.popcoinsystem.util.StunUtils;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -121,16 +122,16 @@ public class KademliaServiceStart {
         server.setExternalNodeInfo(externalNodeInfo);
 
 
+        StunUtils.StunInfo publicAddress = StunUtils.getPublicAddress();
+        String publicIp = publicAddress.getPublicIp();
+        int publicPort = publicAddress.getPublicPort();
+        log.info("公网地址:{} {}", publicIp, publicPort);
 
-
-
-
-
-
-
-
-
-
+        if (publicIp != null && !publicIp.isEmpty() && publicPort > 0) {
+            externalNodeInfo.setIpv4(publicIp);
+            externalNodeInfo.setUdpPort(publicPort);
+            externalNodeInfo.setTcpPort(publicPort);
+        }
 
 
         storageService.addOrUpdateSelfNode(externalNodeInfo);

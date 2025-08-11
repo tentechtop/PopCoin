@@ -694,13 +694,6 @@ public class KademliaNodeServer {
             KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
             log.debug("UDP解码消息内容:{}", message);
             // 添加到输出列表
-            InetSocketAddress senderAddress = datagramPacket.sender();
-            String senderIp = senderAddress.getHostString(); // 获取IP（自动处理IPv4/IPv6）
-            int senderUdpPort = senderAddress.getPort();
-            // 设置消息的发送方信息
-            message.getSender().setIpv4(senderIp);
-            message.getSender().setUdpPort(senderUdpPort);
-
             list.add(message);
         }
     }
@@ -772,20 +765,6 @@ public class KademliaNodeServer {
             // 反序列化为消息对象
             KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
             // 添加到输出列表
-            //解析发送者的IP和端口
-
-            SocketAddress remoteAddress = channelHandlerContext.channel().remoteAddress();
-            if (remoteAddress instanceof InetSocketAddress inetSocketAddress) {
-                String senderIp = inetSocketAddress.getHostString(); // 正确获取IP
-                int senderTcpPort = inetSocketAddress.getPort();
-                // 设置消息的发送方信息
-                message.getSender().setIpv4(senderIp);
-                message.getSender().setTcpPort(senderTcpPort);
-            } else {
-                log.warn("未知的远程地址类型: {}", remoteAddress);
-            }
-
-
             list.add(message);
         }
     }
