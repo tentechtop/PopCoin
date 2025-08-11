@@ -3,6 +3,7 @@ package com.pop.popcoinsystem.service;
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.vo.result.Result;
+import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
 import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.network.rpc.RpcProxyFactory;
@@ -18,8 +19,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigInteger;
 import java.net.ConnectException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 
 @Slf4j
 @Service
@@ -77,17 +77,18 @@ public class SyncBlockChainServiceImpl {
         return Result.ok();
     }
 
-    public Result sendPing() {
+    public Result sendPing() throws ExecutionException, InterruptedException, TimeoutException {
         NodeInfo nodeInfo = new NodeInfo();
         nodeInfo.setId(BigInteger.ONE);
-        nodeInfo.setIpv4("192.168.137.102");
+        nodeInfo.setIpv4("114.67.219.160");
         nodeInfo.setTcpPort(8333);
-        nodeInfo.setUdpPort(8334);
+        nodeInfo.setUdpPort(8333);
 
         PingKademliaMessage pingKademliaMessage = new PingKademliaMessage();
         pingKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());//本节点信息
         pingKademliaMessage.setReceiver(nodeInfo);
-        kademliaNodeServer.getUdpClient().sendAsyncMessage(pingKademliaMessage);
-        return Result.ok();
+        CompletableFuture<KademliaMessage> kademliaMessageCompletableFuture = kademliaNodeServer.getUdpClient().sendMessageWithResponse(pingKademliaMessage);
+        KademliaMessage kademliaMessage = kademliaMessageCompletableFuture.get(5, TimeUnit.SECONDS);
+        return Result.ok(kademliaMessage);
     }
 }

@@ -53,6 +53,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.locks.LockSupport;
 
 import static com.pop.popcoinsystem.constant.BlockChainConstants.NET_VERSION;
+import static org.bouncycastle.crypto.tls.ContentType.handshake;
 // 替换为带容量限制的LRU Map（需引入Guava或自定义）
 
 
@@ -694,6 +695,14 @@ public class KademliaNodeServer {
             KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
             log.debug("UDP解码消息内容:{}", message);
             // 添加到输出列表
+            // 1. 通过 datagramPacket 获取发送者地址
+            InetSocketAddress senderAddress = datagramPacket.sender();
+            // 转换为 InetSocketAddress 以获取 IP 和端口
+            if (senderAddress instanceof InetSocketAddress) {
+                String senderIp = senderAddress.getAddress().getHostAddress(); // 发送者 IP
+                int senderPort = senderAddress.getPort(); // 发送者端口
+                log.info("收到 UDP 消息，发送者: {}:{}", senderIp, senderPort);
+            }
             list.add(message);
         }
     }
@@ -765,6 +774,11 @@ public class KademliaNodeServer {
             // 反序列化为消息对象
             KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
             // 添加到输出列表
+            InetSocketAddress nettyAddr = (InetSocketAddress) channelHandlerContext.channel().remoteAddress();
+            String hostAddress = nettyAddr.getAddress().getHostAddress();
+            String hostName = nettyAddr.getHostName();
+            int port = nettyAddr.getPort();
+            log.info("接收到消息来自:{}  {}  {} ", hostAddress,hostName, port);
             list.add(message);
         }
     }

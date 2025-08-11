@@ -122,18 +122,6 @@ public class KademliaServiceStart {
         server.setExternalNodeInfo(externalNodeInfo);
 
 
-        StunUtils.StunInfo publicAddress = StunUtils.getPublicAddress();
-        String publicIp = publicAddress.getPublicIp();
-        int publicPort = publicAddress.getPublicPort();
-        log.info("公网地址:{} {}", publicIp, publicPort);
-
-        if (publicIp != null && !publicIp.isEmpty() && publicPort > 0) {
-            externalNodeInfo.setIpv4(publicIp);
-            externalNodeInfo.setUdpPort(publicPort);
-            externalNodeInfo.setTcpPort(publicPort);
-        }
-
-
         storageService.addOrUpdateSelfNode(externalNodeInfo);
         //自己要用单独的KEY保存不再放在路由表中
         server.setNodeSettings(NodeSettings.Default.build());

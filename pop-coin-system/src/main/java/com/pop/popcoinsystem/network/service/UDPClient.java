@@ -46,28 +46,15 @@ public class UDPClient {
         // 全局复用EventLoopGroup（重量级资源，避免频繁创建）
         this.eventLoopGroup = new NioEventLoopGroup();
         // 初始化Bootstrap并复用配置
-        this.bootstrap = new Bootstrap();
-        bootstrap.group(eventLoopGroup)
-                .channel(NioDatagramChannel.class) // UDP通道类型
-                .option(ChannelOption.SO_BROADCAST, true)
-                .option(ChannelOption.SO_REUSEADDR, true) // 允许端口复用
-                .option(ChannelOption.SO_RCVBUF, 1024 * 1024)
-                .handler(new ChannelInitializer<NioDatagramChannel>() {
-                    @Override
-                    protected void initChannel(NioDatagramChannel ch) throws Exception {
-                        ChannelPipeline pipeline = ch.pipeline();
-                        pipeline.addLast(new KademliaNodeServer.UDPKademliaMessageDecoder());
-                        pipeline.addLast(new KademliaNodeServer.UDPKademliaMessageEncoder());
-                    }
-                });
+        this.bootstrap = kademliaNodeServer.getUdpBootstrap();
+
         // 初始化全局通道（绑定一次本地临时端口）
         try {
-            ChannelFuture bindFuture = bootstrap.bind(0); // 0表示随机分配一个本地端口
-            globalChannelFuture = bindFuture;
-            if (!bindFuture.await(DEFAULT_OPERATION_TIMEOUT)) {
+            globalChannelFuture = kademliaNodeServer.getUdpBindFuture();
+            if (!globalChannelFuture.await(DEFAULT_OPERATION_TIMEOUT)) {
                 throw new IllegalStateException("Failed to bind UDP channel");
             }
-            this.globalChannel = bindFuture.channel();
+            this.globalChannel = globalChannelFuture.channel();
             log.info("Global UDP channel bound to local port: {}", globalChannel.localAddress());
         } catch (Exception e) {
             log.error("Failed to initialize global UDP channel", e);
@@ -167,7 +154,7 @@ public class UDPClient {
                     if (cause instanceof Exception) {
                         resultFuture.completeExceptionally((Exception) cause);
                     } else {
-                        resultFuture.completeExceptionally(new Exception("发送消息失败：" + cause.getMessage(), cause));
+                        resultFuture.completeExceptionally(new Exception("发送消息失败：", cause));
                     }
                 }
             });
