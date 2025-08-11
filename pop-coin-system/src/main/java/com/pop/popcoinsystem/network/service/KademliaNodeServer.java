@@ -17,6 +17,7 @@ import com.pop.popcoinsystem.network.rpc.RequestResponseManager;
 import com.pop.popcoinsystem.network.rpc.RpcProxyFactory;
 import com.pop.popcoinsystem.network.rpc.RpcService;
 import com.pop.popcoinsystem.network.rpc.RpcServiceRegistry;
+import com.pop.popcoinsystem.service.blockChain.BlockChainService;
 import com.pop.popcoinsystem.service.blockChain.BlockChainServiceImpl;
 import com.pop.popcoinsystem.service.transaction.TransactionService;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
@@ -334,8 +335,13 @@ public class KademliaNodeServer {
 
                         RpcProxyFactory proxyFactory = new RpcProxyFactory(this, bootstrapNodeInfo);
                         // 3. 获取服务代理对象
-                        RpcService proxy = proxyFactory.createProxy(RpcService.class);
-                        PongKademliaMessage response = proxy.ping(pingMessage);
+                        BlockChainService proxy = proxyFactory.createProxy(BlockChainService.class);
+                        byte[] bytes = proxy.GENESIS_BLOCK_HASH();
+                        log.info("获取创世块hash:{}", bytes);
+
+                        CompletableFuture<KademliaMessage> kademliaMessageCompletableFuture = udpClient.sendMessageWithResponse(pingMessage);
+                        KademliaMessage response = kademliaMessageCompletableFuture.get();
+
                         // 3. 处理响应结果
                         if (response == null) {
                             log.warn("未收到引导节点{}的Pong消息，第{}次重试将在{}ms后进行",

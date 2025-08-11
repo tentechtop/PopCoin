@@ -71,8 +71,6 @@ public class SerializeUtils {
         kryo.register(HeadersRequestParam.class);
         kryo.register(Handshake.class);
         kryo.register(ExternalNodeInfo.class);
-        kryo.register(RpcRequestData.class);
-        kryo.register(RpcResponseData.class);
 
 
         // 注册区块和交易相关类
