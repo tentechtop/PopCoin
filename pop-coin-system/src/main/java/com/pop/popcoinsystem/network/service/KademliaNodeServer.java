@@ -14,8 +14,11 @@ import com.pop.popcoinsystem.network.protocol.MessageType;
 import com.pop.popcoinsystem.network.protocol.messageHandler.*;
 import com.pop.popcoinsystem.event.DisruptorManager;
 import com.pop.popcoinsystem.network.rpc.RequestResponseManager;
+import com.pop.popcoinsystem.network.rpc.RpcProxyFactory;
+import com.pop.popcoinsystem.network.rpc.RpcService;
 import com.pop.popcoinsystem.network.rpc.RpcServiceRegistry;
 import com.pop.popcoinsystem.service.blockChain.BlockChainServiceImpl;
+import com.pop.popcoinsystem.service.transaction.TransactionService;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import io.netty.bootstrap.Bootstrap;
@@ -266,15 +269,6 @@ public class KademliaNodeServer {
                                     super.exceptionCaught(ctx, cause);
                                 }
                             });
-                            // 帧解码器：解析类型(4) + 版本(4) + 内容长度(4) + 内容结构
-                            pipeline.addLast(new LengthFieldBasedFrameDecoder(
-                                    10 * 1024 * 1024,  // 最大帧长度
-                                    8,                 // 长度字段偏移量（跳过类型4字节 + 版本4字节）
-                                    4,                 // 长度字段长度（内容长度字段，4字节）
-                                    0,                 // 长度调整值（总长度 = 内容长度 + 12字节头部）
-                                    0                  // 不跳过字节
-                            ));
-                            pipeline.addLast(new LengthFieldPrepender(4));
                             pipeline.addLast(new TCPKademliaMessageDecoder());
                             pipeline.addLast(new TCPKademliaMessageEncoder());
                             pipeline.addLast(new KademliaTcpHandler(KademliaNodeServer.this));
@@ -324,27 +318,22 @@ public class KademliaNodeServer {
                 while (retryCount < MAX_RETRIES) {
                     // 1. 创建Ping消息（提取为辅助方法，减少重复代码）
                     PingKademliaMessage pingMessage = createPingMessage(bootstrapNodeInfo);
-
                     try {
-                        // 2. 发送Ping并等待响应（UDP异步调用保持不变）
-                        CompletableFuture<KademliaMessage> responseFuture = udpClient.sendMessageWithResponse(pingMessage);
-                        KademliaMessage response = responseFuture.get(5, TimeUnit.SECONDS);
+                        RpcProxyFactory proxyFactory = new RpcProxyFactory(this,bootstrapNodeInfo);
+                        RpcService proxy = proxyFactory.createProxy(RpcService.class);
+                        PongKademliaMessage response = proxy.ping();
 
                         // 3. 处理响应结果
                         if (response == null) {
                             log.warn("未收到引导节点{}的Pong消息，第{}次重试将在{}ms后进行",
                                     bootstrapNodeInfo, retryCount + 1,
                                     calculateBackoffInterval(retryCount, INITIAL_RETRY_INTERVAL, MAX_RETRY_INTERVAL));
-                        } else if (response instanceof PongKademliaMessage) {
+                        } else {
                             // 3.1 收到Pong，执行握手逻辑（提取为辅助方法）
                             performHandshake(bootstrapNodeInfo);
                             log.info("成功与引导节点{}建立连接，共尝试{}次", bootstrapNodeInfo, retryCount + 1);
                             resultFuture.complete(null); // 连接成功，完成Future
                             return;
-                        } else {
-                            log.warn("收到引导节点{}的非Pong响应，第{}次重试将在{}ms后进行",
-                                    bootstrapNodeInfo, retryCount + 1,
-                                    calculateBackoffInterval(retryCount, INITIAL_RETRY_INTERVAL, MAX_RETRY_INTERVAL));
                         }
 
                         // 4. 计算退避时间并等待（虚拟线程中用LockSupport更高效，避免Thread.sleep的监控器占用）
@@ -636,17 +625,9 @@ public class KademliaNodeServer {
     public static class UDPKademliaMessageEncoder extends MessageToMessageEncoder<KademliaMessage<?>> {
         @Override
         protected void encode(ChannelHandlerContext channelHandlerContext, KademliaMessage<?> kademliaMessage, List<Object> list) throws Exception {
-            // 序列化消息
             byte[] data = KademliaMessage.serialize(kademliaMessage);
-            // 创建 ByteBuf 并写入消息数据
-            ByteBuf buf = Unpooled.buffer(data.length + 12); // 4(类型) + 4(网络版本) + 4(内容长)
-            buf.writeInt(kademliaMessage.getType());  // 写入消息类型 4
-            //写入网络版本
-            buf.writeInt(NET_VERSION);//4
-            //写入内容长度
-            buf.writeInt(data.length);//4
-            //写入内容
-            buf.writeBytes(data);       // 写入消息内容
+            ByteBuf buf = Unpooled.buffer(data.length);
+            buf.writeBytes(data);
             NodeInfo receiver = kademliaMessage.getReceiver();
             InetSocketAddress inetSocketAddress = new InetSocketAddress(receiver.getIpv4(),receiver.getUdpPort());
             // 创建 DatagramPacket 并添加到输出列表
@@ -660,34 +641,7 @@ public class KademliaNodeServer {
         @Override
         protected void decode(ChannelHandlerContext channelHandlerContext, DatagramPacket datagramPacket, List<Object> list) throws Exception {
             ByteBuf byteBuf = datagramPacket.content();
-            if (byteBuf.readableBytes() < 12) {
-                log.warn("确保有足够的数据读取消息类型和长度信息");
-                return;
-            }
-            // 标记当前读取位置
-            byteBuf.markReaderIndex();
-            // 读取消息类型
-            int messageType = byteBuf.readInt();
-            log.debug("消息类型:{}", MessageType.getDescriptionByCode(messageType));
-            // 读取总长度（内容长度字段 + 内容长度）
-            int netVersion = byteBuf.readInt();
-            log.debug("网络版本:{}", netVersion);
-            //是否和我的网络版本一致
-            if (netVersion != NET_VERSION) {
-                log.warn("网络版本不一致");
-                return;
-            }
-            // 读取内容长度
-            int contentLength = byteBuf.readInt();
-            log.debug("内容长度:{}", contentLength);
-            // 检查是否有足够的数据读取完整的消息内容
-            if (byteBuf.readableBytes() < contentLength) {
-                byteBuf.resetReaderIndex();
-                log.warn("没有足够的数据读取完整的消息内容");
-                return;
-            }
-            // 读取消息内容
-            byte[] contentBytes = new byte[contentLength];
+            byte[] contentBytes = new byte[byteBuf.readableBytes()];
             byteBuf.readBytes(contentBytes);
             // 反序列化为消息对象
             KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
@@ -696,11 +650,6 @@ public class KademliaNodeServer {
             list.add(message);
         }
     }
-
-
-
-
-
 
     /**
      * Kademlia消息编码器  将一个 Java 对象（类型为T）编码为ByteBuf（字节流）。
@@ -711,13 +660,6 @@ public class KademliaNodeServer {
             try {
                 //序列化消息对象
                 byte[] data = KademliaMessage.serialize(kademliaMessage);
-                // 2. 写入消息类型（4字节整数）
-                byteBuf.writeInt(kademliaMessage.getType());  //4
-                //写入网络版本
-                byteBuf.writeInt(NET_VERSION);//4
-                //写入内容长度
-                byteBuf.writeInt(data.length);//4  //32 位（4 字节）的整数
-                //写入类容
                 byteBuf.writeBytes(data);
             } catch (Exception e) {
                 System.err.println("Encode error: " + e.getMessage());
@@ -732,34 +674,7 @@ public class KademliaNodeServer {
     public static class TCPKademliaMessageDecoder extends ByteToMessageDecoder {
         @Override
         protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf, List<Object> list) throws Exception {
-            if (byteBuf.readableBytes() < 12) {
-                log.warn("确保有足够的数据读取消息类型和长度信息");
-                return;
-            }
-            // 标记当前读取位置
-            byteBuf.markReaderIndex();
-            // 读取消息类型
-            int messageType = byteBuf.readInt();
-            log.debug("消息类型:{}", MessageType.getDescriptionByCode(messageType));
-            // 读取总长度（内容长度字段 + 内容长度）
-            int netVersion = byteBuf.readInt();
-            log.debug("网络版本:{}", netVersion);
-            //是否和我的网络版本一致
-            if (netVersion != NET_VERSION) {
-                log.warn("网络版本不一致");
-                return;
-            }
-            // 读取内容长度
-            int contentLength = byteBuf.readInt();
-            log.debug("内容长度:{}", contentLength);
-            // 检查是否有足够的数据读取完整的消息内容
-            if (byteBuf.readableBytes() < contentLength) {
-                byteBuf.resetReaderIndex();
-                log.warn("没有足够的数据读取完整的消息内容");
-                return;
-            }
-            // 读取消息内容
-            byte[] contentBytes = new byte[contentLength];
+            byte[] contentBytes = new byte[byteBuf.readableBytes()];
             byteBuf.readBytes(contentBytes);
             // 反序列化为消息对象
             KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
