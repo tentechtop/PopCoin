@@ -227,7 +227,7 @@ public class KademliaNodeServer {
                             // 帧解码器：解析类型(4) + 版本(4) + 内容长度(4) + 内容结构
                             pipeline.addLast(new LengthFieldBasedFrameDecoder(
                                     10 * 1024 * 1024,  // 最大帧长度
-                                    0,                 // 长度字段偏移量（跳过类型4字节 + 版本4字节）
+                                    8,                 // 长度字段偏移量（跳过类型4字节 + 版本4字节）
                                     4,                 // 长度字段长度（内容长度字段，4字节）
                                     0,                 // 长度调整值（总长度 = 内容长度 + 12字节头部）
                                     0                  // 不跳过字节
@@ -276,7 +276,7 @@ public class KademliaNodeServer {
                             // 帧解码器：解析类型(4) + 版本(4) + 内容长度(4) + 内容结构
                             pipeline.addLast(new LengthFieldBasedFrameDecoder(
                                     10 * 1024 * 1024,  // 最大帧长度
-                                    0,                 // 长度字段偏移量（跳过类型4字节 + 版本4字节）
+                                    8,                 // 长度字段偏移量（跳过类型4字节 + 版本4字节）
                                     4,                 // 长度字段长度（内容长度字段，4字节）
                                     0,                 // 长度调整值（总长度 = 内容长度 + 12字节头部）
                                     0                  // 不跳过字节
@@ -335,28 +335,19 @@ public class KademliaNodeServer {
 
                         RpcProxyFactory proxyFactory = new RpcProxyFactory(this, bootstrapNodeInfo);
                         // 3. 获取服务代理对象
-                        BlockChainService proxy = proxyFactory.createProxy(BlockChainService.class);
-                        byte[] bytes = proxy.GENESIS_BLOCK_HASH();
-                        log.info("获取创世块hash:{}", bytes);
-
-                        CompletableFuture<KademliaMessage> kademliaMessageCompletableFuture = udpClient.sendMessageWithResponse(pingMessage);
-                        KademliaMessage response = kademliaMessageCompletableFuture.get();
-
+                        RpcService proxy = proxyFactory.createProxy(RpcService.class);
+                        PongKademliaMessage response = proxy.ping();
                         // 3. 处理响应结果
                         if (response == null) {
                             log.warn("未收到引导节点{}的Pong消息，第{}次重试将在{}ms后进行",
                                     bootstrapNodeInfo, retryCount + 1,
                                     calculateBackoffInterval(retryCount, INITIAL_RETRY_INTERVAL, MAX_RETRY_INTERVAL));
-                        } else if (response instanceof PongKademliaMessage) {
+                        } else {
                             // 3.1 收到Pong，执行握手逻辑（提取为辅助方法）
                             performHandshake(bootstrapNodeInfo);
                             log.info("成功与引导节点{}建立连接，共尝试{}次", bootstrapNodeInfo, retryCount + 1);
                             resultFuture.complete(null); // 连接成功，完成Future
                             return;
-                        } else {
-                            log.warn("收到引导节点{}的非Pong响应，第{}次重试将在{}ms后进行",
-                                    bootstrapNodeInfo, retryCount + 1,
-                                    calculateBackoffInterval(retryCount, INITIAL_RETRY_INTERVAL, MAX_RETRY_INTERVAL));
                         }
 
                         // 4. 计算退避时间并等待（虚拟线程中用LockSupport更高效，避免Thread.sleep的监控器占用）
@@ -685,7 +676,7 @@ public class KademliaNodeServer {
             log.debug("网络版本:{}", netVersion);
             //是否和我的网络版本一致
             if (netVersion != NET_VERSION) {
-                log.warn("网络版本不一致");
+                log.warn("网络版本不一致{}", netVersion);
                 return;
             }
             // 读取内容长度
