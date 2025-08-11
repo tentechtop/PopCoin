@@ -78,7 +78,7 @@ public class SynchronizedBlocksImpl implements ApplicationRunner {
             return t;
         });
         //延迟60秒执行 之后每30分钟执行一次
-        scheduler.scheduleAtFixedRate(this::findTheHighest, 30, 60*10, TimeUnit.SECONDS);
+        scheduler.scheduleAtFixedRate(this::findTheHighest, 10, 30, TimeUnit.SECONDS);
     }
 
     public void compareAndSync(NodeInfo remoteNode,

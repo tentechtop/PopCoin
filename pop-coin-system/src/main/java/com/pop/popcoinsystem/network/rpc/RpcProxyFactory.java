@@ -97,7 +97,6 @@ public class RpcProxyFactory {
             // 3. 发送请求并获取响应
             KademliaMessage response = kademliaNodeServer.getTcpClient()
                     .sendMessageWithResponse(requestMessage,timeoutSeconds, TimeUnit.SECONDS);
-
             // 4. 解析响应结果（根据实际响应格式处理）
             return parseResponse(response);
         }
