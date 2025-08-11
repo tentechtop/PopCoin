@@ -232,7 +232,6 @@ public class KademliaNodeServer {
                                     0,                 // 长度调整值（总长度 = 内容长度 + 12字节头部）
                                     0                  // 不跳过字节
                             ));
-                            pipeline.addLast(new LengthFieldPrepender(4));
                             pipeline.addLast(new UDPKademliaMessageEncoder());
                             pipeline.addLast(new UDPKademliaMessageDecoder());
                             pipeline.addLast(new KademliaUdpHandler(KademliaNodeServer.this));
@@ -281,7 +280,6 @@ public class KademliaNodeServer {
                                     0,                 // 长度调整值（总长度 = 内容长度 + 12字节头部）
                                     0                  // 不跳过字节
                             ));
-                            pipeline.addLast(new LengthFieldPrepender(4));
                             pipeline.addLast(new TCPKademliaMessageDecoder());
                             pipeline.addLast(new TCPKademliaMessageEncoder());
                             pipeline.addLast(new KademliaTcpHandler(KademliaNodeServer.this));
