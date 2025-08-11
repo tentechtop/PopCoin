@@ -38,11 +38,6 @@ public class WalletService {
     @Autowired
     private BlockChainServiceImpl blockChainService;
 
-
-
-
-
-
     public static void main(String[] args) {
         //测试密码加密私钥
         String password = "123456";

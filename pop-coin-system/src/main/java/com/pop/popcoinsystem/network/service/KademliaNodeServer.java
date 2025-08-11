@@ -692,6 +692,11 @@ public class KademliaNodeServer {
             // 反序列化为消息对象
             KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
             log.debug("UDP解码消息内容:{}", message);
+            String ipv4 = channelHandlerContext.channel().remoteAddress().toString().substring(1);
+            int port = channelHandlerContext.channel().remoteAddress().hashCode();
+            log.info("消息来自:{}:{}", ipv4,port);
+            message.getSender().setIpv4(ipv4);
+            message.getSender().setUdpPort(port);
             // 添加到输出列表
             list.add(message);
         }
@@ -764,6 +769,12 @@ public class KademliaNodeServer {
             // 反序列化为消息对象
             KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
             // 添加到输出列表
+            //解析发送者的IP和端口
+            String ipv4 = channelHandlerContext.channel().remoteAddress().toString().substring(1);
+            int port = channelHandlerContext.channel().remoteAddress().hashCode();
+            log.info("消息来自:{}:{}", ipv4,port);
+            message.getSender().setIpv4(ipv4);
+            message.getSender().setTcpPort(port);
             list.add(message);
         }
     }

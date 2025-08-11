@@ -1231,10 +1231,7 @@ public class StorageService {
         if (pageSize <= 0 || pageSize > 5000) {
             throw new IllegalArgumentException("每页数量必须在1-5000之间");
         }
-
         HashSet<String> utxoKeySet = new HashSet<>();
-
-
         rwLock.readLock().lock();
         RocksIterator iterator = null;
         ReadOptions readOptions = null;
@@ -1302,13 +1299,6 @@ public class StorageService {
             rwLock.readLock().unlock();
         }
     }
-
-
-
-
-
-
-
 
 
     /**

@@ -16,7 +16,6 @@ public class Wallet implements Serializable {
      */
     private int walletType;
 
-
     //余额 单位聪
     private long  balance = 0L;
 
@@ -30,15 +29,8 @@ public class Wallet implements Serializable {
     private String privateKeyHex2;
     private String publicKeyHex2;
 
-
     private String password;
 
     private String passwordHash;
-
-
-
-
-
-
 
 }

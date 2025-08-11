@@ -121,6 +121,18 @@ public class KademliaServiceStart {
         server.setExternalNodeInfo(externalNodeInfo);
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         storageService.addOrUpdateSelfNode(externalNodeInfo);
         //自己要用单独的KEY保存不再放在路由表中
         server.setNodeSettings(NodeSettings.Default.build());
@@ -159,6 +171,7 @@ public class KademliaServiceStart {
                     }
                     //连接到历史节点
                     kademliaNodeServer.sendOnlineStatus();
+
                 }catch (Exception e){
                     log.error("引导节点连接失败:{}", e.getMessage());
                 }
