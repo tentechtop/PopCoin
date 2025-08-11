@@ -224,8 +224,6 @@ public class KademliaNodeServer {
                         @Override
                         protected void initChannel(NioDatagramChannel ch) throws Exception {
                             ChannelPipeline pipeline = ch.pipeline();
-                            // 帧解码器：解析类型(4) + 版本(4) + 内容长度(4) + 内容结构
-                            pipeline.addLast(new LengthFieldPrepender(4));
                             pipeline.addLast(new UDPKademliaMessageEncoder());
                             pipeline.addLast(new UDPKademliaMessageDecoder());
                             pipeline.addLast(new KademliaUdpHandler(KademliaNodeServer.this));
@@ -266,7 +264,6 @@ public class KademliaNodeServer {
                                     super.exceptionCaught(ctx, cause);
                                 }
                             });
-                            pipeline.addLast(new LengthFieldPrepender(4));
                             pipeline.addLast(new TCPKademliaMessageDecoder());
                             pipeline.addLast(new TCPKademliaMessageEncoder());
                             pipeline.addLast(new KademliaTcpHandler(KademliaNodeServer.this));
