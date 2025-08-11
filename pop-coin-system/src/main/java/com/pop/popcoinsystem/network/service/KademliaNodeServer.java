@@ -14,8 +14,11 @@ import com.pop.popcoinsystem.network.protocol.MessageType;
 import com.pop.popcoinsystem.network.protocol.messageHandler.*;
 import com.pop.popcoinsystem.event.DisruptorManager;
 import com.pop.popcoinsystem.network.rpc.RequestResponseManager;
+import com.pop.popcoinsystem.network.rpc.RpcProxyFactory;
+import com.pop.popcoinsystem.network.rpc.RpcService;
 import com.pop.popcoinsystem.network.rpc.RpcServiceRegistry;
 import com.pop.popcoinsystem.service.blockChain.BlockChainServiceImpl;
+import com.pop.popcoinsystem.service.transaction.TransactionService;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.NetworkUtil;
@@ -328,9 +331,11 @@ public class KademliaNodeServer {
                     // 1. 创建Ping消息（提取为辅助方法，减少重复代码）
                     PingKademliaMessage pingMessage = createPingMessage(bootstrapNodeInfo);
                     try {
-                        // 2. 发送Ping并等待响应（UDP异步调用保持不变）
-                        CompletableFuture<KademliaMessage> responseFuture = udpClient.sendMessageWithResponse(pingMessage);
-                        KademliaMessage response = responseFuture.get(5, TimeUnit.SECONDS);
+
+                        RpcProxyFactory proxyFactory = new RpcProxyFactory(this, bootstrapNodeInfo);
+                        // 3. 获取服务代理对象
+                        RpcService proxy = proxyFactory.createProxy(RpcService.class);
+                        PongKademliaMessage response = proxy.ping(pingMessage);
                         // 3. 处理响应结果
                         if (response == null) {
                             log.warn("未收到引导节点{}的Pong消息，第{}次重试将在{}ms后进行",
