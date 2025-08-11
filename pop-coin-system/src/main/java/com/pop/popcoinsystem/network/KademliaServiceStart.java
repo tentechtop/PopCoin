@@ -11,7 +11,6 @@ import com.pop.popcoinsystem.storage.NodeInfoStorageService;
 import com.pop.popcoinsystem.util.BeanCopyUtils;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import com.pop.popcoinsystem.util.NetworkUtil;
-import com.pop.popcoinsystem.util.StunUtils;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,7 +62,6 @@ public class KademliaServiceStart {
     @Bean
     public KademliaNodeServer kademliaNodeServer() throws Exception {
         String localIp = NetworkUtil.getLocalIp();// 获取本机IP
-        log.info("localIp: {}", localIp);
         NodeSettings nodeSetting = storageService.getNodeSetting();
         KeyPair keyPair = CryptoUtil.ECDSASigner.generateKeyPair();
         PrivateKey privateKey = keyPair.getPrivate();
@@ -121,6 +119,8 @@ public class KademliaServiceStart {
         externalNodeInfo.setNodeType(nodeSetting.getNodeType());
         externalNodeInfo.setPublicKey(CryptoUtil.hexToBytes(nodeSetting.getPublicKeyHex()));
         server.setExternalNodeInfo(externalNodeInfo);
+
+
         storageService.addOrUpdateSelfNode(externalNodeInfo);
         //自己要用单独的KEY保存不再放在路由表中
         server.setNodeSettings(NodeSettings.Default.build());

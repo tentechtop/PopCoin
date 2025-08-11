@@ -26,7 +26,7 @@ public class FindNodeRequestMessageHandler implements MessageHandler{
 
 
 
-    protected FindNodeResponseMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull FindNodeRequestMessage message) throws InterruptedException, ConnectException, FullBucketException {
+    protected FindNodeRequestMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull FindNodeRequestMessage message) throws InterruptedException, ConnectException, FullBucketException {
         log.info("收到查找节点请求");
         NodeInfo sender = message.getSender();
         BigInteger findId = message.getData();
@@ -38,7 +38,7 @@ public class FindNodeRequestMessageHandler implements MessageHandler{
         findNodeResponseMessage.setReceiver(sender);
         findNodeResponseMessage.setData(closestResult);
         kademliaNodeServer.getTcpClient().sendAsyncMessage(findNodeResponseMessage);
-        return findNodeResponseMessage;
+        return null;
     }
 
 }

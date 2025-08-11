@@ -46,6 +46,7 @@ import static com.pop.popcoinsystem.constant.BlockChainConstants.NET_VERSION;
  * 加密工具类 - 提供哈希、签名和密钥管理功能
  */
 @Slf4j
+
 public class CryptoUtil {
     public static byte PRE_P2PKH = 0x00;
     public static byte PRE_P2SH = 0x05;
@@ -971,6 +972,9 @@ public class CryptoUtil {
     public static String hashPassword(String password) {
         return Base64.getEncoder().encodeToString(applySHA256(password.getBytes()));
     }
+
+
+
 
     /**
      * Base58编码/解码工具类，用于比特币等加密货币地址处理

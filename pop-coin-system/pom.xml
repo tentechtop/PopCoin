@@ -150,11 +150,6 @@
             <version>3.4.4</version> <!-- 使用最新稳定版本 -->
         </dependency>
 
-        <dependency>
-            <groupId>org.bitlet</groupId>
-            <artifactId>weupnp</artifactId>
-            <version>0.1.4</version>
-        </dependency>
 
         <!--GPU参与运算-->
         <!--OpenCL 的 Java 绑定-->

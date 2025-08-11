@@ -167,7 +167,7 @@ public class UDPClient {
                     if (cause instanceof Exception) {
                         resultFuture.completeExceptionally((Exception) cause);
                     } else {
-                        resultFuture.completeExceptionally(new Exception("发送消息失败：", cause));
+                        resultFuture.completeExceptionally(new Exception("发送消息失败：" + cause.getMessage(), cause));
                     }
                 }
             });

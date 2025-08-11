@@ -3,7 +3,6 @@ package com.pop.popcoinsystem.service;
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.vo.result.Result;
-import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
 import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.network.rpc.RpcProxyFactory;
@@ -12,7 +11,6 @@ import com.pop.popcoinsystem.network.protocol.messageData.RpcRequestData;
 import com.pop.popcoinsystem.service.blockChain.BlockChainService;
 import com.pop.popcoinsystem.service.transaction.TransactionService;
 import com.pop.popcoinsystem.util.CryptoUtil;
-import com.pop.popcoinsystem.util.StunUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
@@ -20,7 +18,8 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigInteger;
 import java.net.ConnectException;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Slf4j
 @Service
@@ -78,26 +77,17 @@ public class SyncBlockChainServiceImpl {
         return Result.ok();
     }
 
-    public Result sendPing() throws ExecutionException, InterruptedException, TimeoutException {
+    public Result sendPing() {
         NodeInfo nodeInfo = new NodeInfo();
         nodeInfo.setId(BigInteger.ONE);
-        nodeInfo.setIpv4("114.67.219.160");
+        nodeInfo.setIpv4("192.168.137.102");
         nodeInfo.setTcpPort(8333);
-        nodeInfo.setUdpPort(8333);
-
-        NodeInfo nodeInfo1 = kademliaNodeServer.getNodeInfo();
-        StunUtils.StunInfo publicAddress = StunUtils.getPublicAddress();
-        String publicIp = publicAddress.getPublicIp();
-        int publicPort = publicAddress.getPublicPort();
-        nodeInfo1.setTcpPort(publicPort);
-        nodeInfo1.setIpv4(publicIp);
-        nodeInfo1.setUdpPort(publicPort);
+        nodeInfo.setUdpPort(8334);
 
         PingKademliaMessage pingKademliaMessage = new PingKademliaMessage();
-        pingKademliaMessage.setSender(nodeInfo1);//本节点信息
+        pingKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());//本节点信息
         pingKademliaMessage.setReceiver(nodeInfo);
-        CompletableFuture<KademliaMessage> kademliaMessageCompletableFuture = kademliaNodeServer.getUdpClient().sendMessageWithResponse(pingKademliaMessage);
-        KademliaMessage kademliaMessage = kademliaMessageCompletableFuture.get(5, TimeUnit.SECONDS);
-        return Result.ok(kademliaMessage);
+        kademliaNodeServer.getUdpClient().sendAsyncMessage(pingKademliaMessage);
+        return Result.ok();
     }
 }

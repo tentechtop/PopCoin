@@ -1,6 +1,5 @@
 package com.pop.popcoinsystem;
 
-import com.pop.popcoinsystem.util.NetworkUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -16,7 +15,7 @@ public class PopCoinSystemApplication {
     public static void main(String[] args) throws UnknownHostException {
         ConfigurableApplicationContext application = SpringApplication.run(PopCoinSystemApplication.class, args);
         Environment env = application.getEnvironment();
-        String ip = NetworkUtil.getLocalIp();
+        String ip = InetAddress.getLocalHost().getHostAddress();
         String port = env.getProperty("server.port");
         log.info("\n----------------------------------------------------------\n\t" +
                 "Application is running! Access URLs:\n\t" +

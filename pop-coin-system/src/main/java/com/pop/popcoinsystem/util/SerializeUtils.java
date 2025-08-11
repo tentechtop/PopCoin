@@ -16,8 +16,6 @@ import com.pop.popcoinsystem.network.common.ExternalNodeInfo;
 import com.pop.popcoinsystem.network.protocol.message.*;
 import com.pop.popcoinsystem.network.protocol.messageData.Handshake;
 import com.pop.popcoinsystem.network.protocol.messageData.HeadersRequestParam;
-import com.pop.popcoinsystem.network.protocol.messageData.RpcRequestData;
-import com.pop.popcoinsystem.network.protocol.messageData.RpcResponseData;
 import org.objenesis.ObjenesisStd;
 import org.objenesis.strategy.InstantiatorStrategy;
 import com.esotericsoftware.kryo.util.DefaultInstantiatorStrategy;
@@ -71,7 +69,6 @@ public class SerializeUtils {
         kryo.register(HeadersRequestParam.class);
         kryo.register(Handshake.class);
         kryo.register(ExternalNodeInfo.class);
-
 
         // 注册区块和交易相关类
         kryo.register(Block.class);

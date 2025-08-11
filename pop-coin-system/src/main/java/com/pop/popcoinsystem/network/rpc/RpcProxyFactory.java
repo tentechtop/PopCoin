@@ -34,6 +34,17 @@ public class RpcProxyFactory {
         this.targetNode = targetNode;
         this.routingTable = server.getRoutingTable();
         this.localNodeInfo = server.getNodeInfo();
+
+        log.info("创建RPC代理，目标节点为：{}", targetNode);
+
+        // 检查目标节点是否在线
+        if (!routingTable.isNodeAvailable(targetNode)) {
+            log.warn("指定的目标节点{}可能不可用，尝试从路由表获取可用节点", targetNode);
+            this.targetNode = routingTable.findAvailableNode();
+            if (this.targetNode == null) {
+                throw new RuntimeException("无任何可用节点");
+            }
+        }
     }
     public RpcProxyFactory(KademliaNodeServer server) {
         this.kademliaNodeServer = server;
@@ -97,6 +108,7 @@ public class RpcProxyFactory {
             // 3. 发送请求并获取响应
             KademliaMessage response = kademliaNodeServer.getTcpClient()
                     .sendMessageWithResponse(requestMessage,timeoutSeconds, TimeUnit.SECONDS);
+
             // 4. 解析响应结果（根据实际响应格式处理）
             return parseResponse(response);
         }

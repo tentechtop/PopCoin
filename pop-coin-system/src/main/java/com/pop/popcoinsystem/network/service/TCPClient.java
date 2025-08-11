@@ -425,8 +425,6 @@ public class TCPClient {
         if (!connectFuture.isSuccess()) {
             String errorMsg = "Failed to connect to " + address;
             log.error(errorMsg, connectFuture.cause());
-            //下线节点
-            kademliaNodeServer.offlineNode(nodeId);
             throw new ConnectException(errorMsg + ": " + connectFuture.cause().getMessage());
         }
         Channel channel = connectFuture.channel();

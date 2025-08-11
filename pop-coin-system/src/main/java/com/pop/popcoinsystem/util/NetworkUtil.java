@@ -14,47 +14,14 @@ public class NetworkUtil {
     /**
      * 获取本地ip
      */
-    /**
-     * 优化后的本地IP获取方法
-     * 优先返回：非回环、非虚拟网卡、已启用的IPv4地址
-     * 兜底返回：127.0.0.1
-     */
     public static String getLocalIp() {
         try {
-            // 遍历所有网络接口
-            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
-            while (interfaces.hasMoreElements()) {
-                NetworkInterface iface = interfaces.nextElement();
-
-                // 过滤无效网卡（回环、虚拟、未启用）
-                if (iface.isLoopback() || iface.isVirtual() || !iface.isUp()) {
-                    continue;
-                }
-
-                // 遍历接口下的所有IP
-                Enumeration<InetAddress> addresses = iface.getInetAddresses();
-                while (addresses.hasMoreElements()) {
-                    InetAddress addr = addresses.nextElement();
-
-                    // 优先选择IPv4地址（非回环）
-                    if (addr instanceof Inet4Address && !addr.isLoopbackAddress()) {
-                        return addr.getHostAddress();
-                    }
-                }
-            }
-        } catch (SocketException e) {
-            // 日志记录异常（建议替换为日志框架）
-            System.err.println("获取本地IP失败：" + e.getMessage());
+            InetAddress ip4 = InetAddress.getLocalHost();
+            return ip4.getHostAddress();
+        } catch (UnknownHostException e) {
+            e.printStackTrace();
         }
-
-        // 兜底：返回回环地址（至少保证程序不崩溃）
-        return "127.0.0.1";
-    }
-
-    //main 测试
-    public static void main(String[] args) {
-        String ip = getLocalIp();
-        System.out.println("Local IP: " + ip);
+        return "";
     }
 
     /**
