@@ -263,11 +263,11 @@ public class KademliaNodeServer {
                             pipeline.addLast(new TCPKademliaMessageEncoder());
                             // 添加LengthFieldBasedFrameDecoder解决TCP粘包问题
                             pipeline.addLast(new LengthFieldBasedFrameDecoder(
-                                    1024 * 1024 * 1024, // 最大帧长度
-                                    0, // 长度字段偏移量
-                                    4, // 长度字段字节数
-                                    0, // 长度字段调整
-                                    4)); // 跳过的字节数
+                                    100 * 1024 * 1024,  // 最大帧长度改为50MB
+                                    0,                 // 长度字段偏移量
+                                    4,                 // 长度字段字节数
+                                    0,                 // 长度字段调整
+                                    4));               // 跳过的字节数
                             pipeline.addLast(new TCPKademliaMessageDecoder());
                             pipeline.addLast(new KademliaTcpHandler(KademliaNodeServer.this));
                         }
