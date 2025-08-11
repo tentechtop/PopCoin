@@ -17,6 +17,10 @@ import com.pop.popcoinsystem.network.rpc.RequestResponseManager;
 import com.pop.popcoinsystem.network.rpc.RpcProxyFactory;
 import com.pop.popcoinsystem.network.rpc.RpcService;
 import com.pop.popcoinsystem.network.rpc.RpcServiceRegistry;
+import com.pop.popcoinsystem.network.service.util.KademliaFrameDecoder;
+import com.pop.popcoinsystem.network.service.util.KademliaFrameEncoder;
+import com.pop.popcoinsystem.network.service.util.UDPFrameDecoderAdapter;
+import com.pop.popcoinsystem.network.service.util.UDPMessageWrapper;
 import com.pop.popcoinsystem.service.blockChain.BlockChainService;
 import com.pop.popcoinsystem.service.blockChain.BlockChainServiceImpl;
 import com.pop.popcoinsystem.service.transaction.TransactionService;
@@ -219,22 +223,12 @@ public class KademliaNodeServer {
                     .option(ChannelOption.SO_BROADCAST, true) // 支持广播（按需开启）
                     .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 1000) // UDP无连接，超时设短（1秒）
                     .option(ChannelOption.RCVBUF_ALLOCATOR, new FixedRecvByteBufAllocator(1024 * 64)) // 固定接收缓冲区大小（64KB，减少动态调整开销）
-
                     .handler(new ChannelInitializer<NioDatagramChannel>() {
                         @Override
                         protected void initChannel(NioDatagramChannel ch) throws Exception {
                             ChannelPipeline pipeline = ch.pipeline();
-                            // 帧解码器：解析类型(4) + 版本(4) + 内容长度(4) + 内容结构
-                            pipeline.addLast(new LengthFieldBasedFrameDecoder(
-                                    10 * 1024 * 1024,  // 最大帧长度
-                                    8,                 // 长度字段偏移量（跳过类型4字节 + 版本4字节）
-                                    4,                 // 长度字段长度（内容长度字段，4字节）
-                                    0,                 // 长度调整值（总长度 = 内容长度 + 12字节头部）
-                                    0                  // 不跳过字节
-                            ));
-                            pipeline.addLast(new LengthFieldPrepender(4));
-                            pipeline.addLast(new UDPKademliaMessageEncoder());
-                            pipeline.addLast(new UDPKademliaMessageDecoder());
+                            pipeline.addLast(new UDPFrameDecoderAdapter());
+                            pipeline.addLast(new UDPMessageWrapper());
                             pipeline.addLast(new KademliaUdpHandler(KademliaNodeServer.this));
                         }
                     });
@@ -273,17 +267,8 @@ public class KademliaNodeServer {
                                     super.exceptionCaught(ctx, cause);
                                 }
                             });
-                            // 帧解码器：解析类型(4) + 版本(4) + 内容长度(4) + 内容结构
-                            pipeline.addLast(new LengthFieldBasedFrameDecoder(
-                                    10 * 1024 * 1024,  // 最大帧长度
-                                    8,                 // 长度字段偏移量（跳过类型4字节 + 版本4字节）
-                                    4,                 // 长度字段长度（内容长度字段，4字节）
-                                    0,                 // 长度调整值（总长度 = 内容长度 + 12字节头部）
-                                    0                  // 不跳过字节
-                            ));
-                            pipeline.addLast(new LengthFieldPrepender(4));
-                            pipeline.addLast(new TCPKademliaMessageDecoder());
-                            pipeline.addLast(new TCPKademliaMessageEncoder());
+                            pipeline.addLast(new KademliaFrameDecoder());
+                            pipeline.addLast(new KademliaFrameEncoder());
                             pipeline.addLast(new KademliaTcpHandler(KademliaNodeServer.this));
                         }
                     })
