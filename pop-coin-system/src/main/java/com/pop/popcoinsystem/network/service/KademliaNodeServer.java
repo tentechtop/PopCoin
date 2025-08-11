@@ -215,7 +215,6 @@ public class KademliaNodeServer {
                     .option(ChannelOption.SO_BROADCAST, true) // 支持广播（按需开启）
                     .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 1000) // UDP无连接，超时设短（1秒）
                     .option(ChannelOption.RCVBUF_ALLOCATOR, new FixedRecvByteBufAllocator(1024 * 64)) // 固定接收缓冲区大小（64KB，减少动态调整开销）
-
                     .handler(new ChannelInitializer<NioDatagramChannel>() {
                         @Override
                         protected void initChannel(NioDatagramChannel ch) throws Exception {
@@ -242,7 +241,6 @@ public class KademliaNodeServer {
             tcpBootstrap = new ServerBootstrap();
             tcpBootstrap.group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
-
                     // 3. TCP参数优化
                     .option(ChannelOption.SO_REUSEADDR, true) // 允许端口复用
                     .option(ChannelOption.SO_RCVBUF, 64* 1024 * 1024) // 接收缓冲区
