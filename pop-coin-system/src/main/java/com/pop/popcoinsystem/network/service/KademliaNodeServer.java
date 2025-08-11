@@ -694,18 +694,18 @@ public class KademliaNodeServer {
             log.debug("UDP解码消息内容:{}", message);
             // 添加到输出列表
             // 1. 通过 datagramPacket 获取发送者地址
-            InetSocketAddress senderAddress = datagramPacket.sender();
+ /*           InetSocketAddress senderAddress = datagramPacket.sender();
             // 转换为 InetSocketAddress 以获取 IP 和端口
             if (senderAddress instanceof InetSocketAddress) {
                 String senderIp = senderAddress.getAddress().getHostAddress(); // 发送者 IP
                 int senderPort = senderAddress.getPort(); // 发送者端口
                 log.info("收到 UDP 消息，发送者: {}:{}", senderIp, senderPort);
                 //如果IP和自己不一样才修改
-  /*              if (!senderIp.equals(NetworkUtil.getLocalIp())) {
+                if (!senderIp.equals(NetworkUtil.getLocalIp())) {
                     message.getSender().setIpv4(senderIp);
                     message.getSender().setUdpPort(senderPort);
-                }*/
-            }
+                }
+            }*/
             list.add(message);
         }
     }

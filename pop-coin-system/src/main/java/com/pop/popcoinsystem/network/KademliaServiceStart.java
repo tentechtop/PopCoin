@@ -63,6 +63,7 @@ public class KademliaServiceStart {
     @Bean
     public KademliaNodeServer kademliaNodeServer() throws Exception {
         String localIp = NetworkUtil.getLocalIp();// 获取本机IP
+        log.info("localIp: {}", localIp);
         NodeSettings nodeSetting = storageService.getNodeSetting();
         KeyPair keyPair = CryptoUtil.ECDSASigner.generateKeyPair();
         PrivateKey privateKey = keyPair.getPrivate();
@@ -120,7 +121,6 @@ public class KademliaServiceStart {
         externalNodeInfo.setNodeType(nodeSetting.getNodeType());
         externalNodeInfo.setPublicKey(CryptoUtil.hexToBytes(nodeSetting.getPublicKeyHex()));
         server.setExternalNodeInfo(externalNodeInfo);
-
 
         storageService.addOrUpdateSelfNode(externalNodeInfo);
         //自己要用单独的KEY保存不再放在路由表中
