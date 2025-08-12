@@ -136,8 +136,10 @@ public class TCPClient {
                                 kademliaNodeServer.offlineNode(nodeId);
                             } else {
                                 //其他异常
-
-
+                                channel.close();
+                                nodeTCPChannel.remove(nodeId);
+                                log.error("发送消息失败：{}", cause.getMessage());
+                                kademliaNodeServer.offlineNode(nodeId);
                             }
                         }
                     })
