@@ -177,6 +177,7 @@ public class KademliaNodeServer {
         if (this.running)
             return;
         try {
+            startUdpDiscovererServer();
             startTcpTransmitServer();
             running = true;
             scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
