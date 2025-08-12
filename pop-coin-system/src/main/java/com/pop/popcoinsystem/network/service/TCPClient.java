@@ -431,9 +431,11 @@ public class TCPClient {
         int timeoutMillis = (connectTimeout != null) ? connectTimeout : DEFAULT_CONNECT_TIMEOUT;
 
         if (!connectFuture.awaitUninterruptibly(timeoutMillis)) {
-            throw new ConnectException("Connection to " + address + " timed out after " + timeoutMillis + "ms");
+            //下线节点
+            kademliaNodeServer.offlineNode(nodeId);
         }
         if (!connectFuture.isSuccess()) {
+            kademliaNodeServer.offlineNode(nodeId);
             String errorMsg = "Failed to connect to " + address;
             log.error(errorMsg, connectFuture.cause());
             throw new ConnectException(errorMsg + ": " + connectFuture.cause().getMessage());
