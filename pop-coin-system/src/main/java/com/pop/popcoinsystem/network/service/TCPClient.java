@@ -76,6 +76,7 @@ public class TCPClient {
                         ));
                         pipeline.addLast(new KademliaNodeServer.TCPKademliaMessageDecoder());
                         pipeline.addLast(new KademliaNodeServer.TCPKademliaMessageEncoder());
+                        pipeline.addLast(new KademliaTcpHandler(kademliaNodeServer));
                     }
                 });
 

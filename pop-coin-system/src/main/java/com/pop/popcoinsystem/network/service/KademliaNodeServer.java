@@ -35,6 +35,8 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.*;
 
 
+import io.netty.handler.logging.LogLevel;
+import io.netty.handler.logging.LoggingHandler;
 import jakarta.annotation.PreDestroy;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -57,6 +59,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.locks.LockSupport;
 
 import static com.pop.popcoinsystem.constant.BlockChainConstants.NET_VERSION;
+import static com.pop.popcoinsystem.util.CryptoUtil.bytesToHex;
 // 替换为带容量限制的LRU Map（需引入Guava或自定义）
 
 
@@ -216,9 +219,6 @@ public class KademliaNodeServer {
                                     super.exceptionCaught(ctx, cause);
                                 }
                             });
-                            // 帧解码器：解析类型(4) + 版本(4) + 内容长度(4) + 内容结构
-                            // 在startTcpTransmitServer()的childHandler中配置
-                            // 修复TCP帧解码器配置
                             pipeline.addLast(new LengthFieldBasedFrameDecoder(
                                     10 * 1024 * 1024,  // maxFrameLength
                                     0,                 // lengthFieldOffset
@@ -595,7 +595,7 @@ public class KademliaNodeServer {
                 int encodedLen = out.writerIndex() - startIndex;
                 byte[] encoded = new byte[encodedLen];
                 out.getBytes(startIndex, encoded);       // 读取刚写入的内容
-                log.info("TCP编码后数据: {}", CryptoUtil.bytesToHex(encoded));
+                log.info("TCP编码后数据: {}", bytesToHex(encoded));
 
             } catch (Exception e) {
                 log.error("Failed to encode TCP message", e);
@@ -613,7 +613,7 @@ public class KademliaNodeServer {
             ByteBuf copy = byteBuf.copy(); // 复制一份，避免影响原数据
             byte[] bytes = new byte[copy.readableBytes()];
             copy.readBytes(bytes);
-            log.info("TCP开始解码原始数据: {}", CryptoUtil.bytesToHex(bytes));
+            log.info("TCP开始解码原始数据: {}", bytesToHex(bytes));
             copy.release(); // 释放复制缓冲区
 
             if (byteBuf.readableBytes() < 4) {
@@ -658,7 +658,7 @@ public class KademliaNodeServer {
                     log.info("发送者 - {}:{}", senderIp, senderPort);
                 }
 
-                log.info("TCP解码数据: {}", message);
+                log.info("TCP解码数1312据: {}", message);
                 out.add(message);
             } catch (Exception e) {
                 log.error("Failed to decode TCP message", e);
