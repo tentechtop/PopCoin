@@ -46,7 +46,7 @@ public class TCPClient {
     // 用于在Channel中存储节点ID的属性键
     public static final AttributeKey<BigInteger> NODE_ID_KEY = AttributeKey.valueOf("NODE_ID");
     public static final int DEFAULT_CONNECT_TIMEOUT = 30000; // 30秒
-    private static final int MAX_RETRY_COUNT = 2; // 减少重试次数，避免恶性循环
+    private static final int MAX_RETRY_COUNT = 0; // 减少重试次数，避免恶性循环
     private static final long RETRY_DELAY_BASE = 200; // 延长基础延迟，避免网络拥堵
 
 

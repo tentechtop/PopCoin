@@ -684,8 +684,29 @@ public class KademliaNodeServer {
                 byte[] contentBytes = new byte[contentLength];
                 byteBuf.readBytes(contentBytes);
                 KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
-
                 out.add(message);
+
+                // 获取真实远程地址并处理
+                InetSocketAddress remoteAddress = (InetSocketAddress) ctx.channel().remoteAddress();
+                if (remoteAddress != null) {
+                    String realIp = remoteAddress.getAddress().getHostAddress();
+                    int realPort = remoteAddress.getPort();
+
+                    // 判断是否为内网IP，非内网则更新消息中的发送者IP
+                    if (!isInternalIp(realIp)) {
+                        // 从消息中获取发送者信息并更新真实IP
+                        NodeInfo sender = message.getSender();
+                        if (sender != null) {
+                            // 注意：此处需确保message的sender可修改，或通过其他方式关联真实IP
+                            sender.setIpv4(realIp);
+                            sender.setTcpPort(realPort); // 若需要，更新端口
+                            log.info("TCP连接：获取到外网IP - {}:{}，已更新发送者信息", realIp, realPort);
+                        }
+                    } else {
+                        log.info("TCP连接：检测到内网IP {}:{}，不更新发送者信息", realIp, realPort);
+                    }
+                }
+
             } catch (Exception e) {
                 log.error("Failed to decode TCP message", e);
                 byteBuf.resetReaderIndex();
@@ -749,8 +770,28 @@ public class KademliaNodeServer {
                 byte[] contentBytes = new byte[contentLength];
                 byteBuf.readBytes(contentBytes);
                 KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
-
                 out.add(message);
+
+
+                // 获取真实远程地址并处理
+                InetSocketAddress senderAddress = datagramPacket.sender();
+                if (senderAddress != null) {
+                    String realIp = senderAddress.getAddress().getHostAddress();
+                    int realPort = senderAddress.getPort();
+
+                    // 判断是否为内网IP，非内网则更新消息中的发送者IP
+                    if (!isInternalIp(realIp)) {
+                        NodeInfo sender = message.getSender();
+                        if (sender != null) {
+                            sender.setIpv4(realIp);
+                            sender.setTcpPort(realPort); // UDP和TCP端口可能不同，根据实际场景调整
+                            log.debug("UDP消息：获取到外网IP - {}:{}，已更新发送者信息", realIp, realPort);
+                        }
+                    } else {
+                        log.debug("UDP消息：检测到内网IP {}:{}，不更新发送者信息", realIp, realPort);
+                    }
+                }
+
             } catch (Exception e) {
                 log.error("Failed to decode TCP message", e);
                 byteBuf.resetReaderIndex();
@@ -760,6 +801,45 @@ public class KademliaNodeServer {
 
 
 
+    /**
+     * 判断IP是否为内网地址
+     * @param ip IPv4地址字符串
+     * @return 是内网地址返回true，否则返回false
+     */
+    private static boolean isInternalIp(String ip) {
+        if (ip == null || ip.isEmpty()) {
+            return true; // 空IP视为无效（内网）
+        }
+        try {
+            String[] parts = ip.split("\\.");
+            if (parts.length != 4) {
+                return true; // 非标准IPv4格式
+            }
+            int first = Integer.parseInt(parts[0]);
+            int second = Integer.parseInt(parts[1]);
+
+            // 127.x.x.x 回环地址
+            if (first == 127) {
+                return true;
+            }
+            // 10.x.x.x
+            if (first == 10) {
+                return true;
+            }
+            // 192.168.x.x
+            if (first == 192 && second == 168) {
+                return true;
+            }
+            // 172.16.x.x 到 172.31.x.x
+            if (first == 172 && (second >= 16 && second <= 31)) {
+                return true;
+            }
+            return false; // 外网IP
+        } catch (NumberFormatException e) {
+            log.warn("Invalid IP format: {}", ip);
+            return true; // 格式错误视为内网
+        }
+    }
 
 
 
