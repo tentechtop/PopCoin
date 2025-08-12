@@ -41,7 +41,7 @@ public class FindNodeResponseMessageHandler implements MessageHandler{
             }
             //如果IP相同 端口相同的节点也忽略
             if (externalNode.getIpv4().equals(nodeInfo.getIpv4())
-                    && (externalNode.getTcpPort() == nodeInfo.getTcpPort() || externalNode.getUdpPort() == nodeInfo.getUdpPort())){
+                    && (externalNode.getTcpPort() == nodeInfo.getTcpPort())){
                 //让路由表删除这个节点
                 routingTable.delete(externalNode);
                 return;

@@ -14,13 +14,5 @@ import java.net.UnknownHostException;
 public class PopCoinSystemApplication {
     public static void main(String[] args) throws UnknownHostException {
         ConfigurableApplicationContext application = SpringApplication.run(PopCoinSystemApplication.class, args);
-        Environment env = application.getEnvironment();
-        String ip = InetAddress.getLocalHost().getHostAddress();
-        String port = env.getProperty("server.port");
-        log.info("\n----------------------------------------------------------\n\t" +
-                "Application is running! Access URLs:\n\t" +
-                "Local: \t\thttp://localhost:" + port + "/\n\t" +
-                "Net: "  + "\t\thttp://" + ip + ":" + port + "/\n\t" +
-                "----------------------------------------------------------");
     }
 }

@@ -35,9 +35,6 @@ public class KademliaServiceStart {
     @Autowired
     private NodeInfoStorageService storageService;
 
-    @Value("${kademlia.node.udpPort:8334}")
-    private int udpPort;
-
     @Value("${kademlia.node.tcpPort:8333}")
     private int tcpPort;
 
@@ -87,7 +84,6 @@ public class KademliaServiceStart {
         nodeSetting.setNodeType(nodeType);//默认是全节点
         nodeSetting.setIpv4(localIp);
         nodeSetting.setTcpPort(tcpPort);
-        nodeSetting.setUdpPort(udpPort);
         if (nodeSetting.getId() == null){
             byte[] bytes = CryptoUtil.applyRIPEMD160(CryptoUtil.applySHA256(publicKey.getEncoded()));
             if (bytes.length != 20) {
@@ -102,7 +98,6 @@ public class KademliaServiceStart {
         NodeInfo nodeInfo = NodeInfo.builder()
                 .id(nodeSetting.getId())
                 .ipv4(nodeSetting.getIpv4())
-                .udpPort(udpPort)
                 .tcpPort(tcpPort)
                 .build();
         KademliaNodeServer server = new KademliaNodeServer();
@@ -115,7 +110,6 @@ public class KademliaServiceStart {
         externalNodeInfo.setId(nodeSetting.getId());
         externalNodeInfo.setIpv4(nodeSetting.getIpv4());
         externalNodeInfo.setTcpPort(nodeSetting.getTcpPort());
-        externalNodeInfo.setUdpPort(nodeSetting.getUdpPort());
         externalNodeInfo.setNodeType(nodeSetting.getNodeType());
         externalNodeInfo.setPublicKey(CryptoUtil.hexToBytes(nodeSetting.getPublicKeyHex()));
         server.setExternalNodeInfo(externalNodeInfo);
@@ -149,7 +143,6 @@ public class KademliaServiceStart {
                                         .id(bootstrapNode.getNodeId())
                                         .ipv4(bootstrapNode.getIp())
                                         .tcpPort(bootstrapNode.getTcpPort())
-                                        .udpPort(bootstrapNode.getUdpPort())
                                         .build();
                                 kademliaNodeServer.connectToNode(nodeInfo);
                             }

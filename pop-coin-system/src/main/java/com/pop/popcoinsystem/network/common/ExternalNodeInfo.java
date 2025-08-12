@@ -23,7 +23,6 @@ public class ExternalNodeInfo implements Comparable<Object>, Serializable {
     private int version;//节点版本
     private  String ipv4;//ipv4地址
     private  String ipv6;//ipv6地址
-    private  int udpPort;//UDP端口 用于节点发现
     private  int tcpPort;//TCP端口 用于通信传输
     private Date lastSeen;//最后活跃时间
     private int score;//分数
@@ -46,17 +45,15 @@ public class ExternalNodeInfo implements Comparable<Object>, Serializable {
         NodeInfo nodeInfo = new NodeInfo();
         nodeInfo.setId(id);
         nodeInfo.setIpv4(ipv4);
-        nodeInfo.setUdpPort(udpPort);
         nodeInfo.setTcpPort(tcpPort);
         return nodeInfo;
     }
 
 
-    public ExternalNodeInfo(BigInteger id, String ipv4, String ipv6, int udpPort, int tcpPort,boolean isSeedNode) {
+    public ExternalNodeInfo(BigInteger id, String ipv4, String ipv6, int tcpPort,boolean isSeedNode) {
         this.id = id;
         this.ipv4 = ipv4;
         this.ipv6 = ipv6;
-        this.udpPort = udpPort;
         this.tcpPort = tcpPort;
         this.lastSeen = new Date();
         this.score = 0;
@@ -78,7 +75,6 @@ public class ExternalNodeInfo implements Comparable<Object>, Serializable {
         this.id = node.getId();
         this.ipv4 = node.getIpv4();
         this.ipv6 = node.getIpv6();
-        this.udpPort = node.getUdpPort();
         this.tcpPort = node.getTcpPort();
         this.lastSeen = node.getLastSeen();
         this.score = node.getScore();
@@ -149,7 +145,6 @@ public class ExternalNodeInfo implements Comparable<Object>, Serializable {
 
     public void updateAddInfo(NodeInfo nodeInfo){
         this.ipv4 = nodeInfo.getIpv4();
-        this.udpPort = nodeInfo.getUdpPort();
         this.tcpPort = nodeInfo.getTcpPort();
     }
 

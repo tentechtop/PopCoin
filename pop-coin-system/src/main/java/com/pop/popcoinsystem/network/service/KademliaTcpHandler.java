@@ -15,15 +15,15 @@ import static com.pop.popcoinsystem.network.service.KademliaNodeServer.KademliaM
 import static org.springframework.core.io.support.SpringFactoriesLoader.FailureHandler.handleMessage;
 
 @Slf4j
-public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMessage> {
+public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMessage<? extends Serializable>> {
 
     private final KademliaNodeServer nodeServer;
 
     // 定义业务线程池（CPU密集型：核心数=CPU核心数；IO密集型：核心数=CPU核心数*2）
 
 
-
     public KademliaTcpHandler(KademliaNodeServer nodeServer) {
+        log.info("创建KademliaTcpHandler实例");
         if (nodeServer == null) {
             throw new NullPointerException("传入的KademliaNodeServer为null！请检查是否正确传入实例");
         }
@@ -33,38 +33,41 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, KademliaMessage message) throws Exception {
-        Thread.startVirtualThread(() -> {
-            long messageId = message.getMessageId();
-            // 检查：若消息已存在（未过期），则跳过广播
-            if (nodeServer.getBroadcastMessages().getIfPresent(messageId) != null) {
-                log.debug("消息,或者交易 {} 已处理过（未过期），跳过", messageId);
-                return;
-            }
-            // 记录：将消息ID存入缓存（自动过期）
-            nodeServer.getBroadcastMessages().put(messageId, Boolean.TRUE);
-            boolean single = message.isSingle();
-            if (single){
-                //单播消息
-                long requestId = message.getRequestId();
-                if (message.isResponse()){
-                    log.debug("响应消息ID {}", requestId);
-                    // 响应消息：交给RequestResponseManager处理，完成客户端的Promise
-                    handleResponseMessage(ctx, message);
-                }else {
-                    log.debug("收到请求消息，requestId: {}", requestId);
-                    // 处理请求消息并生成响应
-                    handleRequestMessage(ctx, message);
-                }
+       log.info("处理器收到消息:{}",message);
+
+        long messageId = message.getMessageId();
+        // 检查：若消息已存在（未过期），则跳过广播
+        if (nodeServer.getBroadcastMessages().getIfPresent(messageId) != null) {
+            log.debug("消息,或者交易 {} 已处理过（未过期），跳过", messageId);
+            return;
+        }
+        // 记录：将消息ID存入缓存（自动过期）
+        nodeServer.getBroadcastMessages().put(messageId, Boolean.TRUE);
+        boolean single = message.isSingle();
+        if (single){
+            //单播消息
+            long requestId = message.getRequestId();
+            if (message.isResponse()){
+                log.debug("响应消息ID {}", requestId);
+                // 响应消息：交给RequestResponseManager处理，完成客户端的Promise
+                handleResponseMessage(ctx, message);
             }else {
-                //广播消息
-                MessageHandler messageHandler = KademliaMessageHandler.get(message.getType());
-                try {
-                    messageHandler.handleMesage(nodeServer, message);
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
+                log.debug("收到请求消息，requestId: {}", requestId);
+                // 处理请求消息并生成响应
+                handleRequestMessage(ctx, message);
             }
-        });
+        }else {
+            //广播消息
+            MessageHandler messageHandler = KademliaMessageHandler.get(message.getType());
+            try {
+                KademliaMessage<? extends Serializable> kademliaMessage = messageHandler.handleMesage(nodeServer, message);
+                if (kademliaMessage != null){
+                    ctx.writeAndFlush(kademliaMessage);
+                }
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 
     /**
@@ -89,10 +92,12 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
         try {
             MessageHandler messageHandler = KademliaMessageHandler.get(message.getType());
             KademliaMessage<? extends Serializable> response = messageHandler.handleMesage(nodeServer, message);
+            log.info("请求消息 {} 已交给处理器处理", message.getMessageId());
             if (response != null) {
                 // 标记为响应消息
                 response.setResponse(true);
-                nodeServer.getTcpClient().sendMessage(response);//已经优化 会复用通道
+                //用原来通道回复
+                ctx.writeAndFlush(response);
             }
         } catch (Exception e) {
             log.error("处理请求消息 {} 时发生异常", message.getRequestId(), e);

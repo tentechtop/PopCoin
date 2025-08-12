@@ -3,7 +3,10 @@ package com.pop.popcoinsystem.service;
 import com.pop.popcoinsystem.data.block.Block;
 import com.pop.popcoinsystem.data.block.BlockDTO;
 import com.pop.popcoinsystem.data.vo.result.Result;
+import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
 import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
+import com.pop.popcoinsystem.network.protocol.message.PongKademliaMessage;
+import com.pop.popcoinsystem.network.rpc.RpcService;
 import com.pop.popcoinsystem.network.service.KademliaNodeServer;
 import com.pop.popcoinsystem.network.rpc.RpcProxyFactory;
 import com.pop.popcoinsystem.network.common.NodeInfo;
@@ -18,6 +21,8 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigInteger;
 import java.net.ConnectException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -36,12 +41,12 @@ public class SyncBlockChainServiceImpl {
         // 1. 准备目标服务节点信息
         NodeInfo nodeInfo = new NodeInfo();
         nodeInfo.setId(BigInteger.ONE);
-        nodeInfo.setIpv4("192.168.137.102");
-        nodeInfo.setTcpPort(8334);
-        nodeInfo.setUdpPort(8333);
+        nodeInfo.setIpv4("114.67.219.160");
+        nodeInfo.setTcpPort(8333);
+
 
         // 2. 创建代理工厂
-        RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer);
+        RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer,nodeInfo);
         // 3. 获取服务代理对象
         TransactionService transactionService = proxyFactory.createProxy(TransactionService.class);
         // 4. 像调用本地方法一样调用远程服务
@@ -77,17 +82,16 @@ public class SyncBlockChainServiceImpl {
         return Result.ok();
     }
 
-    public Result sendPing() {
+    public Result sendPing() throws Exception {
         NodeInfo nodeInfo = new NodeInfo();
         nodeInfo.setId(BigInteger.ONE);
-        nodeInfo.setIpv4("192.168.137.102");
-        nodeInfo.setTcpPort(8333);
-        nodeInfo.setUdpPort(8334);
+        nodeInfo.setIpv4("114.67.219.160");
+        nodeInfo.setTcpPort(8999);
 
-        PingKademliaMessage pingKademliaMessage = new PingKademliaMessage();
-        pingKademliaMessage.setSender(kademliaNodeServer.getNodeInfo());//本节点信息
-        pingKademliaMessage.setReceiver(nodeInfo);
-        kademliaNodeServer.getUdpClient().sendAsyncMessage(pingKademliaMessage);
-        return Result.ok();
+
+        RpcProxyFactory proxyFactory = new RpcProxyFactory(kademliaNodeServer,nodeInfo);
+        RpcService proxy = proxyFactory.createProxy(RpcService.class);
+        PongKademliaMessage ping = proxy.ping();
+        return Result.ok(ping);
     }
 }

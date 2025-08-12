@@ -4,6 +4,9 @@ import com.pop.popcoinsystem.data.script.Script;
 import com.pop.popcoinsystem.data.script.ScriptPubKey;
 import com.pop.popcoinsystem.data.script.ScriptSig;
 
+import com.pop.popcoinsystem.network.protocol.MessageType;
+import com.pop.popcoinsystem.network.protocol.message.KademliaMessage;
+import com.pop.popcoinsystem.network.protocol.message.PingKademliaMessage;
 import com.pop.popcoinsystem.util.CryptoUtil;
 import lombok.extern.slf4j.Slf4j;
 
@@ -17,6 +20,17 @@ import java.util.Objects;
 @Slf4j
 public class mtTx {
     public static void main(String[] args) {
+
+        PingKademliaMessage msg = new PingKademliaMessage();
+        msg.setType(MessageType.PING.getCode());
+        msg.setData("test");
+        byte[] data = KademliaMessage.serialize(msg);
+        KademliaMessage<?> deserialized = KademliaMessage.deSerialize(data);
+        assert deserialized.getType() == msg.getType(); // 校验类型一致
+        assert deserialized.getData().equals(msg.getData()); // 校验内容一致
+        log.info("TCP接收 - 内容: {}", deserialized.getData());
+
+
 
         KeyPair keyPair1 = CryptoUtil.ECDSASigner.generateKeyPair();
         PrivateKey privateKey1 = keyPair1.getPrivate();

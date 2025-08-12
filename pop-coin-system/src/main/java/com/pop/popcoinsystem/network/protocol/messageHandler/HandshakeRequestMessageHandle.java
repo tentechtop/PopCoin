@@ -72,8 +72,7 @@ public class HandshakeRequestMessageHandle implements MessageHandler{
         handshakeResponseMessage.setSender(me);
         handshakeResponseMessage.setReceiver(message.getSender());
         handshakeResponseMessage.setData(handshakeResponse);
-        kademliaNodeServer.getTcpClient().sendMessage(handshakeResponseMessage);
-        return null;
+        return handshakeResponseMessage;
     }
 
 }

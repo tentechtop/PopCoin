@@ -8,6 +8,5 @@ import java.math.BigInteger;
 public class BootstrapNode {
     private String ip;
     private int tcpPort;
-    private int udpPort;
     private BigInteger nodeId;
 }

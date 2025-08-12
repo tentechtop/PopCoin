@@ -36,7 +36,6 @@ public class BlockMessageHandler implements MessageHandler {
             kademliaNodeServer.getBlockChainService().verifyBlock(data,false);
             message.setSender(kademliaNodeServer.getNodeInfo());
             kademliaNodeServer.broadcastMessage(message,originalAuthor);
-
             Thread.startVirtualThread(() -> {
                 if (!Objects.equals(originalAuthor.getId(), kademliaNodeServer.getNodeInfo().getId())) {
                     long remoteLatestBlockHeight = data.getHeight();

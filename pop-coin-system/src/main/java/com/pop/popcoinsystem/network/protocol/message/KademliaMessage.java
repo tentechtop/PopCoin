@@ -3,6 +3,7 @@ package com.pop.popcoinsystem.network.protocol.message;
 import com.google.common.base.Objects;
 import com.pop.popcoinsystem.network.common.NodeInfo;
 import com.pop.popcoinsystem.util.SerializeUtils;
+import com.pop.popcoinsystem.util.TimeGenerator;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -46,7 +47,7 @@ public abstract class KademliaMessage<D extends Serializable> {
     }
 
     public void setReqResId() {
-        this.requestId =  atomicLong.incrementAndGet();
+        this.requestId = TimeGenerator.generateUniqueTransactionTime();
     }
 
     /**

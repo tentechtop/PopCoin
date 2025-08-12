@@ -34,11 +34,9 @@ kademlia:
   nodeType: 1  #1全节点 #2轻节点 #仅出站
   node:
     tcpPort: 8333
-    udpPort: 8334
-  isBootstrap: 0 # 0不连接到引导节点  1连接
+  isBootstrap: 1 # 0不连接到引导节点  1连接  114.67.219.160
   bootstrap:
-    - ip: 192.168.137.102
+    - ip: 192.168.181.136
       tcp-port: 8333
-      udp-port: 8334
       node-id: 0
 

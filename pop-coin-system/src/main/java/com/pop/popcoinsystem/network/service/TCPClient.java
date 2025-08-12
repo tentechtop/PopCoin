@@ -10,6 +10,7 @@ import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.handler.timeout.IdleStateHandler;
@@ -65,7 +66,14 @@ public class TCPClient {
                         ChannelPipeline pipeline = ch.pipeline();
                         // 1. 添加异常处理器（放在编解码器之前，优先捕获异常）
                         pipeline.addLast(new ConnectionExceptionHandler(nodeTCPChannel, kademliaNodeServer));
-                        // 独立编解码器，解除耦合
+                        pipeline.addLast(new LengthFieldBasedFrameDecoder(
+                                10 * 1024 * 1024,  // 最大帧长度
+                                0,                 // 长度字段偏移量 - 从开头就读取长度
+                                4,                 // 长度字段长度
+                                0,                 // 长度调整值
+                                4,                 // 跳过长度字段本身
+                                true
+                        ));
                         pipeline.addLast(new KademliaNodeServer.TCPKademliaMessageDecoder());
                         pipeline.addLast(new KademliaNodeServer.TCPKademliaMessageEncoder());
                     }
