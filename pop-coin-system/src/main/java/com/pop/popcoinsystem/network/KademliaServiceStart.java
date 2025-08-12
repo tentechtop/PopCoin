@@ -58,7 +58,7 @@ public class KademliaServiceStart {
     // 定义单例Bean，Spring会确保仅创建一次
     @Bean
     public KademliaNodeServer kademliaNodeServer() throws Exception {
-        String localIp = "127.0.0.1";// 获取本机IP
+        String localIp = NetworkUtil.getLocalIp();// 获取本机IP
         NodeSettings nodeSetting = storageService.getNodeSetting();
         KeyPair keyPair = CryptoUtil.ECDSASigner.generateKeyPair();
         PrivateKey privateKey = keyPair.getPrivate();
