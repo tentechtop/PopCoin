@@ -233,8 +233,6 @@ public class KademliaNodeServer {
                             pipeline.addLast(new KademliaTcpHandler(KademliaNodeServer.this));
                         }
                     });
-
-
             tcpBindFuture = tcpBootstrap.bind("0.0.0.0",nodeInfo.getTcpPort()).sync();
             log.info("TCP服务已启动，端口: {}", nodeInfo.getTcpPort());
             this.tcpClient = new TCPClient(KademliaNodeServer.this);
@@ -585,17 +583,10 @@ public class KademliaNodeServer {
                 byte[] data = KademliaMessage.serialize(msg);
                 int totalLength = 4 + 4 + data.length;   // type + version + payload
 
-                int startIndex = out.writerIndex();      // 记录起始下标
                 out.writeInt(totalLength);               // 总长度（4字节）
                 out.writeInt(msg.getType());             // 消息类型（4字节）
                 out.writeInt(NET_VERSION);               // 网络版本（4字节）
                 out.writeBytes(data);                    // 消息内容
-
-                // 打印编码后的完整字节流
-                int encodedLen = out.writerIndex() - startIndex;
-                byte[] encoded = new byte[encodedLen];
-                out.getBytes(startIndex, encoded);       // 读取刚写入的内容
-                log.info("TCP编码后数据: {}", bytesToHex(encoded));
 
             } catch (Exception e) {
                 log.error("Failed to encode TCP message", e);
@@ -610,18 +601,10 @@ public class KademliaNodeServer {
     public static class TCPKademliaMessageDecoder extends ByteToMessageDecoder {
         @Override
         protected void decode(ChannelHandlerContext ctx, ByteBuf byteBuf, List<Object> out) throws Exception {
-            ByteBuf copy = byteBuf.copy(); // 复制一份，避免影响原数据
-            byte[] bytes = new byte[copy.readableBytes()];
-            copy.readBytes(bytes);
-            log.info("TCP开始解码原始数据: {}", bytesToHex(bytes));
-            copy.release(); // 释放复制缓冲区
-
             if (byteBuf.readableBytes() < 4) {
                 return; // 等待更多数据
             }
-
             byteBuf.markReaderIndex();
-
             int totalLength = byteBuf.readInt(); // 读取总长度
             if (totalLength <= 8 || totalLength > 10 * 1024 * 1024) {
                 log.warn("Invalid totalLength: {}", totalLength);
@@ -645,20 +628,8 @@ public class KademliaNodeServer {
                 int contentLength = totalLength - 8; // 减去类型和版本
                 byte[] contentBytes = new byte[contentLength];
                 byteBuf.readBytes(contentBytes);
-
                 KademliaMessage<?> message = KademliaMessage.deSerialize(contentBytes);
 
-                // 设置发送者IP和端口
-                SocketAddress senderAddress = ctx.channel().remoteAddress();
-                if (senderAddress instanceof InetSocketAddress inetAddr) {
-                    String senderIp = inetAddr.getAddress().getHostAddress();
-                    int senderPort = inetAddr.getPort();
-                    message.getSender().setIpv4(senderIp);
-                    message.getSender().setTcpPort(senderPort);
-                    log.info("发送者 - {}:{}", senderIp, senderPort);
-                }
-
-                log.info("TCP解码数1312据: {}", message);
                 out.add(message);
             } catch (Exception e) {
                 log.error("Failed to decode TCP message", e);

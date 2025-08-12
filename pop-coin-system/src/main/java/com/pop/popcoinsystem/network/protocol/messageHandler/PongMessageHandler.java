@@ -17,10 +17,10 @@ public class PongMessageHandler implements MessageHandler{
 
     @Override
     public KademliaMessage<? extends Serializable> handleMesage(KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) throws InterruptedException, FullBucketException, ConnectException {
-      return doHandle(kademliaNodeServer, (PongKademliaMessage) message);
+      return doHandle(kademliaNodeServer,  message);
     }
 
-    protected EmptyKademliaMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull PongKademliaMessage message) throws InterruptedException, FullBucketException, ConnectException {
+    protected EmptyKademliaMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull KademliaMessage message) throws InterruptedException, FullBucketException, ConnectException {
         log.info("收到pong");
         NodeInfo sender = message.getSender();
         kademliaNodeServer.getRoutingTable().update(sender);

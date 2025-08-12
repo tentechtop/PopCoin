@@ -62,9 +62,9 @@ public class RoutingTable {
         Bucket bucket = this.findBucket(node.getId());
         // 更新桶的访问时间
         lastBucketAccessTime.put(bucket.getId(), System.currentTimeMillis());
-        node.setDistance(node.getId().xor(this.localNodeId));
-        log.info("更新节点状态{}", node);
 
+        log.info("更新节点状态{}", node);
+        node.setDistance(node.getId().xor(this.localNodeId));
         if (bucket.contains(node)) {
             bucket.pushToFront(node);
             return false;
@@ -76,6 +76,7 @@ public class RoutingTable {
     }
 
     public boolean update(NodeInfo updateNode) throws FullBucketException {
+
         NodeInfoStorageService instance = NodeInfoStorageService.getInstance();
         ExternalNodeInfo original = findNode(updateNode.getId());
         if (original == null){
@@ -85,12 +86,12 @@ public class RoutingTable {
         original.updateAddInfo(updateNode);
         original.setNodeStatus(NodeStatus.ACTIVE);//在线
         original.onSuccessfulResponse(false);
-        log.info("更新节点状态{}", original);
         original.setLastSeen(new Date());
         Bucket bucket = this.findBucket(original.getId());
         // 更新桶的访问时间
         lastBucketAccessTime.put(bucket.getId(), System.currentTimeMillis());
         original.setDistance(original.getId().xor(this.localNodeId));
+        log.info("更新节点状态{}", original);
         if (bucket.contains(original)) {
             bucket.pushToFront(original);
             return false;

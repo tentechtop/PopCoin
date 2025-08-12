@@ -17,9 +17,10 @@ public class PingMessageHandler implements MessageHandler {
 
     @Override
     public KademliaMessage<? extends Serializable> handleMesage(KademliaNodeServer kademliaNodeServer, KademliaMessage<?> message) throws InterruptedException, FullBucketException {
-        return doHandle(kademliaNodeServer, (PingKademliaMessage) message);
+
+        return doHandle(kademliaNodeServer, message);
     }
-    protected PongKademliaMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull PingKademliaMessage message) throws InterruptedException, FullBucketException {
+    protected PongKademliaMessage doHandle(KademliaNodeServer kademliaNodeServer, @NotNull KademliaMessage message) throws InterruptedException, FullBucketException {
         log.info("收到ping");
         NodeInfo sender = message.getSender();
         kademliaNodeServer.getRoutingTable().update(sender);

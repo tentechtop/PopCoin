@@ -23,7 +23,6 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
 
 
     public KademliaTcpHandler(KademliaNodeServer nodeServer) {
-        log.info("创建KademliaTcpHandler实例");
         if (nodeServer == null) {
             throw new NullPointerException("传入的KademliaNodeServer为null！请检查是否正确传入实例");
         }
@@ -33,8 +32,6 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, KademliaMessage message) throws Exception {
-       log.info("处理器收到消息:{}",message);
-
         long messageId = message.getMessageId();
         // 检查：若消息已存在（未过期），则跳过广播
         if (nodeServer.getBroadcastMessages().getIfPresent(messageId) != null) {
@@ -92,7 +89,6 @@ public class KademliaTcpHandler extends SimpleChannelInboundHandler<KademliaMess
         try {
             MessageHandler messageHandler = KademliaMessageHandler.get(message.getType());
             KademliaMessage<? extends Serializable> response = messageHandler.handleMesage(nodeServer, message);
-            log.info("请求消息 {} 已交给处理器处理", message.getMessageId());
             if (response != null) {
                 // 标记为响应消息
                 response.setResponse(true);
